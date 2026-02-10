@@ -7,12 +7,13 @@ import './styles/global.css'
 // Expose store for e2e testing
 ;(window as any).__store = useAppStore
 
-// Load persisted state before rendering
-hydrateFromDisk()
-
-const root = createRoot(document.getElementById('root')!)
-root.render(
-  <StrictMode>
-    <App />
-  </StrictMode>
-)
+// Hydrate persisted state (tabs, PTYs) BEFORE rendering to avoid
+// mounting terminals with stale pty IDs that get replaced moments later.
+hydrateFromDisk().then(() => {
+  const root = createRoot(document.getElementById('root')!)
+  root.render(
+    <StrictMode>
+      <App />
+    </StrictMode>
+  )
+})

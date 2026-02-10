@@ -30,6 +30,9 @@ export function TerminalPanel({ ptyId, active }: Props) {
 
         if (disposed) return
 
+        // Clear any leftover DOM from a previous terminal instance
+        termDiv.innerHTML = ''
+
         const term = new ghostty.Terminal({
           fontSize: useAppStore.getState().settings.terminalFontSize,
           fontFamily: "'SF Mono', Menlo, 'Cascadia Code', monospace",

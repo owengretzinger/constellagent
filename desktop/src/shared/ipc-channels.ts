@@ -58,7 +58,11 @@ export const IPC = {
   // GitHub operations
   GITHUB_GET_PR_STATUSES: 'github:get-pr-statuses',
 
+  // Clipboard operations
+  CLIPBOARD_SAVE_IMAGE: 'clipboard:save-image',
+
   // State persistence
   STATE_SAVE: 'state:save',
+  STATE_SAVE_SYNC: 'state:save-sync',
   STATE_LOAD: 'state:load',
 } as const

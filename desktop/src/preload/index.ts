@@ -133,9 +133,16 @@ const api = {
       ipcRenderer.invoke(IPC.GITHUB_GET_PR_STATUSES, repoPath, branches),
   },
 
+  clipboard: {
+    saveImage: () =>
+      ipcRenderer.invoke(IPC.CLIPBOARD_SAVE_IMAGE) as Promise<string | null>,
+  },
+
   state: {
     save: (data: unknown) =>
       ipcRenderer.invoke(IPC.STATE_SAVE, data),
+    saveSync: (data: unknown) =>
+      ipcRenderer.sendSync(IPC.STATE_SAVE_SYNC, data) as boolean,
     load: () =>
       ipcRenderer.invoke(IPC.STATE_LOAD),
   },

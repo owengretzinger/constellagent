@@ -7,8 +7,7 @@ export function useShortcuts() {
       // Tab handling when terminal is focused
       if (e.key === 'Tab' && (e.target as HTMLElement)?.closest?.('[class*="terminalInner"]')) {
         if (e.shiftKey && !e.metaKey && !e.ctrlKey && !e.altKey) {
-          // Shift+Tab: ghostty-web bug — sends \t instead of \x1b[Z (reverse tab).
-          // Consume the event and write the correct escape sequence directly to PTY.
+          // Shift+Tab: ghostty-web sends \t for both Tab and Shift+Tab
           e.preventDefault()
           e.stopPropagation()
           const s = useAppStore.getState()
@@ -26,9 +25,8 @@ export function useShortcuts() {
       // Shift+Enter handling when terminal is focused
       if (e.key === 'Enter' && e.shiftKey && !e.metaKey && !e.ctrlKey && !e.altKey
         && (e.target as HTMLElement)?.closest?.('[class*="terminalInner"]')) {
-        // Shift+Enter: ghostty-web sends \r for both Enter and Shift+Enter.
-        // Write the kitty keyboard protocol sequence so CLIs (e.g. Claude Code) can
-        // distinguish Shift+Enter (new line) from Enter (submit).
+        // Write kitty keyboard protocol so CLIs (e.g. Claude Code) can distinguish
+        // Shift+Enter (new line) from Enter (submit).
         e.preventDefault()
         e.stopPropagation()
         const s = useAppStore.getState()
@@ -37,6 +35,34 @@ export function useShortcuts() {
           window.api.pty.write(tab.ptyId, '\x1b[13;2u')
         }
         return
+      }
+
+      // Cmd+Left/Right/Backspace: macOS line-editing conventions.
+      // Only Cmd (not Ctrl) — Ctrl+arrow is word movement handled by ghostty.
+      if (e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey
+        && (e.target as HTMLElement)?.closest?.('[class*="terminalInner"]')) {
+        const s = useAppStore.getState()
+        const tab = s.tabs.find((t) => t.id === s.activeTabId)
+        if (tab?.type === 'terminal') {
+          if (e.key === 'ArrowLeft') {
+            e.preventDefault()
+            e.stopPropagation()
+            window.api.pty.write(tab.ptyId, '\x01') // Ctrl+A — beginning of line
+            return
+          }
+          if (e.key === 'ArrowRight') {
+            e.preventDefault()
+            e.stopPropagation()
+            window.api.pty.write(tab.ptyId, '\x05') // Ctrl+E — end of line
+            return
+          }
+          if (e.key === 'Backspace') {
+            e.preventDefault()
+            e.stopPropagation()
+            window.api.pty.write(tab.ptyId, '\x15') // Ctrl+U — kill to beginning of line
+            return
+          }
+        }
       }
 
       const meta = e.metaKey || e.ctrlKey
@@ -187,5 +213,34 @@ export function useShortcuts() {
     // Capture phase: runs before ghostty-web's stopPropagation() on the terminal element
     window.addEventListener('keydown', handler, true)
     return () => window.removeEventListener('keydown', handler, true)
+  }, [])
+
+  // Image paste: ghostty-web ignores clipboard images, so intercept and save to temp file
+  useEffect(() => {
+    const handlePaste = async (e: ClipboardEvent) => {
+      const target = e.target as HTMLElement
+      if (!target?.closest?.('[class*="terminalInner"]')) return
+      if (!e.clipboardData) return
+
+      const hasImage = Array.from(e.clipboardData.items).some(
+        (item) => item.type.startsWith('image/')
+      )
+      if (!hasImage) return
+
+      e.preventDefault()
+      e.stopPropagation()
+
+      const filePath = await window.api.clipboard.saveImage()
+      if (!filePath) return
+
+      const s = useAppStore.getState()
+      const tab = s.tabs.find((t) => t.id === s.activeTabId)
+      if (tab?.type === 'terminal') {
+        window.api.pty.write(tab.ptyId, `\x1b[200~${filePath}\x1b[201~`)
+      }
+    }
+
+    document.addEventListener('paste', handlePaste, true)
+    return () => document.removeEventListener('paste', handlePaste, true)
   }, [])
 }

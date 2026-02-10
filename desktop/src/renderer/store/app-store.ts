@@ -493,6 +493,13 @@ useAppStore.subscribe((state, prevState) => {
   }
 })
 
+// Flush state to disk synchronously when the window is closing.
+// Uses sendSync + writeFileSync so the write completes before the renderer is destroyed.
+window.addEventListener('beforeunload', () => {
+  if (saveTimer) clearTimeout(saveTimer)
+  window.api.state.saveSync(getPersistedSlice(useAppStore.getState()))
+})
+
 // Load persisted state on startup
 export async function hydrateFromDisk(): Promise<void> {
   try {

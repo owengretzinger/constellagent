@@ -1,6 +1,8 @@
-import { ipcMain, dialog, app, BrowserWindow } from 'electron'
+import { ipcMain, dialog, app, BrowserWindow, clipboard } from 'electron'
 import { join, relative } from 'path'
-import { mkdir } from 'fs/promises'
+import { mkdir, writeFile } from 'fs/promises'
+import { mkdirSync, writeFileSync } from 'fs'
+import { tmpdir } from 'os'
 import { watch, type FSWatcher } from 'fs'
 import { IPC } from '../shared/ipc-channels'
 import { PtyManager } from './pty-manager'
@@ -338,6 +340,16 @@ export function registerIpcHandlers(): void {
     return null
   })
 
+  // ── Clipboard handlers ──
+  ipcMain.handle(IPC.CLIPBOARD_SAVE_IMAGE, async () => {
+    const img = clipboard.readImage()
+    if (img.isEmpty()) return null
+    const buf = img.toPNG()
+    const filePath = join(tmpdir(), `constellagent-paste-${Date.now()}.png`)
+    await writeFile(filePath, buf)
+    return filePath
+  })
+
   // ── State persistence handlers ──
   const stateFilePath = () =>
     join(app.getPath('userData'), 'constellagent-state.json')
@@ -345,6 +357,17 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(IPC.STATE_SAVE, async (_e, data: unknown) => {
     await mkdir(app.getPath('userData'), { recursive: true })
     await saveJsonFile(stateFilePath(), data)
+  })
+
+  // Synchronous save for beforeunload — guarantees state is written before window closes
+  ipcMain.on(IPC.STATE_SAVE_SYNC, (event, data: unknown) => {
+    try {
+      mkdirSync(app.getPath('userData'), { recursive: true })
+      writeFileSync(stateFilePath(), JSON.stringify(data, null, 2), 'utf-8')
+      event.returnValue = true
+    } catch {
+      event.returnValue = false
+    }
   })
 
   ipcMain.handle(IPC.STATE_LOAD, async () => {

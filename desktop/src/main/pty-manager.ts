@@ -6,6 +6,8 @@ interface PtyInstance {
   process: pty.IPty
   webContents: WebContents
   onExitCallbacks: Array<(exitCode: number) => void>
+  cols: number
+  rows: number
 }
 
 export class PtyManager {
@@ -51,7 +53,7 @@ export class PtyManager {
       }
     })
 
-    const instance: PtyInstance = { process: proc, webContents, onExitCallbacks: [] }
+    const instance: PtyInstance = { process: proc, webContents, onExitCallbacks: [], cols: 80, rows: 24 }
 
     proc.onExit(({ exitCode }) => {
       for (const cb of instance.onExitCallbacks) cb(exitCode)
@@ -72,7 +74,12 @@ export class PtyManager {
   }
 
   resize(ptyId: string, cols: number, rows: number): void {
-    this.ptys.get(ptyId)?.process.resize(cols, rows)
+    const instance = this.ptys.get(ptyId)
+    if (instance) {
+      instance.cols = cols
+      instance.rows = rows
+      instance.process.resize(cols, rows)
+    }
   }
 
   destroy(ptyId: string): void {
@@ -93,6 +100,9 @@ export class PtyManager {
     const instance = this.ptys.get(ptyId)
     if (!instance) return false
     instance.webContents = webContents
+    // Send SIGWINCH directly so TUI apps (Claude Code) redraw their screen.
+    // Can't use resize() with same dimensions — kernel skips the signal on no-op.
+    try { process.kill(instance.process.pid, 'SIGWINCH') } catch {}
     return true
   }
 
