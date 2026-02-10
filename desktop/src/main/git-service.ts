@@ -144,6 +144,10 @@ export class GitService {
     return git(['rev-parse', '--show-toplevel'], cwd)
   }
 
+  static async getCurrentBranch(worktreePath: string): Promise<string> {
+    return git(['rev-parse', '--abbrev-ref', 'HEAD'], worktreePath)
+  }
+
   static async getStatus(worktreePath: string): Promise<FileStatus[]> {
     const output = await git(
       ['status', '--porcelain=v1', '-uall'],

@@ -25,6 +25,8 @@ const api = {
       ipcRenderer.invoke(IPC.GIT_DISCARD, worktreePath, paths, untracked),
     commit: (worktreePath: string, message: string) =>
       ipcRenderer.invoke(IPC.GIT_COMMIT, worktreePath, message),
+    getCurrentBranch: (worktreePath: string) =>
+      ipcRenderer.invoke(IPC.GIT_GET_CURRENT_BRANCH, worktreePath) as Promise<string>,
   },
 
   pty: {

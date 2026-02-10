@@ -77,20 +77,42 @@ export class GithubService {
 
   private static async fetchPrForBranch(repoPath: string, branch: string): Promise<PrInfo | null> {
     try {
+      // Fetch open PR first — if a branch has multiple PRs (e.g. after rebase
+      // onto a new base), we want the current open one, not a stale closed one.
       const { stdout } = await execFileAsync(
         'gh',
         [
           'pr', 'list',
           '--head', branch,
-          '--state', 'all',
+          '--state', 'open',
           '--limit', '1',
           '--json', 'number,state,title,url,statusCheckRollup,updatedAt',
         ],
         { cwd: repoPath, timeout: 10_000 }
       )
 
-      const prs = JSON.parse(stdout)
-      if (!prs || prs.length === 0) return null
+      let prs = JSON.parse(stdout)
+
+      // No open PR — check for merged/closed (show final state)
+      if (!prs || prs.length === 0) {
+        const { stdout: allStdout } = await execFileAsync(
+          'gh',
+          [
+            'pr', 'list',
+            '--head', branch,
+            '--state', 'all',
+            '--limit', '5',
+            '--json', 'number,state,title,url,statusCheckRollup,updatedAt',
+          ],
+          { cwd: repoPath, timeout: 10_000 }
+        )
+        prs = JSON.parse(allStdout)
+        if (!prs || prs.length === 0) return null
+        // Pick most recently updated
+        prs.sort((a: { updatedAt: string }, b: { updatedAt: string }) =>
+          b.updatedAt.localeCompare(a.updatedAt)
+        )
+      }
 
       const pr = prs[0]
       return {

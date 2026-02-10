@@ -62,6 +62,10 @@ export function registerIpcHandlers(): void {
     return GitService.commit(worktreePath, message)
   })
 
+  ipcMain.handle(IPC.GIT_GET_CURRENT_BRANCH, async (_e, worktreePath: string) => {
+    return GitService.getCurrentBranch(worktreePath)
+  })
+
   // ── GitHub handlers ──
   ipcMain.handle(IPC.GITHUB_GET_PR_STATUSES, async (_e, repoPath: string, branches: string[]) => {
     return GithubService.getPrStatuses(repoPath, branches)

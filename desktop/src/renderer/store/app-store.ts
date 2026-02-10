@@ -74,6 +74,11 @@ export const useAppStore = create<AppState>((set, get) => ({
       workspaces: s.workspaces.map((w) => w.id === id ? { ...w, name } : w),
     })),
 
+  updateWorkspaceBranch: (id, branch) =>
+    set((s) => ({
+      workspaces: s.workspaces.map((w) => w.id === id ? { ...w, branch } : w),
+    })),
+
   setActiveWorkspace: (id) =>
     set((s) => {
       const wsTabs = s.tabs.filter((t) => t.workspaceId === id)
@@ -198,16 +203,25 @@ export const useAppStore = create<AppState>((set, get) => ({
   nextWorkspace: () => {
     const s = get()
     if (s.workspaces.length <= 1) return
-    const idx = s.workspaces.findIndex((w) => w.id === s.activeWorkspaceId)
-    const next = s.workspaces[(idx + 1) % s.workspaces.length]
+    // Build visual order: workspaces grouped by project, matching sidebar display
+    const ordered = s.projects.flatMap((p) =>
+      s.workspaces.filter((w) => w.projectId === p.id),
+    )
+    if (ordered.length <= 1) return
+    const idx = ordered.findIndex((w) => w.id === s.activeWorkspaceId)
+    const next = ordered[(idx + 1) % ordered.length]
     get().setActiveWorkspace(next.id)
   },
 
   prevWorkspace: () => {
     const s = get()
     if (s.workspaces.length <= 1) return
-    const idx = s.workspaces.findIndex((w) => w.id === s.activeWorkspaceId)
-    const prev = s.workspaces[(idx - 1 + s.workspaces.length) % s.workspaces.length]
+    const ordered = s.projects.flatMap((p) =>
+      s.workspaces.filter((w) => w.projectId === p.id),
+    )
+    if (ordered.length <= 1) return
+    const idx = ordered.findIndex((w) => w.id === s.activeWorkspaceId)
+    const prev = ordered[(idx - 1 + ordered.length) % ordered.length]
     get().setActiveWorkspace(prev.id)
   },
 

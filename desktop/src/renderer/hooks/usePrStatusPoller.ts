@@ -9,10 +9,29 @@ export function usePrStatusPoller(): void {
 
   useEffect(() => {
     async function pollAll() {
-      const { projects, workspaces, setPrStatuses, setGhAvailability } = useAppStore.getState()
+      const { projects, workspaces, setPrStatuses, setGhAvailability, updateWorkspaceBranch } =
+        useAppStore.getState()
+
+      // Refresh actual branch names from git before querying PRs
+      await Promise.allSettled(
+        workspaces.map(async (ws) => {
+          if (!ws.worktreePath) return
+          try {
+            const actual = await window.api.git.getCurrentBranch(ws.worktreePath)
+            if (actual && actual !== ws.branch) {
+              updateWorkspaceBranch(ws.id, actual)
+            }
+          } catch {
+            // Worktree may have been removed — ignore
+          }
+        })
+      )
+
+      // Re-read workspaces after branch updates
+      const freshWorkspaces = useAppStore.getState().workspaces
 
       const projectBranches = new Map<string, { repoPath: string; branches: string[] }>()
-      for (const ws of workspaces) {
+      for (const ws of freshWorkspaces) {
         const project = projects.find((p) => p.id === ws.projectId)
         if (!project || !ws.branch) continue
 
