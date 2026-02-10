@@ -44,6 +44,8 @@ export type Tab = {
 
 export type RightPanelMode = 'files' | 'changes'
 
+export type PrLinkProvider = 'github' | 'graphite' | 'devinreview'
+
 export interface Settings {
   confirmOnClose: boolean
   autoSaveOnBlur: boolean
@@ -52,6 +54,7 @@ export interface Settings {
   diffInline: boolean
   terminalFontSize: number
   editorFontSize: number
+  prLinkProvider: PrLinkProvider
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -62,6 +65,7 @@ export const DEFAULT_SETTINGS: Settings = {
   diffInline: false,
   terminalFontSize: 14,
   editorFontSize: 13,
+  prLinkProvider: 'github',
 }
 
 export interface Toast {

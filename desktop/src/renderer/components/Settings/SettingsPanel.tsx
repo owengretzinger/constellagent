@@ -106,6 +106,32 @@ function NumberRow({ label, description, value, onChange, min = 8, max = 32 }: {
   )
 }
 
+function SelectRow({ label, description, value, onChange, options }: {
+  label: string
+  description: string
+  value: string
+  onChange: (v: string) => void
+  options: { value: string; label: string }[]
+}) {
+  return (
+    <div className={styles.row}>
+      <div className={styles.rowText}>
+        <div className={styles.rowLabel}>{label}</div>
+        <div className={styles.rowDescription}>{description}</div>
+      </div>
+      <select
+        className={styles.selectInput}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+      >
+        {options.map((o) => (
+          <option key={o.value} value={o.value}>{o.label}</option>
+        ))}
+      </select>
+    </div>
+  )
+}
+
 function ClaudeHooksSection() {
   const [installed, setInstalled] = useState<boolean | null>(null)
   const [installing, setInstalling] = useState(false)
@@ -257,6 +283,18 @@ export function SettingsPanel() {
             value={settings.defaultShell}
             onChange={(v) => update('defaultShell', v)}
             placeholder="/bin/zsh"
+          />
+
+          <SelectRow
+            label="PR link provider"
+            description="Where to open pull request links"
+            value={settings.prLinkProvider}
+            onChange={(v) => update('prLinkProvider', v as Settings['prLinkProvider'])}
+            options={[
+              { value: 'github', label: 'GitHub' },
+              { value: 'graphite', label: 'Graphite' },
+              { value: 'devinreview', label: 'Devin Review' },
+            ]}
           />
         </div>
 

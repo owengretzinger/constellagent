@@ -47,6 +47,7 @@ function WorkspaceMeta({
     s.prStatusMap.get(`${projectId}:${branch}`),
   );
   const ghAvailable = useAppStore((s) => s.ghAvailability.get(projectId));
+  const prLinkProvider = useAppStore((s) => s.settings.prLinkProvider);
   const hasPr = !!(ghAvailable && prInfo !== undefined && prInfo !== null);
 
   if (!hasPr && !showBranch) return null;
@@ -61,7 +62,13 @@ function WorkspaceMeta({
           title={`PR #${prInfo!.number}: ${prInfo!.title}`}
           onClick={(e) => {
             e.stopPropagation();
-            window.open(prInfo!.url);
+            const domains: Record<string, string> = {
+              github: 'github.com',
+              graphite: 'graphite.dev',
+              devinreview: 'devinreview.com',
+            };
+            const url = prInfo!.url.replace('github.com', domains[prLinkProvider] || 'github.com');
+            window.open(url);
           }}
         >
           <PrStateIcon state={prInfo!.state} />

@@ -272,7 +272,7 @@
 }
 
 .prInline:hover {
-  color: var(--text-secondary);
+  filter: brightness(1.3);
 }
 
 
