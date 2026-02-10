@@ -1,5 +1,5 @@
 import { ipcMain, dialog, app, BrowserWindow } from 'electron'
-import { join } from 'path'
+import { join, relative } from 'path'
 import { mkdir } from 'fs/promises'
 import { watch, type FSWatcher } from 'fs'
 import { IPC } from '../shared/ipc-channels'
@@ -86,15 +86,30 @@ export function registerIpcHandlers(): void {
   })
 
   ipcMain.handle(IPC.FS_GET_TREE_WITH_STATUS, async (_e, dirPath: string) => {
-    const [tree, statuses] = await Promise.all([
+    const [tree, statuses, topLevel] = await Promise.all([
       FileService.getTree(dirPath),
       GitService.getStatus(dirPath).catch(() => []),
+      GitService.getTopLevel(dirPath).catch(() => dirPath),
     ])
 
-    // Build map: relative path → git status
+    // git status --porcelain paths are relative to repo root, but
+    // git ls-files paths (used for the tree) are relative to cwd (dirPath).
+    // Compute prefix to convert between them.
+    const prefix = relative(topLevel, dirPath) // e.g. 'desktop' or ''
+
+    // Build map: dirPath-relative path → git status
     const statusMap = new Map<string, string>()
     for (const s of statuses) {
-      statusMap.set(s.path, s.status)
+      let p = s.path
+      // Handle renamed files: "old -> new" — use the new path
+      if (p.includes(' -> ')) {
+        p = p.split(' -> ')[1]
+      }
+      // Strip repo-root prefix to get dirPath-relative path
+      if (prefix && p.startsWith(prefix + '/')) {
+        p = p.slice(prefix.length + 1)
+      }
+      statusMap.set(p, s.status)
     }
 
     // Attach gitStatus to nodes, propagate to parent dirs
@@ -210,21 +225,23 @@ export function registerIpcHandlers(): void {
     if (app.isPackaged) {
       return join(process.resourcesPath, 'claude-hooks', 'notify.sh')
     }
-    return join(__dirname, '..', '..', 'resources', 'claude-hooks', 'notify.sh')
+    return join(__dirname, '..', '..', 'claude-hooks', 'notify.sh')
+  }
+
+  // Stable identifier to match our hook entries regardless of full path
+  const HOOK_IDENTIFIER = 'claude-hooks/notify.sh'
+
+  function isOurHook(rule: { hooks?: Array<{ command?: string }> }): boolean {
+    return !!rule.hooks?.some((h) => h.command?.includes(HOOK_IDENTIFIER))
   }
 
   ipcMain.handle(IPC.CLAUDE_CHECK_HOOKS, async () => {
     const settings = await loadClaudeSettings()
-    const scriptPath = getHookScriptPath()
     const hooks = settings.hooks as Record<string, unknown[]> | undefined
     if (!hooks) return { installed: false }
 
-    const hasStop = (hooks.Stop as Array<{ hooks?: Array<{ command?: string }> }> | undefined)?.some(
-      (rule) => rule.hooks?.some((h) => h.command?.includes(scriptPath))
-    )
-    const hasNotification = (hooks.Notification as Array<{ hooks?: Array<{ command?: string }> }> | undefined)?.some(
-      (rule) => rule.hooks?.some((h) => h.command?.includes(scriptPath))
-    )
+    const hasStop = (hooks.Stop as Array<{ hooks?: Array<{ command?: string }> }> | undefined)?.some(isOurHook)
+    const hasNotification = (hooks.Notification as Array<{ hooks?: Array<{ command?: string }> }> | undefined)?.some(isOurHook)
     return { installed: !!(hasStop && hasNotification) }
   })
 
@@ -235,16 +252,13 @@ export function registerIpcHandlers(): void {
     const hooks = (settings.hooks ?? {}) as Record<string, unknown[]>
     const hookEntry = { matcher: '', hooks: [{ type: 'command', command: scriptPath }] }
 
-    // Helper: add our hook to an event if not already present
+    // Helper: remove stale entries with old paths, then add current one
     function ensureHook(event: string) {
       const rules = (hooks[event] ?? []) as Array<{ hooks?: Array<{ command?: string }> }>
-      const alreadyInstalled = rules.some((rule) =>
-        rule.hooks?.some((h) => h.command?.includes(scriptPath))
-      )
-      if (!alreadyInstalled) {
-        rules.push(hookEntry)
-      }
-      hooks[event] = rules
+      // Remove any existing entries for our hook (potentially with stale paths)
+      const filtered = rules.filter((rule) => !isOurHook(rule))
+      filtered.push(hookEntry)
+      hooks[event] = filtered
     }
 
     ensureHook('Stop')
@@ -257,15 +271,12 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle(IPC.CLAUDE_UNINSTALL_HOOKS, async () => {
     const settings = await loadClaudeSettings()
-    const scriptPath = getHookScriptPath()
     const hooks = settings.hooks as Record<string, unknown[]> | undefined
     if (!hooks) return { success: true }
 
     function removeHook(event: string) {
       const rules = (hooks![event] ?? []) as Array<{ hooks?: Array<{ command?: string }> }>
-      hooks![event] = rules.filter(
-        (rule) => !rule.hooks?.some((h) => h.command?.includes(scriptPath))
-      )
+      hooks![event] = rules.filter((rule) => !isOurHook(rule))
       if ((hooks![event] as unknown[]).length === 0) delete hooks![event]
     }
 

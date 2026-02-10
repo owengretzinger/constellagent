@@ -39,7 +39,7 @@ function friendlyGitError(err: unknown, fallback: string): string {
 
   // "fatal: 'branch' is already used by worktree at '/path'"
   const alreadyUsed = stderr.match(/fatal: '([^']+)' is already (?:checked out|used by worktree) at '([^']+)'/)
-  if (alreadyUsed) return `Branch "${alreadyUsed[1]}" is already checked out in another worktree`
+  if (alreadyUsed) return 'BRANCH_CHECKED_OUT'
 
   // "fatal: invalid reference: branch-name"
   if (stderr.includes('invalid reference')) {
@@ -108,12 +108,17 @@ export class GitService {
       await rm(worktreePath, { recursive: true, force: true })
     }
 
+    // Pre-check if branch exists so we never need -b retry
+    const branchExists = await git(['rev-parse', '--verify', `refs/heads/${branch}`], repoPath)
+      .then(() => true, () => false)
+
     const args = ['worktree', 'add']
-    if (newBranch) {
+    if (force) args.push('--force')
+    if (newBranch && !branchExists) {
       args.push('-b', branch)
     }
     args.push(worktreePath)
-    if (!newBranch) {
+    if (!newBranch || branchExists) {
       args.push(branch)
     }
 
@@ -121,15 +126,7 @@ export class GitService {
       await git(args, repoPath)
     } catch (err) {
       const msg = friendlyGitError(err, 'Failed to create worktree')
-      // Branch already exists from a previous worktree — retry without -b
-      if (msg === 'BRANCH_ALREADY_EXISTS' && newBranch) {
-        try {
-          await git(['worktree', 'add', worktreePath, branch], repoPath)
-          return worktreePath
-        } catch (retryErr) {
-          throw new Error(friendlyGitError(retryErr, 'Failed to create worktree'))
-        }
-      }
+      if (msg === 'BRANCH_CHECKED_OUT' && !force) throw new Error(msg)
       throw new Error(msg)
     }
     return worktreePath
@@ -141,6 +138,10 @@ export class GitService {
     } catch (err) {
       throw new Error(friendlyGitError(err, 'Failed to remove worktree'))
     }
+  }
+
+  static async getTopLevel(cwd: string): Promise<string> {
+    return git(['rev-parse', '--show-toplevel'], cwd)
   }
 
   static async getStatus(worktreePath: string): Promise<FileStatus[]> {
@@ -222,12 +223,29 @@ export class GitService {
   }
 
   static async getBranches(repoPath: string): Promise<string[]> {
-    const output = await git(
-      ['branch', '--list', '--format=%(refname:short)'],
-      repoPath
-    )
-    if (!output) return []
-    return output.split('\n').filter(Boolean)
+    const [localOut, remoteOut] = await Promise.all([
+      git(['branch', '--list', '--format=%(refname:short)'], repoPath),
+      git(['branch', '-r', '--format=%(refname:short)'], repoPath).catch(() => ''),
+    ])
+    const seen = new Set<string>()
+    const branches: string[] = []
+    // Add local branches first
+    for (const name of localOut.split('\n').filter(Boolean)) {
+      seen.add(name)
+      branches.push(name)
+    }
+    // Add remote branches, stripping remote prefix and deduplicating
+    for (const raw of remoteOut.split('\n').filter(Boolean)) {
+      if (raw.endsWith('/HEAD')) continue
+      // "origin/feature-x" → "feature-x", "origin/feat/sub" → "feat/sub"
+      const slash = raw.indexOf('/')
+      const name = slash >= 0 ? raw.slice(slash + 1) : raw
+      if (!seen.has(name)) {
+        seen.add(name)
+        branches.push(name)
+      }
+    }
+    return branches
   }
 
   static async stage(worktreePath: string, paths: string[]): Promise<void> {

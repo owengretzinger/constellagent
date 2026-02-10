@@ -42,6 +42,7 @@
   --accent-cyan: #7dcfff;        /* Info, links */
   --accent-purple: #bb9af7;      /* Keywords, special items */
   --accent-green: #9ece6a;       /* Success, additions, new items */
+  --accent-green-muted: #73a94c; /* Untracked/new files (dimmer green) */
   --accent-green-dim: rgba(158, 206, 106, 0.12);
   --accent-red: #f7768e;         /* Errors, deletions, destructive */
   --accent-red-dim: rgba(247, 118, 142, 0.12);

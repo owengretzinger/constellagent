@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import type { Project } from '../../store/types'
 import styles from './WorkspaceDialog.module.css'
 
@@ -15,6 +15,8 @@ export function WorkspaceDialog({ project, onConfirm, onCancel }: Props) {
   const [isNewBranch, setIsNewBranch] = useState(true)
   const [newBranchName, setNewBranchName] = useState('')
   const [loading, setLoading] = useState(true)
+  const [pickerOpen, setPickerOpen] = useState(false)
+  const pickerRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     window.api.git.getBranches(project.repoPath).then((b) => {
@@ -30,6 +32,18 @@ export function WorkspaceDialog({ project, onConfirm, onCancel }: Props) {
     const branch = isNewBranch ? (newBranchName || name) : selectedBranch
     onConfirm(name, branch, isNewBranch)
   }, [name, isNewBranch, newBranchName, selectedBranch, onConfirm])
+
+  // Close picker on click outside
+  useEffect(() => {
+    if (!pickerOpen) return
+    const handler = (e: MouseEvent) => {
+      if (pickerRef.current && !pickerRef.current.contains(e.target as Node)) {
+        setPickerOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [pickerOpen])
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === 'Enter') handleSubmit()
@@ -74,16 +88,36 @@ export function WorkspaceDialog({ project, onConfirm, onCancel }: Props) {
             placeholder={name || 'branch-name'}
           />
         ) : (
-          <select
-            className={styles.input}
-            value={selectedBranch}
-            onChange={(e) => setSelectedBranch(e.target.value)}
-            disabled={loading}
-          >
-            {branches.map((b) => (
-              <option key={b} value={b}>{b}</option>
-            ))}
-          </select>
+          <div className={styles.branchInputRow} ref={pickerRef}>
+            <input
+              className={styles.input}
+              value={selectedBranch}
+              onChange={(e) => setSelectedBranch(e.target.value)}
+              disabled={loading}
+              placeholder="Branch name"
+            />
+            <button
+              className={styles.pickerBtn}
+              onClick={() => setPickerOpen((v) => !v)}
+              disabled={loading}
+              type="button"
+            >
+              &#9662;
+            </button>
+            {pickerOpen && (
+              <div className={styles.pickerDropdown}>
+                {branches.map((b) => (
+                  <div
+                    key={b}
+                    className={`${styles.pickerOption} ${b === selectedBranch ? styles.pickerOptionActive : ''}`}
+                    onClick={() => { setSelectedBranch(b); setPickerOpen(false) }}
+                  >
+                    {b}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         )}
 
         <div className={styles.actions}>

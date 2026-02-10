@@ -129,10 +129,22 @@ export function Sidebar() {
       await finishCreateWorkspace(project, name, branch, worktreePath)
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to create workspace'
-      if (msg === 'WORKTREE_PATH_EXISTS') {
-        showConfirmDialog({
+      const confirmMessages = [
+        {
+          key: 'WORKTREE_PATH_EXISTS',
           title: 'Worktree already exists',
           message: `A leftover directory for workspace "${name}" already exists on disk. Replace it?`,
+        },
+        {
+          key: 'BRANCH_CHECKED_OUT',
+          title: 'Branch in use',
+          message: `Branch "${branch}" is checked out in another worktree. Remove the old worktree and continue?`,
+        },
+      ]
+      const confirm = confirmMessages.find((c) => msg.includes(c.key))
+      if (confirm) {
+        showConfirmDialog({
+          ...confirm,
           confirmLabel: 'Replace',
           destructive: true,
           onConfirm: () => {

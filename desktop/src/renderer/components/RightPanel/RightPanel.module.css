@@ -111,26 +111,26 @@
   white-space: nowrap;
 }
 
-/* ── Git Status Colors ── */
+/* ── Git Status Colors (must override active/hover states) ── */
 
-.gitModified {
+.treeName.gitModified {
   color: var(--accent-orange);
 }
 
-.gitAdded {
+.treeName.gitAdded {
   color: var(--accent-green);
 }
 
-.gitDeleted {
+.treeName.gitDeleted {
   color: var(--accent-red);
 }
 
-.gitRenamed {
+.treeName.gitRenamed {
   color: var(--accent-cyan);
 }
 
-.gitUntracked {
-  color: var(--text-tertiary);
+.treeName.gitUntracked {
+  color: var(--accent-green-muted);
 }
 
 /* ── Changed Files ── */
