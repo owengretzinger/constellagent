@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Constellagent — Parallel AI Workspaces</title>
+  <meta name="description" content="Run dozens of Claude Code workspaces in parallel. Give each one a branch, a task, and let them rip.">
+  <link rel="icon" type="image/png" href="icon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@1&family=Instrument+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- Grain overlay -->
+  <div class="grain" aria-hidden="true"></div>
+
+  <!-- Nav -->
+  <nav class="nav" id="nav">
+    <div class="nav-inner">
+      <a href="#" class="nav-brand">
+        <img src="icon.png" alt="Constellagent" width="32" height="32">
+        <span>Constellagent</span>
+      </a>
+      <div class="nav-links">
+        <a href="#features">Features</a>
+        <a href="#how-it-works">How it Works</a>
+      </div>
+      <div class="nav-ctas">
+        <a href="https://github.com" class="btn btn-sm btn-secondary" target="_blank" rel="noopener">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+          Star on GitHub
+        </a>
+        <a href="https://github.com" class="btn btn-sm btn-primary" target="_blank" rel="noopener">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Download
+        </a>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Hero -->
+  <section class="hero">
+    <canvas id="constellation" aria-hidden="true"></canvas>
+    <div class="hero-grid" aria-hidden="true"></div>
+    <div class="hero-content">
+      <span class="mono eyebrow">Parallel AI workspaces</span>
+      <h1>
+        Command your<br>
+        <em>constellation</em><br>
+        of AI agents
+      </h1>
+      <p class="hero-sub">Run dozens of Claude Code workspaces in parallel. Give each one a branch, a task, and let them rip.</p>
+      <div class="hero-ctas">
+        <a href="https://github.com" class="btn btn-primary" target="_blank" rel="noopener">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Download
+        </a>
+        <a href="https://github.com" class="btn btn-secondary" target="_blank" rel="noopener">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+          Star on GitHub
+        </a>
+      </div>
+      <small class="hero-note">Free and open source</small>
+      <div class="hero-screenshot app-window">
+        <img class="window-screenshot" src="screenshot.png" alt="Constellagent showing parallel Claude Code workspaces with sidebar, terminal, and code editor">
+      </div>
+    </div>
+  </section>
+
+  <!-- Features -->
+  <section class="section" id="features">
+    <div class="section-inner">
+      <span class="mono section-label">// capabilities</span>
+      <h2>A control room for<br>your AI agents</h2>
+      <div class="feature-grid">
+        <div class="feature-card animate-in" style="--accent: var(--accent-blue)">
+          <div class="feature-accent"></div>
+          <svg class="feature-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="8" height="8" rx="1.5"/><rect x="14" y="3" width="8" height="8" rx="1.5"/><rect x="2" y="13" width="8" height="8" rx="1.5"/><rect x="14" y="13" width="8" height="8" rx="1.5"/></svg>
+          <h3>Parallel Workspaces</h3>
+          <p>Run multiple Claude Code sessions simultaneously. Each workspace gets its own terminal, files, and git branch.</p>
+        </div>
+        <div class="feature-card animate-in" style="--accent: var(--accent-cyan)">
+          <div class="feature-accent"></div>
+          <svg class="feature-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+          <h3>Integrated Terminal</h3>
+          <p>Full Ghostty terminal emulation with WebGL rendering. Supports TUI apps, colors, and persistent scrollback.</p>
+        </div>
+        <div class="feature-card animate-in" style="--accent: var(--accent-purple)">
+          <div class="feature-accent"></div>
+          <svg class="feature-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M13 6h3a2 2 0 0 1 2 2v7"/><path d="M11 18H8a2 2 0 0 1-2-2V9"/></svg>
+          <h3>Git &amp; PR Status</h3>
+          <p>Live branch detection, file status, and GitHub PR badges. Open, merged, closed — visible right from the sidebar.</p>
+        </div>
+        <div class="feature-card animate-in" style="--accent: var(--accent-green)">
+          <div class="feature-accent"></div>
+          <svg class="feature-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          <h3>Scheduled Automations</h3>
+          <p>Set agents on a cron schedule with templates. Hourly, daily, or whenever you want. They just keep going.</p>
+        </div>
+        <div class="feature-card animate-in" style="--accent: var(--accent-orange)">
+          <div class="feature-accent"></div>
+          <svg class="feature-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/><line x1="9" y1="14" x2="15" y2="14"/><line x1="9" y1="18" x2="13" y2="18"/></svg>
+          <h3>Code Editor &amp; Diffs</h3>
+          <p>Monaco editor with syntax highlighting. Context-collapsing diff viewer to review what your agents changed.</p>
+        </div>
+        <div class="feature-card animate-in" style="--accent: var(--accent-blue)">
+          <div class="feature-accent"></div>
+          <svg class="feature-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M6 8h.01"/><path d="M10 8h.01"/><path d="M14 8h.01"/><line x1="6" y1="12" x2="18" y2="12"/><line x1="6" y1="16" x2="14" y2="16"/></svg>
+          <h3>Keyboard-First</h3>
+          <p>45+ shortcuts. Quick Open, workspace switching, font scaling. Mice are optional.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- How it Works -->
+  <section class="section" id="how-it-works">
+    <div class="section-inner">
+      <span class="mono section-label">// workflow</span>
+      <h2>From zero to shipping<br>in three steps</h2>
+      <div class="steps">
+        <div class="step animate-in">
+          <span class="step-num mono">01</span>
+          <h3>Create a project</h3>
+          <p>Group related workspaces. Each project maps to a git repo with isolated worktree branches.</p>
+        </div>
+        <div class="step-connector" aria-hidden="true"></div>
+        <div class="step animate-in">
+          <span class="step-num mono">02</span>
+          <h3>Spin up agents</h3>
+          <p>Launch parallel Claude Code sessions. Each agent gets its own terminal, branch, and context.</p>
+        </div>
+        <div class="step-connector" aria-hidden="true"></div>
+        <div class="step animate-in">
+          <span class="step-num mono">03</span>
+          <h3>Review &amp; ship</h3>
+          <p>See diffs, check PR status, and merge. Automations keep agents running while you sleep.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Final CTA -->
+  <section class="section section-cta" id="download">
+    <div class="section-inner cta-inner">
+      <h2>Ready to orchestrate?</h2>
+      <p>Star on GitHub and grab the latest release.</p>
+      <a href="https://github.com" class="btn btn-primary btn-lg" target="_blank" rel="noopener">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Download
+      </a>
+      <small class="mono cta-note">Free and open source</small>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <div class="footer-inner">
+      <div class="footer-brand">
+        <img src="icon.png" alt="Constellagent" width="20" height="20">
+        <span>&copy; 2026 Constellagent</span>
+      </div>
+      <a href="https://github.com" target="_blank" rel="noopener">GitHub</a>
+    </div>
+  </footer>
+
+  <script src="main.js"></script>
+</body>
+</html>

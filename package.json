@@ -6,6 +6,7 @@
     "build": "bun run --cwd desktop build",
     "test": "bun run --cwd desktop test",
     "rebuild": "bun run --cwd desktop rebuild",
-    "dist": "bun run --cwd desktop dist"
+    "dist": "bun run --cwd desktop dist",
+    "landing": "bunx serve landing-page"
   }
 }
