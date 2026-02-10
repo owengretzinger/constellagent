@@ -1,7 +1,21 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
-import Editor from '@monaco-editor/react'
+import Editor, { type BeforeMount, loader } from '@monaco-editor/react'
 import { useAppStore } from '../../store/app-store'
 import styles from './Editor.module.css'
+
+// Disable TS/JS semantic diagnostics globally once — Monaco can't resolve project modules
+let diagnosticsConfigured = false
+loader.init().then((monaco) => {
+  if (diagnosticsConfigured) return
+  diagnosticsConfigured = true
+  const diagnosticsOff = {
+    noSemanticValidation: true,
+    noSyntaxValidation: false,
+    noSuggestionDiagnostics: true,
+  }
+  monaco.languages.typescript.typescriptDefaults.setDiagnosticsOptions(diagnosticsOff)
+  monaco.languages.typescript.javascriptDefaults.setDiagnosticsOptions(diagnosticsOff)
+})
 
 interface Props {
   tabId: string
