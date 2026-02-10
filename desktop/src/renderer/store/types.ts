@@ -90,6 +90,7 @@ export interface AppState {
   automations: Automation[]
   activeWorkspaceId: string | null
   activeTabId: string | null
+  lastActiveTabByWorkspace: Record<string, string>
   rightPanelMode: RightPanelMode
   rightPanelOpen: boolean
   sidebarCollapsed: boolean
@@ -178,5 +179,6 @@ export interface PersistedState {
   automations?: Automation[]
   activeWorkspaceId?: string | null
   activeTabId?: string | null
+  lastActiveTabByWorkspace?: Record<string, string>
   settings?: Settings
 }

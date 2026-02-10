@@ -9,6 +9,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   automations: [],
   activeWorkspaceId: null,
   activeTabId: null,
+  lastActiveTabByWorkspace: {},
   rightPanelMode: 'files',
   rightPanelOpen: true,
   sidebarCollapsed: false,
@@ -35,10 +36,14 @@ export const useAppStore = create<AppState>((set, get) => ({
       for (const a of projectAutomations) {
         window.api.automations.delete(a.id)
       }
+      const removedWsIds = new Set(s.workspaces.filter((w) => w.projectId === id).map((w) => w.id))
+      const tabMap = { ...s.lastActiveTabByWorkspace }
+      for (const wsId of removedWsIds) delete tabMap[wsId]
       return {
         projects: s.projects.filter((p) => p.id !== id),
         workspaces: s.workspaces.filter((w) => w.projectId !== id),
         automations: s.automations.filter((a) => a.projectId !== id),
+        lastActiveTabByWorkspace: tabMap,
       }
     }),
 
@@ -54,10 +59,13 @@ export const useAppStore = create<AppState>((set, get) => ({
       const newTabs = s.tabs.filter((t) => t.workspaceId !== id)
       const newUnread = new Set(s.unreadWorkspaceIds)
       newUnread.delete(id)
+      const tabMap = { ...s.lastActiveTabByWorkspace }
+      delete tabMap[id]
       return {
         workspaces: newWorkspaces,
         tabs: newTabs,
         unreadWorkspaceIds: newUnread,
+        lastActiveTabByWorkspace: tabMap,
         activeWorkspaceId:
           s.activeWorkspaceId === id
             ? newWorkspaces[0]?.id ?? null
@@ -81,12 +89,26 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   setActiveWorkspace: (id) =>
     set((s) => {
+      // Remember which tab was active in the workspace we're leaving
+      const tabMap = { ...s.lastActiveTabByWorkspace }
+      if (s.activeWorkspaceId && s.activeTabId) {
+        tabMap[s.activeWorkspaceId] = s.activeTabId
+      }
+
       const wsTabs = s.tabs.filter((t) => t.workspaceId === id)
       const newUnread = new Set(s.unreadWorkspaceIds)
       if (id) newUnread.delete(id)
+
+      // Restore remembered tab, falling back to first tab
+      const remembered = id ? tabMap[id] : null
+      const activeTabId = remembered && wsTabs.some((t) => t.id === remembered)
+        ? remembered
+        : wsTabs[0]?.id ?? null
+
       return {
         activeWorkspaceId: id,
-        activeTabId: wsTabs[0]?.id ?? null,
+        activeTabId,
+        lastActiveTabByWorkspace: tabMap,
         unreadWorkspaceIds: newUnread,
       }
     }),
@@ -415,6 +437,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       automations: data.automations ?? [],
       activeWorkspaceId,
       activeTabId,
+      lastActiveTabByWorkspace: data.lastActiveTabByWorkspace ?? {},
       settings,
     })
   },
@@ -441,6 +464,7 @@ function getPersistedSlice(state: AppState): PersistedState {
     automations: state.automations,
     activeWorkspaceId: state.activeWorkspaceId,
     activeTabId: state.activeTabId,
+    lastActiveTabByWorkspace: state.lastActiveTabByWorkspace,
     settings: state.settings,
   }
 }
@@ -497,17 +521,35 @@ export async function hydrateFromDisk(): Promise<void> {
       await Promise.all(reattachPromises)
     }
 
-    // Drop terminal tabs whose PTY is no longer alive
+    // Respawn PTYs for terminal tabs whose process is no longer alive
     const deadTabs = tabs.filter(
-      (t) => t.type === 'terminal' && !livePtyIds.has(t.ptyId)
+      (t): t is Extract<Tab, { type: 'terminal' }> =>
+        t.type === 'terminal' && !livePtyIds.has(t.ptyId)
     )
     if (deadTabs.length > 0) {
-      const deadIds = new Set(deadTabs.map((t) => t.id))
-      const remainingTabs = tabs.filter((t) => !deadIds.has(t.id))
-      const activeTabId = store.activeTabId && deadIds.has(store.activeTabId)
-        ? (remainingTabs.find((t) => t.workspaceId === store.activeWorkspaceId)?.id ?? null)
-        : store.activeTabId
-      useAppStore.setState({ tabs: remainingTabs, activeTabId })
+      const shell = store.settings.defaultShell || undefined
+      const updatedTabs = [...tabs]
+      for (const dead of deadTabs) {
+        const ws = store.workspaces.find((w) => w.id === dead.workspaceId)
+        if (!ws) continue
+        try {
+          const newPtyId = await window.api.pty.create(ws.worktreePath, shell, { AGENT_ORCH_WS_ID: ws.id })
+          const idx = updatedTabs.findIndex((t) => t.id === dead.id)
+          if (idx !== -1) updatedTabs[idx] = { ...dead, ptyId: newPtyId }
+        } catch {
+          // If respawn fails, drop the tab
+          const idx = updatedTabs.findIndex((t) => t.id === dead.id)
+          if (idx !== -1) updatedTabs.splice(idx, 1)
+        }
+      }
+      // Drop any terminal tabs whose workspace no longer exists
+      const finalTabs = updatedTabs.filter(
+        (t) => t.type !== 'terminal' || store.workspaces.some((w) => w.id === t.workspaceId)
+      )
+      const activeTabId = finalTabs.find((t) => t.id === store.activeTabId)
+        ? store.activeTabId
+        : (finalTabs.find((t) => t.workspaceId === store.activeWorkspaceId)?.id ?? null)
+      useAppStore.setState({ tabs: finalTabs, activeTabId })
     }
   } catch (err) {
     console.error('Failed to reconcile PTY tabs:', err)
