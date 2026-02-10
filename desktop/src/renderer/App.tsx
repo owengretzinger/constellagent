@@ -29,6 +29,14 @@ export function App() {
     return unsub
   }, [])
 
+  // Listen for Claude Code activity updates
+  useEffect(() => {
+    const unsub = window.api.claude.onActivityUpdate((workspaceIds: string[]) => {
+      useAppStore.getState().setActiveClaudeWorkspaces(workspaceIds)
+    })
+    return unsub
+  }, [])
+
   const {
     tabs: allTabs,
     activeTabId,

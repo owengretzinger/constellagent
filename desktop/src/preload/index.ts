@@ -93,6 +93,13 @@ const api = {
         ipcRenderer.removeListener(IPC.CLAUDE_NOTIFY_WORKSPACE, listener)
       }
     },
+    onActivityUpdate: (callback: (workspaceIds: string[]) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, wsIds: string[]) => callback(wsIds)
+      ipcRenderer.on(IPC.CLAUDE_ACTIVITY_UPDATE, listener)
+      return () => {
+        ipcRenderer.removeListener(IPC.CLAUDE_ACTIVITY_UPDATE, listener)
+      }
+    },
   },
 
   automations: {

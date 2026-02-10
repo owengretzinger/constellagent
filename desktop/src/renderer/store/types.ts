@@ -96,6 +96,7 @@ export interface AppState {
   toasts: Toast[]
   quickOpenVisible: boolean
   unreadWorkspaceIds: Set<string>
+  activeClaudeWorkspaceIds: Set<string>
 
   // Actions
   addProject: (project: Project) => void
@@ -141,6 +142,9 @@ export interface AppState {
   // Unread indicator actions
   markWorkspaceUnread: (workspaceId: string) => void
   clearWorkspaceUnread: (workspaceId: string) => void
+
+  // Claude activity actions
+  setActiveClaudeWorkspaces: (workspaceIds: string[]) => void
 
   // Automation actions
   addAutomation: (automation: Automation) => void

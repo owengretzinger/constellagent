@@ -19,6 +19,8 @@ export const IPC = {
   PTY_WRITE: 'pty:write',
   PTY_RESIZE: 'pty:resize',
   PTY_DESTROY: 'pty:destroy',
+  PTY_LIST: 'pty:list',
+  PTY_REATTACH: 'pty:reattach',
   PTY_DATA: 'pty:data', // prefix for events: `pty:data:{id}`
 
   // File operations
@@ -41,6 +43,7 @@ export const IPC = {
   CLAUDE_UNINSTALL_HOOKS: 'claude:uninstall-hooks',
   CLAUDE_CHECK_HOOKS: 'claude:check-hooks',
   CLAUDE_NOTIFY_WORKSPACE: 'claude:notify-workspace',
+  CLAUDE_ACTIVITY_UPDATE: 'claude:activity-update',
 
   // Automation operations
   AUTOMATION_CREATE: 'automation:create',

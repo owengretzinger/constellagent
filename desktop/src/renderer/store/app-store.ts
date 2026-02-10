@@ -21,6 +21,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   toasts: [],
   quickOpenVisible: false,
   unreadWorkspaceIds: new Set<string>(),
+  activeClaudeWorkspaceIds: new Set<string>(),
 
   addProject: (project) =>
     set((s) => ({ projects: [...s.projects, project] })),
@@ -337,6 +338,9 @@ export const useAppStore = create<AppState>((set, get) => ({
       newUnread.delete(workspaceId)
       return { unreadWorkspaceIds: newUnread }
     }),
+
+  setActiveClaudeWorkspaces: (workspaceIds) =>
+    set(() => ({ activeClaudeWorkspaceIds: new Set(workspaceIds) })),
 
   addAutomation: (automation) =>
     set((s) => ({ automations: [...s.automations, automation] })),

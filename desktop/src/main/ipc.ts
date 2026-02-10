@@ -221,18 +221,18 @@ export function registerIpcHandlers(): void {
   })
 
   // ── Claude Code hooks ──
-  function getHookScriptPath(): string {
+  function getHookScriptPath(name: string): string {
     if (app.isPackaged) {
-      return join(process.resourcesPath, 'claude-hooks', 'notify.sh')
+      return join(process.resourcesPath, 'claude-hooks', name)
     }
-    return join(__dirname, '..', '..', 'claude-hooks', 'notify.sh')
+    return join(__dirname, '..', '..', 'claude-hooks', name)
   }
 
-  // Stable identifier to match our hook entries regardless of full path
-  const HOOK_IDENTIFIER = 'claude-hooks/notify.sh'
+  // Stable identifiers to match our hook entries regardless of full path
+  const HOOK_IDENTIFIERS = ['claude-hooks/notify.sh', 'claude-hooks/activity.sh']
 
   function isOurHook(rule: { hooks?: Array<{ command?: string }> }): boolean {
-    return !!rule.hooks?.some((h) => h.command?.includes(HOOK_IDENTIFIER))
+    return !!rule.hooks?.some((h) => HOOK_IDENTIFIERS.some((id) => h.command?.includes(id)))
   }
 
   ipcMain.handle(IPC.CLAUDE_CHECK_HOOKS, async () => {
@@ -242,27 +242,28 @@ export function registerIpcHandlers(): void {
 
     const hasStop = (hooks.Stop as Array<{ hooks?: Array<{ command?: string }> }> | undefined)?.some(isOurHook)
     const hasNotification = (hooks.Notification as Array<{ hooks?: Array<{ command?: string }> }> | undefined)?.some(isOurHook)
-    return { installed: !!(hasStop && hasNotification) }
+    const hasPromptSubmit = (hooks.UserPromptSubmit as Array<{ hooks?: Array<{ command?: string }> }> | undefined)?.some(isOurHook)
+    return { installed: !!(hasStop && hasNotification && hasPromptSubmit) }
   })
 
   ipcMain.handle(IPC.CLAUDE_INSTALL_HOOKS, async () => {
     const settings = await loadClaudeSettings()
-    const scriptPath = getHookScriptPath()
+    const notifyPath = getHookScriptPath('notify.sh')
+    const activityPath = getHookScriptPath('activity.sh')
 
     const hooks = (settings.hooks ?? {}) as Record<string, unknown[]>
-    const hookEntry = { matcher: '', hooks: [{ type: 'command', command: scriptPath }] }
 
     // Helper: remove stale entries with old paths, then add current one
-    function ensureHook(event: string) {
-      const rules = (hooks[event] ?? []) as Array<{ hooks?: Array<{ command?: string }> }>
-      // Remove any existing entries for our hook (potentially with stale paths)
-      const filtered = rules.filter((rule) => !isOurHook(rule))
-      filtered.push(hookEntry)
+    function ensureHook(event: string, scriptPath: string, matcher = '') {
+      const rules = (hooks[event] ?? []) as Array<Record<string, unknown>>
+      const filtered = rules.filter((rule) => !isOurHook(rule as { hooks?: Array<{ command?: string }> }))
+      filtered.push({ matcher, hooks: [{ type: 'command', command: scriptPath }] })
       hooks[event] = filtered
     }
 
-    ensureHook('Stop')
-    ensureHook('Notification')
+    ensureHook('Stop', notifyPath)
+    ensureHook('Notification', notifyPath)
+    ensureHook('UserPromptSubmit', activityPath)
     settings.hooks = hooks
 
     await saveClaudeSettings(settings)
@@ -282,6 +283,7 @@ export function registerIpcHandlers(): void {
 
     removeHook('Stop')
     removeHook('Notification')
+    removeHook('UserPromptSubmit')
 
     if (Object.keys(hooks).length === 0) delete settings.hooks
     await saveClaudeSettings(settings)

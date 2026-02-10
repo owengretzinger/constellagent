@@ -28,6 +28,7 @@ export function Sidebar() {
     toggleSettings,
     toggleAutomations,
     unreadWorkspaceIds,
+    activeClaudeWorkspaceIds,
     renameWorkspace,
   } = useAppStore()
 
@@ -249,7 +250,7 @@ export function Sidebar() {
                         key={ws.id}
                         className={`${styles.workspaceItem} ${
                           ws.id === activeWorkspaceId ? styles.active : ''
-                        } ${unreadWorkspaceIds.has(ws.id) ? styles.unread : ''}`}
+                        } ${unreadWorkspaceIds.has(ws.id) ? styles.unread : ''} ${activeClaudeWorkspaceIds.has(ws.id) ? styles.claudeActive : ''}`}
                         onClick={() => !isEditing && handleSelectWorkspace(ws.id)}
                         onDoubleClick={() => {
                           editRef.current = displayName
