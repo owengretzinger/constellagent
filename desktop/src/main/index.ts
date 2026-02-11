@@ -1,7 +1,38 @@
 import { app, BrowserWindow, Menu, shell } from 'electron'
 import { join } from 'path'
+import { execFileSync } from 'child_process'
 import { registerIpcHandlers } from './ipc'
 import { NotificationWatcher } from './notification-watcher'
+
+// Fix PATH for Electron launched from Dock/Spotlight.
+// macOS GUI apps inherit a minimal PATH (/usr/bin:/bin:/usr/sbin:/sbin) which
+// doesn't include /opt/homebrew/bin (git, gh on Apple Silicon) or user shell paths.
+// Resolve the real PATH from the user's login shell once at startup.
+function fixPath(): void {
+  if (process.platform !== 'darwin') return
+  try {
+    const shellPath = process.env.SHELL || '/bin/zsh'
+    // -ilc: interactive login shell so .zprofile/.zshrc are sourced
+    const result = execFileSync(shellPath, ['-ilc', 'echo -n $PATH'], {
+      encoding: 'utf-8',
+      timeout: 5000,
+      env: { ...process.env },
+    })
+    if (result.trim()) {
+      process.env.PATH = result.trim()
+    }
+  } catch {
+    // Fallback: ensure common macOS binary paths are present
+    const extras = ['/opt/homebrew/bin', '/opt/homebrew/sbin', '/usr/local/bin']
+    const current = process.env.PATH || ''
+    const missing = extras.filter((p) => !current.includes(p))
+    if (missing.length) {
+      process.env.PATH = [...missing, current].join(':')
+    }
+  }
+}
+
+fixPath()
 
 let mainWindow: BrowserWindow | null = null
 const notificationWatcher = new NotificationWatcher()

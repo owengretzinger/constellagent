@@ -1,6 +1,6 @@
 import { ipcMain, dialog, app, BrowserWindow, clipboard } from 'electron'
 import { join, relative } from 'path'
-import { mkdir, writeFile } from 'fs/promises'
+import { mkdir, writeFile, access } from 'fs/promises'
 import { mkdirSync, writeFileSync } from 'fs'
 import { tmpdir } from 'os'
 import { watch, type FSWatcher } from 'fs'
@@ -18,6 +18,11 @@ const automationScheduler = new AutomationScheduler(ptyManager)
 // Filesystem watchers: dirPath → { watcher, debounceTimer }
 const fsWatchers = new Map<string, { watcher: FSWatcher; timer: ReturnType<typeof setTimeout> | null }>()
 
+/** Check if a path exists on disk. Used to guard handlers against stale workspace paths. */
+async function pathExists(p: string): Promise<boolean> {
+  try { await access(p); return true } catch { return false }
+}
+
 export function registerIpcHandlers(): void {
   // ── Git handlers ──
   ipcMain.handle(IPC.GIT_LIST_WORKTREES, async (_e, repoPath: string) => {
@@ -29,10 +34,17 @@ export function registerIpcHandlers(): void {
   })
 
   ipcMain.handle(IPC.GIT_REMOVE_WORKTREE, async (_e, repoPath: string, worktreePath: string) => {
+    if (!(await pathExists(worktreePath))) {
+      const { execFile } = await import('child_process')
+      const { promisify } = await import('util')
+      await promisify(execFile)('git', ['worktree', 'prune'], { cwd: repoPath }).catch(() => {})
+      return
+    }
     return GitService.removeWorktree(repoPath, worktreePath)
   })
 
   ipcMain.handle(IPC.GIT_GET_STATUS, async (_e, worktreePath: string) => {
+    if (!(await pathExists(worktreePath))) return []
     return GitService.getStatus(worktreePath)
   })
 
@@ -65,6 +77,7 @@ export function registerIpcHandlers(): void {
   })
 
   ipcMain.handle(IPC.GIT_GET_CURRENT_BRANCH, async (_e, worktreePath: string) => {
+    if (!(await pathExists(worktreePath))) return ''
     return GitService.getCurrentBranch(worktreePath)
   })
 
@@ -81,7 +94,9 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(IPC.PTY_CREATE, async (_e, workingDir: string, shell?: string, extraEnv?: Record<string, string>) => {
     const win = BrowserWindow.fromWebContents(_e.sender)
     if (!win) throw new Error('No window found')
-    return ptyManager.create(workingDir, win.webContents, shell, undefined, undefined, extraEnv)
+    // Fall back to home dir if workspace directory was deleted
+    const cwd = (await pathExists(workingDir)) ? workingDir : app.getPath('home')
+    return ptyManager.create(cwd, win.webContents, shell, undefined, undefined, extraEnv)
   })
 
   ipcMain.on(IPC.PTY_WRITE, (_e, ptyId: string, data: string) => {
@@ -112,6 +127,8 @@ export function registerIpcHandlers(): void {
   })
 
   ipcMain.handle(IPC.FS_GET_TREE_WITH_STATUS, async (_e, dirPath: string) => {
+    if (!(await pathExists(dirPath))) return []
+
     const [tree, statuses, topLevel] = await Promise.all([
       FileService.getTree(dirPath),
       GitService.getStatus(dirPath).catch(() => []),
@@ -169,6 +186,7 @@ export function registerIpcHandlers(): void {
   })
 
   ipcMain.handle(IPC.FS_READ_FILE, async (_e, filePath: string) => {
+    if (!(await pathExists(filePath))) return ''
     return FileService.readFile(filePath)
   })
 

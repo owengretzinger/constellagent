@@ -1,6 +1,16 @@
 #!/bin/bash
 # Patches Electron.app for dev mode: replaces icon + sets app name in plist.
+# Also fixes node-pty permissions (bun install strips execute bits from prebuilds).
 # Run after `bun install` or manually. Requires full app restart (Cmd+Q) to take effect.
+
+# ── Fix node-pty spawn-helper permissions ──
+# bun install extracts prebuilt binaries without the execute bit, causing
+# "posix_spawnp failed" when node-pty tries to fork a PTY process.
+SPAWN_HELPER="node_modules/node-pty/prebuilds/darwin-arm64/spawn-helper"
+if [ -f "$SPAWN_HELPER" ] && [ ! -x "$SPAWN_HELPER" ]; then
+  chmod +x "$SPAWN_HELPER"
+  echo "Fixed node-pty spawn-helper permissions"
+fi
 
 PLIST="node_modules/electron/dist/Electron.app/Contents/Info.plist"
 ICNS_SRC="build/icon.icns"
