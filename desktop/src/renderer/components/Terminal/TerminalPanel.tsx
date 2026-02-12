@@ -88,9 +88,26 @@ export function TerminalPanel({ ptyId, active }: Props) {
         }
         requestAnimationFrame(tryFit)
 
-        if (fitAddon.observeResize) {
-          fitAddon.observeResize()
-        }
+        // Own ResizeObserver instead of fitAddon.observeResize() — ghostty's
+        // built-in observer silently drops resize events that fire during its
+        // 50ms _isResizing lock, causing the terminal to stay at a wrong width
+        // when Allotment settles after the initial fit.
+        let resizeTimer: ReturnType<typeof setTimeout>
+        const resizeObserver = new ResizeObserver(() => {
+          clearTimeout(resizeTimer)
+          resizeTimer = setTimeout(() => {
+            if (!disposed) fitAddon.fit()
+          }, 150)
+        })
+        resizeObserver.observe(termDiv)
+
+        // Delayed refit — catches cases where the container was already the
+        // right size but ghostty-web's renderer metrics weren't ready yet
+        // (font not measured, canvas not initialized). The ResizeObserver
+        // won't fire in that case because the container never changes size.
+        const settleTimer = setTimeout(() => {
+          if (!disposed) fitAddon.fit()
+        }, 500)
 
         // Connect to PTY via IPC
         term.onData((data: string) => {
@@ -110,6 +127,9 @@ export function TerminalPanel({ ptyId, active }: Props) {
         fitAddonRef.current = fitAddon
 
         cleanup = () => {
+          resizeObserver.disconnect()
+          clearTimeout(resizeTimer)
+          clearTimeout(settleTimer)
           unsubData()
           term.dispose()
         }
