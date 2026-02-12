@@ -35,6 +35,7 @@ interface DiffFileSectionProps {
   inline: boolean
   worktreePath: string
   onOpenFile: (filePath: string) => void
+  themeType: 'dark' | 'light'
 }
 
 const DiffFileSection = memo(function DiffFileSection({
@@ -42,6 +43,7 @@ const DiffFileSection = memo(function DiffFileSection({
   inline,
   worktreePath,
   onOpenFile,
+  themeType,
 }: DiffFileSectionProps) {
   const parts = data.filePath.split('/')
   const fileName = parts.pop()
@@ -68,8 +70,8 @@ const DiffFileSection = memo(function DiffFileSection({
       <PatchDiff
         patch={data.patch}
         options={{
-          theme: 'tokyo-night',
-          themeType: 'dark',
+          theme: themeType === 'dark' ? 'tokyo-night' : 'github',
+          themeType,
           diffStyle: inline ? 'unified' : 'split',
           diffIndicators: 'bars',
           lineDiffType: 'word-alt',
@@ -120,6 +122,14 @@ export function DiffViewer({ worktreePath, active }: Props) {
   const scrollAreaRef = useRef<HTMLDivElement>(null)
   const { settings, updateSettings, openFileTab } = useAppStore()
   const inline = settings.diffInline
+
+  // Resolve theme type for diff viewer
+  const themeType = (() => {
+    if (settings.theme === 'system') {
+      return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+    }
+    return settings.theme
+  })() as 'dark' | 'light'
 
   // Load all changed files
   const loadFiles = useCallback(async () => {
@@ -272,6 +282,7 @@ export function DiffViewer({ worktreePath, active }: Props) {
             inline={inline}
             worktreePath={worktreePath}
             onOpenFile={openFileTab}
+            themeType={themeType}
           />
         ))}
       </div>

@@ -291,6 +291,18 @@ export function SettingsPanel() {
         <div className={styles.section}>
           <div className={styles.sectionTitle}>Appearance</div>
 
+          <SelectRow
+            label="Theme"
+            description="Choose the color theme for the app"
+            value={settings.theme}
+            onChange={(v) => update('theme', v as Settings['theme'])}
+            options={[
+              { value: 'dark', label: 'Dark' },
+              { value: 'light', label: 'Light' },
+              { value: 'system', label: 'System' },
+            ]}
+          />
+
           <NumberRow
             label="Terminal font size"
             description="Font size in pixels for terminal tabs"

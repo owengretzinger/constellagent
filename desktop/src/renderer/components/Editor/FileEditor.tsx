@@ -54,6 +54,14 @@ export function FileEditor({ tabId, filePath, active }: Props) {
   const currentContentRef = useRef<string>('')
   const { setTabUnsaved, notifyTabSaved, settings } = useAppStore()
 
+  // Resolve theme for Monaco
+  const resolvedTheme = (() => {
+    if (settings.theme === 'system') {
+      return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'vs-dark' : 'vs'
+    }
+    return settings.theme === 'dark' ? 'vs-dark' : 'vs'
+  })()
+
   // Load file content
   useEffect(() => {
     let cancelled = false
@@ -128,7 +136,7 @@ export function FileEditor({ tabId, filePath, active }: Props) {
         height="100%"
         language={getLanguage(filePath)}
         value={content}
-        theme="vs-dark"
+        theme={resolvedTheme}
         onChange={handleChange}
         onMount={handleEditorMount}
         options={{

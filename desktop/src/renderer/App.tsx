@@ -20,6 +20,26 @@ export function App() {
   useShortcuts()
   usePrStatusPoller()
 
+  const { settings } = useAppStore()
+
+  // Apply theme to document
+  useEffect(() => {
+    const applyTheme = (theme: 'dark' | 'light') => {
+      document.documentElement.setAttribute('data-theme', theme)
+    }
+
+    if (settings.theme === 'system') {
+      const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
+      applyTheme(mediaQuery.matches ? 'dark' : 'light')
+
+      const handler = (e: MediaQueryListEvent) => applyTheme(e.matches ? 'dark' : 'light')
+      mediaQuery.addEventListener('change', handler)
+      return () => mediaQuery.removeEventListener('change', handler)
+    } else {
+      applyTheme(settings.theme)
+    }
+  }, [settings.theme])
+
   // Listen for workspace notification signals from Claude Code hooks
   useEffect(() => {
     const unsub = window.api.claude.onNotifyWorkspace((workspaceId: string) => {
