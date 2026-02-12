@@ -186,7 +186,9 @@ export function registerIpcHandlers(): void {
     try {
       const watcher = watch(dirPath, { recursive: true }, (_eventType, filename) => {
         // Ignore .git internal changes
-        if (filename && (filename.startsWith('.git/') || filename.startsWith('.git\\'))) return
+        if (filename && (filename.startsWith('.git/') || filename.startsWith('.git\\'))) {
+          if (filename !== '.git/index' && filename !== '.git\\index') return
+        }
 
         const entry = fsWatchers.get(dirPath)
         if (!entry) return
