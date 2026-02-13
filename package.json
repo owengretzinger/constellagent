@@ -3,6 +3,7 @@
   "private": true,
   "scripts": {
     "postinstall": "bun install --cwd desktop",
+    "setup": "bun install --cwd desktop && bun run --cwd desktop rebuild",
     "dev": "bun run --cwd desktop dev",
     "build": "bun run --cwd desktop build",
     "test": "bun run --cwd desktop test",

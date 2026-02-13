@@ -19,7 +19,7 @@ A macOS desktop app for running multiple AI agents in parallel. Each agent gets 
 Requires macOS and [Bun](https://bun.sh).
 
 ```bash
-bun install
+bun run setup
 bun run dev
 ```
 
