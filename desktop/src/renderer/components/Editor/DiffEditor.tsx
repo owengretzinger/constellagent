@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useRef, memo } from 'react'
 import { PatchDiff } from '@pierre/diffs/react'
 import { useAppStore } from '../../store/app-store'
+import { useResolvedTheme } from '../../hooks/useResolvedTheme'
 import styles from './Editor.module.css'
 
 interface FileStatus {
@@ -35,6 +36,7 @@ interface DiffFileSectionProps {
   inline: boolean
   worktreePath: string
   onOpenFile: (filePath: string) => void
+  themeType: 'dark' | 'light'
 }
 
 const DiffFileSection = memo(function DiffFileSection({
@@ -42,6 +44,7 @@ const DiffFileSection = memo(function DiffFileSection({
   inline,
   worktreePath,
   onOpenFile,
+  themeType,
 }: DiffFileSectionProps) {
   const parts = data.filePath.split('/')
   const fileName = parts.pop()
@@ -68,8 +71,8 @@ const DiffFileSection = memo(function DiffFileSection({
       <PatchDiff
         patch={data.patch}
         options={{
-          theme: 'tokyo-night',
-          themeType: 'dark',
+          theme: themeType === 'dark' ? 'tokyo-night' : 'github',
+          themeType,
           diffStyle: inline ? 'unified' : 'split',
           diffIndicators: 'bars',
           lineDiffType: 'word-alt',
@@ -122,6 +125,7 @@ export function DiffViewer({ worktreePath, active }: Props) {
   const updateSettings = useAppStore((s) => s.updateSettings)
   const openFileTab = useAppStore((s) => s.openFileTab)
   const inline = settings.diffInline
+  const themeType = useResolvedTheme()
 
   // Load all changed files
   const loadFiles = useCallback(async () => {
@@ -274,6 +278,7 @@ export function DiffViewer({ worktreePath, active }: Props) {
             inline={inline}
             worktreePath={worktreePath}
             onOpenFile={openFileTab}
+            themeType={themeType}
           />
         ))}
       </div>

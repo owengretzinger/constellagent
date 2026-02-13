@@ -1,10 +1,58 @@
 import { useEffect, useRef, useState } from 'react'
 import { useAppStore } from '../../store/app-store'
+import { useResolvedTheme } from '../../hooks/useResolvedTheme'
 import styles from './TerminalPanel.module.css'
 
 const PR_POLL_HINT_EVENT = 'constellagent:pr-poll-hint'
 const PR_POLL_HINT_COMMAND_RE =
   /^(?:[A-Za-z_][A-Za-z0-9_]*=(?:'[^']*'|"[^"]*"|\S+)\s+)*(?:sudo\s+)?(?:(?:git\s+push)|(?:gh\s+pr\s+(?:create|ready|reopen|merge)))(?:\s|$)/
+
+// Terminal color palettes
+const DARK_THEME = {
+  background: '#13141b',
+  foreground: '#c0caf5',
+  cursor: '#c0caf5',
+  selectionBackground: 'rgba(122, 162, 247, 0.2)',
+  black: '#15161e',
+  red: '#f7768e',
+  green: '#9ece6a',
+  yellow: '#e0af68',
+  blue: '#7aa2f7',
+  magenta: '#bb9af7',
+  cyan: '#7dcfff',
+  white: '#a9b1d6',
+  brightBlack: '#414868',
+  brightRed: '#f7768e',
+  brightGreen: '#9ece6a',
+  brightYellow: '#e0af68',
+  brightBlue: '#7aa2f7',
+  brightMagenta: '#bb9af7',
+  brightCyan: '#7dcfff',
+  brightWhite: '#c0caf5',
+}
+
+const LIGHT_THEME = {
+  background: '#e9e9ed',
+  foreground: '#343b58',
+  cursor: '#343b58',
+  selectionBackground: 'rgba(46, 125, 233, 0.2)',
+  black: '#d5d6db',
+  red: '#f52a65',
+  green: '#587539',
+  yellow: '#8c6c3e',
+  blue: '#2e7de9',
+  magenta: '#9854f1',
+  cyan: '#007197',
+  white: '#5a607d',
+  brightBlack: '#b8bdd4',
+  brightRed: '#f52a65',
+  brightGreen: '#587539',
+  brightYellow: '#8c6c3e',
+  brightBlue: '#2e7de9',
+  brightMagenta: '#9854f1',
+  brightCyan: '#007197',
+  brightWhite: '#343b58',
+}
 
 interface Props {
   ptyId: string
@@ -40,6 +88,7 @@ export function TerminalPanel({ ptyId, active }: Props) {
   const inputLineRef = useRef('')
   const [loading, setLoading] = useState(true)
   const terminalFontSize = useAppStore((s) => s.settings.terminalFontSize)
+  const resolvedTheme = useResolvedTheme()
 
   const emitPrPollHint = (command: string) => {
     const normalized = command.trim().toLowerCase()
@@ -111,28 +160,7 @@ export function TerminalPanel({ ptyId, active }: Props) {
           cursorBlink: true,
           cursorStyle: 'bar',
           scrollback: 10000,
-          theme: {
-            background: '#13141b',
-            foreground: '#c0caf5',
-            cursor: '#c0caf5',
-            selectionBackground: 'rgba(122, 162, 247, 0.2)',
-            black: '#15161e',
-            red: '#f7768e',
-            green: '#9ece6a',
-            yellow: '#e0af68',
-            blue: '#7aa2f7',
-            magenta: '#bb9af7',
-            cyan: '#7dcfff',
-            white: '#a9b1d6',
-            brightBlack: '#414868',
-            brightRed: '#f7768e',
-            brightGreen: '#9ece6a',
-            brightYellow: '#e0af68',
-            brightBlue: '#7aa2f7',
-            brightMagenta: '#bb9af7',
-            brightCyan: '#7dcfff',
-            brightWhite: '#c0caf5',
-          },
+          theme: resolvedTheme === 'dark' ? DARK_THEME : LIGHT_THEME,
         }) as TerminalLike
 
         term.open(termDiv)
@@ -248,7 +276,7 @@ export function TerminalPanel({ ptyId, active }: Props) {
       fitFnRef.current = null
       inputLineRef.current = ''
     }
-  }, [ptyId])
+  }, [ptyId, resolvedTheme])
 
   // Update font size on live terminals
   useEffect(() => {

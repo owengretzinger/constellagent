@@ -135,3 +135,63 @@
   --titlebar-height: 38px;     /* macOS traffic lights area */
   --status-bar-height: 22px;
 }
+
+/* ═══════════════════════════════════════════════════════════
+   LIGHT THEME — Tokyo Night Light palette
+   ═══════════════════════════════════════════════════════════ */
+[data-theme="light"] {
+  /* Surface layers */
+  --surface-0: #d5d6db;
+  --surface-1: #e1e2e7;
+  --surface-2: #e9e9ed;
+  --surface-3: #f0f0f4;
+  --surface-4: #ffffff;
+
+  /* Borders */
+  --border-subtle: #d0d0d8;
+  --border-default: #b8b8c0;
+  --border-strong: #9a9aa8;
+  --border-accent: #2e7de9;
+
+  /* Text */
+  --text-primary: #343b58;
+  --text-secondary: #5a607d;
+  --text-tertiary: #8990b3;
+  --text-ghost: #b8bdd4;
+  --text-inverse: #ffffff;
+
+  /* Accents — Tokyo Night Light colors */
+  --accent-blue: #2e7de9;
+  --accent-blue-dim: #7aa6da;
+  --accent-blue-glow: rgba(46, 125, 233, 0.1);
+  --accent-cyan: #007197;
+  --accent-purple: #9854f1;
+  --accent-green: #587539;
+  --accent-green-muted: #6d8c47;
+  --accent-green-dim: rgba(88, 117, 57, 0.12);
+  --accent-red: #f52a65;
+  --accent-red-dim: rgba(245, 42, 101, 0.12);
+  --accent-orange: #b15c00;
+  --accent-orange-dim: rgba(177, 92, 0, 0.12);
+  --accent-yellow: #8c6c3e;
+
+  /* Terminal palette — light theme */
+  --term-bg: #e9e9ed;
+  --term-fg: #343b58;
+  --term-cursor: #343b58;
+  --term-selection: rgba(46, 125, 233, 0.2);
+  --term-black: #0f0f14;
+  --term-red: #f52a65;
+  --term-green: #587539;
+  --term-yellow: #8c6c3e;
+  --term-blue: #2e7de9;
+  --term-magenta: #9854f1;
+  --term-cyan: #007197;
+  --term-white: #343b58;
+
+  /* Shadows — lighter for light theme */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.08);
+  --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.12);
+  --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.16);
+  --shadow-inset: inset 0 1px 0 rgba(255, 255, 255, 0.5);
+}
