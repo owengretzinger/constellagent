@@ -4,7 +4,7 @@ import type { Toast } from '../../store/types'
 import styles from './Toast.module.css'
 
 function ToastItem({ toast }: { toast: Toast }) {
-  const { dismissToast } = useAppStore()
+  const dismissToast = useAppStore((s) => s.dismissToast)
 
   useEffect(() => {
     const timer = setTimeout(() => dismissToast(toast.id), 5000)

@@ -1,18 +1,31 @@
 import { test, expect, _electron as electron, ElectronApplication, Page } from '@playwright/test'
 import { resolve, join } from 'path'
-import { mkdirSync, writeFileSync } from 'fs'
+import { mkdirSync, renameSync, rmSync, writeFileSync } from 'fs'
 import { execSync } from 'child_process'
 
 const appPath = resolve(__dirname, '../out/main/index.js')
-const NOTIFY_DIR = '/tmp/constellagent-notify'
+const TMP_DIR = '/tmp'
 
-async function launchApp(): Promise<{ app: ElectronApplication; window: Page }> {
-  const app = await electron.launch({ args: [appPath], env: { ...process.env, CI_TEST: '1' } })
+async function launchApp(
+  label: string
+): Promise<{ app: ElectronApplication; window: Page; notifyDir: string; activityDir: string }> {
+  const suffix = `${label}-${Date.now()}-${Math.random().toString(16).slice(2)}`
+  const notifyDir = join(TMP_DIR, `constellagent-notify-${suffix}`)
+  const activityDir = join(TMP_DIR, `constellagent-activity-${suffix}`)
+  const app = await electron.launch({
+    args: [appPath],
+    env: {
+      ...process.env,
+      CI_TEST: '1',
+      CONSTELLAGENT_NOTIFY_DIR: notifyDir,
+      CONSTELLAGENT_ACTIVITY_DIR: activityDir,
+    },
+  })
   const window = await app.firstWindow()
   await window.waitForLoadState('domcontentloaded')
   await window.waitForSelector('#root', { timeout: 10000 })
   await window.waitForTimeout(1500)
-  return { app, window }
+  return { app, window, notifyDir, activityDir }
 }
 
 function createTestRepo(name: string): string {
@@ -66,15 +79,18 @@ async function setupNotifyListener(window: Page) {
 }
 
 /** Write a signal file to the notification directory, simulating what the hook script does */
-function writeSignalFile(workspaceId: string): void {
-  mkdirSync(NOTIFY_DIR, { recursive: true })
-  writeFileSync(join(NOTIFY_DIR, `test-${Date.now()}-${Math.random()}`), workspaceId)
+function writeSignalFile(workspaceId: string, notifyDir: string): void {
+  mkdirSync(notifyDir, { recursive: true })
+  const target = join(notifyDir, `test-${Date.now()}-${Math.random()}`)
+  const tmpTarget = `${target}.tmp`
+  writeFileSync(tmpTarget, `${workspaceId}\n`)
+  renameSync(tmpTarget, target)
 }
 
 test.describe('Unread indicator', () => {
   test('notification signal marks non-active workspace as unread', async () => {
     const repoPath = createTestRepo('unread-1')
-    const { app, window } = await launchApp()
+    const { app, window, notifyDir, activityDir } = await launchApp('unread-1')
 
     try {
       const { ws1Id } = await setupTwoWorkspaces(window, repoPath)
@@ -82,7 +98,7 @@ test.describe('Unread indicator', () => {
       await window.waitForTimeout(500)
 
       // ws2 is active, write signal file for ws1
-      writeSignalFile(ws1Id)
+      writeSignalFile(ws1Id, notifyDir)
 
       // Wait for watcher poll (500ms interval) + IPC delivery
       await window.waitForFunction(
@@ -97,12 +113,14 @@ test.describe('Unread indicator', () => {
       expect(isUnread).toBe(true)
     } finally {
       await app.close()
+      rmSync(notifyDir, { recursive: true, force: true })
+      rmSync(activityDir, { recursive: true, force: true })
     }
   })
 
   test('switching to unread workspace dismisses indicator', async () => {
     const repoPath = createTestRepo('unread-2')
-    const { app, window } = await launchApp()
+    const { app, window, notifyDir, activityDir } = await launchApp('unread-2')
 
     try {
       const { ws1Id } = await setupTwoWorkspaces(window, repoPath)
@@ -110,7 +128,7 @@ test.describe('Unread indicator', () => {
       await window.waitForTimeout(500)
 
       // Write signal for ws1 (non-active)
-      writeSignalFile(ws1Id)
+      writeSignalFile(ws1Id, notifyDir)
 
       // Wait for unread to be set
       await window.waitForFunction(
@@ -132,12 +150,14 @@ test.describe('Unread indicator', () => {
       expect(isUnreadAfter).toBe(false)
     } finally {
       await app.close()
+      rmSync(notifyDir, { recursive: true, force: true })
+      rmSync(activityDir, { recursive: true, force: true })
     }
   })
 
   test('notification for active workspace does not show indicator', async () => {
     const repoPath = createTestRepo('unread-3')
-    const { app, window } = await launchApp()
+    const { app, window, notifyDir, activityDir } = await launchApp('unread-3')
 
     try {
       const { ws2Id } = await setupTwoWorkspaces(window, repoPath)
@@ -145,7 +165,7 @@ test.describe('Unread indicator', () => {
       await window.waitForTimeout(500)
 
       // ws2 is active — write signal for ws2
-      writeSignalFile(ws2Id)
+      writeSignalFile(ws2Id, notifyDir)
       await window.waitForTimeout(1500)
 
       // ws2 should NOT be marked as unread
@@ -155,6 +175,8 @@ test.describe('Unread indicator', () => {
       expect(isUnread).toBe(false)
     } finally {
       await app.close()
+      rmSync(notifyDir, { recursive: true, force: true })
+      rmSync(activityDir, { recursive: true, force: true })
     }
   })
 })

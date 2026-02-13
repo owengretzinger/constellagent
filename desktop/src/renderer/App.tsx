@@ -72,18 +72,16 @@ export function App() {
     return unsub
   }, [])
 
-  const {
-    tabs: allTabs,
-    activeTabId,
-    rightPanelOpen,
-    sidebarCollapsed,
-    activeWorkspaceTabs,
-    workspaces,
-    activeWorkspaceId,
-    settingsOpen,
-    automationsOpen,
-    quickOpenVisible,
-  } = useAppStore()
+  const allTabs = useAppStore((s) => s.tabs)
+  const activeTabId = useAppStore((s) => s.activeTabId)
+  const rightPanelOpen = useAppStore((s) => s.rightPanelOpen)
+  const sidebarCollapsed = useAppStore((s) => s.sidebarCollapsed)
+  const activeWorkspaceTabs = useAppStore((s) => s.activeWorkspaceTabs)
+  const workspaces = useAppStore((s) => s.workspaces)
+  const activeWorkspaceId = useAppStore((s) => s.activeWorkspaceId)
+  const settingsOpen = useAppStore((s) => s.settingsOpen)
+  const automationsOpen = useAppStore((s) => s.automationsOpen)
+  const quickOpenVisible = useAppStore((s) => s.quickOpenVisible)
 
   const wsTabs = activeWorkspaceTabs()
   const activeTab = wsTabs.find((t) => t.id === activeTabId)

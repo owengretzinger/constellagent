@@ -5,7 +5,10 @@ import { Tooltip } from '../Tooltip/Tooltip'
 import styles from './RightPanel.module.css'
 
 export function RightPanel() {
-  const { rightPanelMode, setRightPanelMode, activeWorkspaceId, workspaces } = useAppStore()
+  const rightPanelMode = useAppStore((s) => s.rightPanelMode)
+  const setRightPanelMode = useAppStore((s) => s.setRightPanelMode)
+  const activeWorkspaceId = useAppStore((s) => s.activeWorkspaceId)
+  const workspaces = useAppStore((s) => s.workspaces)
 
   const workspace = workspaces.find((w) => w.id === activeWorkspaceId)
 

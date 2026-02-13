@@ -1,21 +1,27 @@
-import { mkdirSync, readdirSync, readFileSync, unlinkSync } from 'fs'
+import { mkdirSync, readdirSync, readFileSync, statSync, unlinkSync } from 'fs'
 import { join } from 'path'
 import { BrowserWindow } from 'electron'
 import { IPC } from '../shared/ipc-channels'
 
-const NOTIFY_DIR = '/tmp/constellagent-notify'
-const ACTIVITY_DIR = '/tmp/constellagent-activity'
+const DEFAULT_NOTIFY_DIR = '/tmp/constellagent-notify'
+const DEFAULT_ACTIVITY_DIR = '/tmp/constellagent-activity'
 const POLL_INTERVAL = 500
+const FILE_SETTLE_MS = 100
 const CLAUDE_MARKER_SUFFIX = '.claude'
 const CODEX_MARKER_SEGMENT = '.codex.'
 
 export class NotificationWatcher {
+  constructor(
+    private readonly notifyDir = process.env.CONSTELLAGENT_NOTIFY_DIR || DEFAULT_NOTIFY_DIR,
+    private readonly activityDir = process.env.CONSTELLAGENT_ACTIVITY_DIR || DEFAULT_ACTIVITY_DIR,
+  ) {}
+
   private timer: ReturnType<typeof setInterval> | null = null
   private lastActiveIds: string = ''
 
   start(): void {
-    mkdirSync(NOTIFY_DIR, { recursive: true })
-    mkdirSync(ACTIVITY_DIR, { recursive: true })
+    mkdirSync(this.notifyDir, { recursive: true })
+    mkdirSync(this.activityDir, { recursive: true })
     this.pollOnce()
     this.timer = setInterval(() => this.pollOnce(), POLL_INTERVAL)
   }
@@ -34,9 +40,20 @@ export class NotificationWatcher {
 
   private pollNotifications(): void {
     try {
-      const files = readdirSync(NOTIFY_DIR)
+      const files = readdirSync(this.notifyDir)
+      const now = Date.now()
       for (const f of files) {
-        this.processFile(join(NOTIFY_DIR, f))
+        // Ignore in-progress temp files written by atomic-writer hooks.
+        if (f.endsWith('.tmp')) continue
+        const filePath = join(this.notifyDir, f)
+        try {
+          const stat = statSync(filePath)
+          // Avoid reading files while writers may still be flushing content.
+          if (now - stat.mtimeMs < FILE_SETTLE_MS) continue
+        } catch {
+          continue
+        }
+        this.processFile(filePath)
       }
     } catch {
       // Directory may not exist yet
@@ -45,7 +62,7 @@ export class NotificationWatcher {
 
   private pollActivity(): void {
     try {
-      const files = readdirSync(ACTIVITY_DIR)
+      const files = readdirSync(this.activityDir)
       const workspaceIds = Array.from(new Set(
         files
           .map((name) => {
@@ -89,7 +106,10 @@ export class NotificationWatcher {
   private processFile(filePath: string): void {
     try {
       const wsId = readFileSync(filePath, 'utf-8').trim()
-      if (!wsId) return
+      if (!wsId) {
+        unlinkSync(filePath)
+        return
+      }
       this.notifyRenderer(wsId)
       unlinkSync(filePath)
     } catch {
@@ -117,7 +137,7 @@ export class NotificationWatcher {
 
   private removeActivityMarker(name: string): void {
     try {
-      unlinkSync(join(ACTIVITY_DIR, name))
+      unlinkSync(join(this.activityDir, name))
     } catch {
       // Marker may already be gone
     }
