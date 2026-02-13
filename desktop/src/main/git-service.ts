@@ -2,7 +2,7 @@ import { execFile } from 'child_process'
 import { existsSync } from 'fs'
 import { copyFile, mkdir, readdir, rm } from 'fs/promises'
 import { promisify } from 'util'
-import { basename, dirname, join, resolve } from 'path'
+import { basename, dirname, isAbsolute, join, relative, resolve } from 'path'
 import type { CreateWorktreeProgress } from '../shared/workspace-creation'
 
 const execFileAsync = promisify(execFile)
@@ -37,7 +37,10 @@ async function git(args: string[], cwd: string): Promise<string> {
 
 /** Extract a user-friendly message from a git exec error */
 function friendlyGitError(err: unknown, fallback: string): string {
-  const stderr = (err as any)?.stderr as string | undefined
+  const stderr =
+    typeof err === 'object' && err !== null && 'stderr' in err
+      ? String((err as { stderr?: unknown }).stderr ?? '')
+      : undefined
   if (!stderr) return fallback
 
   // "fatal: 'branch' is already used by worktree at '/path'"
@@ -64,6 +67,25 @@ function friendlyGitError(err: unknown, fallback: string): string {
   if (fatal) return fatal
 
   return fallback
+}
+
+/** Sanitize user-facing workspace names for safe filesystem directory names */
+function sanitizeWorktreeName(name: string): string {
+  const sanitized = name
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^[-_]+|[-_]+$/g, '')
+    .slice(0, 80)
+  return sanitized || 'workspace'
+}
+
+function ensureWithinParent(parentDir: string, candidatePath: string): void {
+  const relPath = relative(parentDir, candidatePath)
+  if (relPath.startsWith('..') || isAbsolute(relPath)) {
+    throw new Error('Invalid workspace name')
+  }
 }
 
 const SKIP_DIRS = new Set(['node_modules', '.git', 'dist', 'build', 'out', '.next'])
@@ -94,6 +116,13 @@ function reportCreateWorktreeProgress(
 }
 
 export class GitService {
+  private static async hasRemote(repoPath: string, remoteName: string): Promise<boolean> {
+    return git(['remote', 'get-url', remoteName], repoPath).then(
+      () => true,
+      () => false,
+    )
+  }
+
   static async listWorktrees(repoPath: string): Promise<WorktreeInfo[]> {
     const output = await git(['worktree', 'list', '--porcelain'], repoPath)
     if (!output) return []
@@ -133,24 +162,34 @@ export class GitService {
   }
 
   static async getDefaultBranch(repoPath: string): Promise<string> {
-    // Best effort sync of origin/HEAD. Network hiccups should not block worktree creation.
-    await git(['remote', 'set-head', 'origin', '--auto'], repoPath).catch(() => {})
+    const hasOrigin = await this.hasRemote(repoPath, 'origin')
 
-    const ref = await git(['symbolic-ref', 'refs/remotes/origin/HEAD'], repoPath).catch(() => '')
-    // "refs/remotes/origin/main" → "origin/main"
-    if (ref) return ref.replace('refs/remotes/', '')
+    if (hasOrigin) {
+      // Best effort sync of origin/HEAD. Network hiccups should not block worktree creation.
+      await git(['remote', 'set-head', 'origin', '--auto'], repoPath).catch(() => {})
 
-    // Fallback for repos where origin/HEAD is unset.
-    for (const candidate of ['origin/main', 'origin/master']) {
-      const exists = await git(['rev-parse', '--verify', `refs/remotes/${candidate}`], repoPath)
+      const ref = await git(['symbolic-ref', 'refs/remotes/origin/HEAD'], repoPath).catch(() => '')
+      // "refs/remotes/origin/main" → "origin/main"
+      if (ref) return ref.replace('refs/remotes/', '')
+
+      // Fallback for repos where origin/HEAD is unset.
+      for (const candidate of ['origin/main', 'origin/master']) {
+        const exists = await git(['rev-parse', '--verify', `refs/remotes/${candidate}`], repoPath)
+          .then(() => true, () => false)
+        if (exists) return candidate
+      }
+    }
+
+    const local = await git(['rev-parse', '--abbrev-ref', 'HEAD'], repoPath).catch(() => '')
+    if (local && local !== 'HEAD') return local
+
+    for (const candidate of ['main', 'master']) {
+      const exists = await git(['rev-parse', '--verify', `refs/heads/${candidate}`], repoPath)
         .then(() => true, () => false)
       if (exists) return candidate
     }
 
-    const local = await git(['rev-parse', '--abbrev-ref', 'HEAD'], repoPath).catch(() => '')
-    if (local && local !== 'HEAD') return local.startsWith('origin/') ? local : `origin/${local}`
-
-    return 'origin/main'
+    return 'main'
   }
 
   static async createWorktree(
@@ -168,7 +207,9 @@ export class GitService {
 
     const parentDir = dirname(repoPath)
     const repoName = basename(repoPath)
-    const worktreePath = resolve(parentDir, `${repoName}-ws-${name}`)
+    const safeWorktreeName = sanitizeWorktreeName(name)
+    const worktreePath = resolve(parentDir, `${repoName}-ws-${safeWorktreeName}`)
+    ensureWithinParent(parentDir, worktreePath)
 
     // Clean up stale worktree refs
     reportCreateWorktreeProgress(onProgress, {
@@ -177,12 +218,17 @@ export class GitService {
     })
     await git(['worktree', 'prune'], repoPath).catch(() => {})
 
+    const hasOrigin = await GitService.hasRemote(repoPath, 'origin')
+
     // Fetch remote refs so worktree branches from latest state
     reportCreateWorktreeProgress(onProgress, {
       stage: 'fetch-origin',
-      message: 'Syncing remote...',
+      message: hasOrigin ? 'Syncing remote...' : 'No origin remote found; using local refs...',
     })
-    await git(['fetch', '--prune', 'origin'], repoPath)
+    if (hasOrigin) {
+      // Best effort: local repos (or temporary network failures) should still work.
+      await git(['fetch', '--prune', 'origin'], repoPath).catch(() => {})
+    }
 
     // Auto-detect base branch when creating a new branch without explicit base
     if (newBranch && !baseBranch) {
@@ -215,8 +261,10 @@ export class GitService {
     // If checking out an existing branch that doesn't exist locally or on origin,
     // try fetching it as a GitHub PR branch (fork PRs aren't included in normal fetch)
     if (!newBranch && !branchExists) {
-      const remoteExists = await git(['rev-parse', '--verify', `refs/remotes/origin/${branch}`], repoPath)
-        .then(() => true, () => false)
+      const remoteExists = hasOrigin
+        ? await git(['rev-parse', '--verify', `refs/remotes/origin/${branch}`], repoPath)
+            .then(() => true, () => false)
+        : false
       if (!remoteExists) {
         try {
           const headCandidates = [requestedBranch]

@@ -4,7 +4,7 @@ import { registerIpcHandlers } from './ipc'
 import { NotificationWatcher } from './notification-watcher'
 
 let mainWindow: BrowserWindow | null = null
-const notificationWatcher = new NotificationWatcher()
+let notificationWatcher: NotificationWatcher | null = null
 
 function createWindow(): void {
   mainWindow = new BrowserWindow({
@@ -53,6 +53,8 @@ if (process.env.CI_TEST) {
   const { join } = require('path')
   const testData = mkdtempSync(join(require('os').tmpdir(), 'constellagent-test-'))
   app.setPath('userData', testData)
+  process.env.CONSTELLAGENT_NOTIFY_DIR ||= join(testData, 'notify')
+  process.env.CONSTELLAGENT_ACTIVITY_DIR ||= join(testData, 'activity')
 }
 
 app.whenReady().then(() => {
@@ -91,6 +93,7 @@ app.whenReady().then(() => {
   Menu.setApplicationMenu(menu)
 
   registerIpcHandlers()
+  notificationWatcher = new NotificationWatcher()
   notificationWatcher.start()
   createWindow()
 
@@ -108,5 +111,5 @@ app.on('window-all-closed', () => {
 })
 
 app.on('before-quit', () => {
-  notificationWatcher.stop()
+  notificationWatcher?.stop()
 })

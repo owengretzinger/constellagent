@@ -259,7 +259,9 @@ function CodexNotifySection() {
 }
 
 export function SettingsPanel() {
-  const { settings, updateSettings, toggleSettings } = useAppStore()
+  const settings = useAppStore((s) => s.settings)
+  const updateSettings = useAppStore((s) => s.updateSettings)
+  const toggleSettings = useAppStore((s) => s.toggleSettings)
 
   const update = <K extends keyof Settings>(key: K, value: Settings[K]) => {
     updateSettings({ [key]: value })

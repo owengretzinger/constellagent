@@ -1,4 +1,4 @@
-import { ipcMain, dialog, app, BrowserWindow, clipboard } from 'electron'
+import { ipcMain, dialog, app, BrowserWindow, clipboard, type WebContents } from 'electron'
 import { join, relative } from 'path'
 import { mkdir, writeFile } from 'fs/promises'
 import { mkdirSync, writeFileSync } from 'fs'
@@ -9,16 +9,31 @@ import type { CreateWorktreeProgressEvent } from '../shared/workspace-creation'
 import { PtyManager } from './pty-manager'
 import { GitService } from './git-service'
 import { GithubService } from './github-service'
-import { FileService } from './file-service'
-import { AutomationScheduler, type AutomationConfig } from './automation-scheduler'
+import { FileService, type FileNode } from './file-service'
+import { AutomationScheduler } from './automation-scheduler'
+import type { AutomationConfig } from '../shared/automation-types'
 import { trustPathForClaude, loadClaudeSettings, saveClaudeSettings, loadJsonFile, saveJsonFile } from './claude-config'
 import { loadCodexConfigText, saveCodexConfigText } from './codex-config'
 
 const ptyManager = new PtyManager()
 const automationScheduler = new AutomationScheduler(ptyManager)
 
-// Filesystem watchers: dirPath → { watcher, debounceTimer }
-const fsWatchers = new Map<string, { watcher: FSWatcher; timer: ReturnType<typeof setTimeout> | null }>()
+interface FsWatchSubscriber {
+  webContents: WebContents
+  refs: number
+}
+
+interface FsWatcherEntry {
+  watcher: FSWatcher
+  timer: ReturnType<typeof setTimeout> | null
+  subscribers: Map<number, FsWatchSubscriber>
+  totalRefs: number
+}
+
+// Filesystem watchers keyed by watched directory.
+// Each renderer subscription increments a ref count so one panel unmounting
+// does not tear down a shared watcher used by another panel.
+const fsWatchers = new Map<string, FsWatcherEntry>()
 
 export function registerIpcHandlers(): void {
   // ── Git handlers ──
@@ -152,7 +167,7 @@ export function registerIpcHandlers(): void {
     }
 
     // Attach gitStatus to nodes, propagate to parent dirs
-    function annotate(nodes: Awaited<ReturnType<typeof FileService.getTree>>): boolean {
+    function annotate(nodes: FileNode[]): boolean {
       let hasStatus = false
       for (const node of nodes) {
         // Compute relative path from dirPath
@@ -163,13 +178,13 @@ export function registerIpcHandlers(): void {
         if (node.type === 'file') {
           const st = statusMap.get(rel)
           if (st) {
-            ;(node as any).gitStatus = st
+            node.gitStatus = st
             hasStatus = true
           }
         } else if (node.children) {
           const childHasStatus = annotate(node.children)
           if (childHasStatus) {
-            ;(node as any).gitStatus = 'modified'
+            node.gitStatus = 'modified'
             hasStatus = true
           }
         }
@@ -191,10 +206,18 @@ export function registerIpcHandlers(): void {
 
   // ── Filesystem watcher handlers ──
   ipcMain.handle(IPC.FS_WATCH_START, (_e, dirPath: string) => {
-    if (fsWatchers.has(dirPath)) return // already watching
-
-    const win = BrowserWindow.fromWebContents(_e.sender)
-    if (!win) return
+    const senderId = _e.sender.id
+    const existing = fsWatchers.get(dirPath)
+    if (existing) {
+      const subscriber = existing.subscribers.get(senderId)
+      if (subscriber) {
+        subscriber.refs += 1
+      } else {
+        existing.subscribers.set(senderId, { webContents: _e.sender, refs: 1 })
+      }
+      existing.totalRefs += 1
+      return
+    }
 
     try {
       const watcher = watch(dirPath, { recursive: true }, (_eventType, filename) => {
@@ -213,13 +236,29 @@ export function registerIpcHandlers(): void {
         // Debounce: wait 500ms of quiet before notifying
         if (entry.timer) clearTimeout(entry.timer)
         entry.timer = setTimeout(() => {
-          if (!win.isDestroyed()) {
-            win.webContents.send(IPC.FS_WATCH_CHANGED, dirPath)
+          for (const [id, subscriber] of entry.subscribers.entries()) {
+            if (subscriber.webContents.isDestroyed()) {
+              entry.totalRefs = Math.max(0, entry.totalRefs - subscriber.refs)
+              entry.subscribers.delete(id)
+              continue
+            }
+            subscriber.webContents.send(IPC.FS_WATCH_CHANGED, dirPath)
+          }
+
+          if (entry.totalRefs <= 0 || entry.subscribers.size === 0) {
+            if (entry.timer) clearTimeout(entry.timer)
+            entry.watcher.close()
+            fsWatchers.delete(dirPath)
           }
         }, 500)
       })
 
-      fsWatchers.set(dirPath, { watcher, timer: null })
+      fsWatchers.set(dirPath, {
+        watcher,
+        timer: null,
+        subscribers: new Map([[senderId, { webContents: _e.sender, refs: 1 }]]),
+        totalRefs: 1,
+      })
     } catch {
       // Directory may not exist or be inaccessible — ignore
     }
@@ -227,7 +266,21 @@ export function registerIpcHandlers(): void {
 
   ipcMain.on(IPC.FS_WATCH_STOP, (_e, dirPath: string) => {
     const entry = fsWatchers.get(dirPath)
-    if (entry) {
+    if (!entry) return
+
+    const senderId = _e.sender.id
+    const subscriber = entry.subscribers.get(senderId)
+    if (subscriber) {
+      subscriber.refs -= 1
+      entry.totalRefs = Math.max(0, entry.totalRefs - 1)
+      if (subscriber.refs <= 0) {
+        entry.subscribers.delete(senderId)
+      }
+    } else {
+      entry.totalRefs = Math.max(0, entry.totalRefs - 1)
+    }
+
+    if (entry.totalRefs <= 0 || entry.subscribers.size === 0) {
       if (entry.timer) clearTimeout(entry.timer)
       entry.watcher.close()
       fsWatchers.delete(dirPath)
@@ -254,10 +307,6 @@ export function registerIpcHandlers(): void {
     } catch {
       return null
     }
-  })
-
-  ipcMain.handle(IPC.APP_GET_DATA_PATH, async () => {
-    return app.getPath('userData')
   })
 
   // ── Claude Code trust ──
@@ -469,13 +518,6 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle(IPC.AUTOMATION_STOP, async (_e, automationId: string) => {
     automationScheduler.unschedule(automationId)
-  })
-
-  // Load persisted automations and schedule enabled ones on startup
-  ipcMain.handle(IPC.AUTOMATION_LIST, async () => {
-    // List is just for init — renderer manages the list in store
-    // Main process uses this to bootstrap scheduler from persisted state
-    return null
   })
 
   // ── Clipboard handlers ──

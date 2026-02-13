@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
-import Editor, { type BeforeMount, loader } from '@monaco-editor/react'
+import Editor, { loader } from '@monaco-editor/react'
+import type { editor } from 'monaco-editor'
 import { useAppStore } from '../../store/app-store'
 import styles from './Editor.module.css'
 
@@ -50,9 +51,11 @@ function getLanguage(path: string): string {
 export function FileEditor({ tabId, filePath, active }: Props) {
   const [content, setContent] = useState<string | null>(null)
   const [unsaved, setUnsaved] = useState(false)
-  const editorRef = useRef<any>(null)
+  const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null)
   const currentContentRef = useRef<string>('')
-  const { setTabUnsaved, notifyTabSaved, settings } = useAppStore()
+  const setTabUnsaved = useAppStore((s) => s.setTabUnsaved)
+  const notifyTabSaved = useAppStore((s) => s.notifyTabSaved)
+  const settings = useAppStore((s) => s.settings)
 
   // Load file content
   useEffect(() => {
@@ -95,9 +98,9 @@ export function FileEditor({ tabId, filePath, active }: Props) {
   }, [active, unsaved, settings.autoSaveOnBlur, handleSave])
 
   // Cmd+S handler
-  const handleEditorMount = useCallback((editor: any) => {
-    editorRef.current = editor
-    editor.addCommand(
+  const handleEditorMount = useCallback((editorInstance: editor.IStandaloneCodeEditor) => {
+    editorRef.current = editorInstance
+    editorInstance.addCommand(
       // Monaco.KeyMod.CtrlCmd | Monaco.KeyCode.KeyS
       2048 | 49,
       () => handleSave()

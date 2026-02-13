@@ -85,7 +85,8 @@ export function QuickOpen({ worktreePath }: Props) {
   const [selectedIndex, setSelectedIndex] = useState(0)
   const inputRef = useRef<HTMLInputElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
-  const { openFileTab, closeQuickOpen } = useAppStore()
+  const openFileTab = useAppStore((s) => s.openFileTab)
+  const closeQuickOpen = useAppStore((s) => s.closeQuickOpen)
 
   // Load file tree on mount
   useEffect(() => {

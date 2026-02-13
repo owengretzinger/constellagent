@@ -1,19 +1,10 @@
 import * as cron from 'node-cron'
 import { BrowserWindow } from 'electron'
 import { IPC } from '../shared/ipc-channels'
+import type { AutomationConfig, AutomationRunStartedEvent } from '../shared/automation-types'
 import { PtyManager } from './pty-manager'
 import { GitService } from './git-service'
 import { trustPathForClaude } from './claude-config'
-
-export interface AutomationConfig {
-  id: string
-  name: string
-  projectId: string
-  prompt: string
-  cronExpression: string
-  enabled: boolean
-  repoPath: string
-}
 
 export class AutomationScheduler {
   private jobs = new Map<string, cron.ScheduledTask>()
@@ -100,14 +91,15 @@ export class AutomationScheduler {
 
     // Notify renderer to create workspace + terminal tab
     if (!win.isDestroyed()) {
-      win.webContents.send(IPC.AUTOMATION_RUN_STARTED, {
+      const event: AutomationRunStartedEvent = {
         automationId: config.id,
         automationName: config.name,
         projectId: config.projectId,
         ptyId,
         worktreePath,
         branch,
-      })
+      }
+      win.webContents.send(IPC.AUTOMATION_RUN_STARTED, event)
     }
   }
 }

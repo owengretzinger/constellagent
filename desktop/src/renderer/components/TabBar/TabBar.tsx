@@ -18,8 +18,15 @@ function getTabTitle(tab: Tab): string {
 }
 
 export function TabBar() {
-  const { activeTabId, setActiveTab, removeTab, activeWorkspaceTabs, createTerminalForActiveWorkspace, lastSavedTabId, settings } = useAppStore()
-  const tabs = activeWorkspaceTabs()
+  const activeTabId = useAppStore((s) => s.activeTabId)
+  const setActiveTab = useAppStore((s) => s.setActiveTab)
+  const removeTab = useAppStore((s) => s.removeTab)
+  const allTabs = useAppStore((s) => s.tabs)
+  const activeWorkspaceId = useAppStore((s) => s.activeWorkspaceId)
+  const createTerminalForActiveWorkspace = useAppStore((s) => s.createTerminalForActiveWorkspace)
+  const lastSavedTabId = useAppStore((s) => s.lastSavedTabId)
+  const settings = useAppStore((s) => s.settings)
+  const tabs = allTabs.filter((t) => t.workspaceId === activeWorkspaceId)
 
   const handleClose = useCallback(
     (e: React.MouseEvent, tabId: string) => {

@@ -153,29 +153,27 @@ function WorkspaceMeta({
 }
 
 export function Sidebar() {
-  const {
-    projects,
-    workspaces,
-    activeWorkspaceId,
-    setActiveWorkspace,
-    addProject,
-    addWorkspace,
-    addTab,
-    addToast,
-    workspaceDialogProjectId,
-    openWorkspaceDialog,
-    deleteWorkspace,
-    updateProject,
-    deleteProject,
-    confirmDialog,
-    showConfirmDialog,
-    dismissConfirmDialog,
-    toggleSettings,
-    toggleAutomations,
-    unreadWorkspaceIds,
-    activeClaudeWorkspaceIds,
-    renameWorkspace,
-  } = useAppStore();
+  const projects = useAppStore((s) => s.projects);
+  const workspaces = useAppStore((s) => s.workspaces);
+  const activeWorkspaceId = useAppStore((s) => s.activeWorkspaceId);
+  const setActiveWorkspace = useAppStore((s) => s.setActiveWorkspace);
+  const addProject = useAppStore((s) => s.addProject);
+  const addWorkspace = useAppStore((s) => s.addWorkspace);
+  const addTab = useAppStore((s) => s.addTab);
+  const addToast = useAppStore((s) => s.addToast);
+  const workspaceDialogProjectId = useAppStore((s) => s.workspaceDialogProjectId);
+  const openWorkspaceDialog = useAppStore((s) => s.openWorkspaceDialog);
+  const deleteWorkspace = useAppStore((s) => s.deleteWorkspace);
+  const updateProject = useAppStore((s) => s.updateProject);
+  const deleteProject = useAppStore((s) => s.deleteProject);
+  const confirmDialog = useAppStore((s) => s.confirmDialog);
+  const showConfirmDialog = useAppStore((s) => s.showConfirmDialog);
+  const dismissConfirmDialog = useAppStore((s) => s.dismissConfirmDialog);
+  const toggleSettings = useAppStore((s) => s.toggleSettings);
+  const toggleAutomations = useAppStore((s) => s.toggleAutomations);
+  const unreadWorkspaceIds = useAppStore((s) => s.unreadWorkspaceIds);
+  const activeClaudeWorkspaceIds = useAppStore((s) => s.activeClaudeWorkspaceIds);
+  const renameWorkspace = useAppStore((s) => s.renameWorkspace);
 
   const [manualCollapsed, setManualCollapsed] = useState<Set<string>>(
     new Set(),
