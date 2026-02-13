@@ -12,7 +12,12 @@ TMP_TARGET="${TARGET}.tmp"
 printf '%s\n' "$WS_ID" > "$TMP_TARGET"
 mv "$TMP_TARGET" "$TARGET"
 
-# Clear activity marker — Codex finished this turn.
+# Clear Codex-specific activity markers for this workspace.
 ACTIVITY_DIR="${CONSTELLAGENT_ACTIVITY_DIR:-/tmp/constellagent-activity}"
-rm -f "$ACTIVITY_DIR/$WS_ID"
+rm -f "$ACTIVITY_DIR/$WS_ID.codex."*
+
+# Legacy cleanup: remove old shared marker only if Claude isn't marked active.
+if [ ! -f "$ACTIVITY_DIR/$WS_ID.claude" ]; then
+  rm -f "$ACTIVITY_DIR/$WS_ID"
+fi
 exit 0

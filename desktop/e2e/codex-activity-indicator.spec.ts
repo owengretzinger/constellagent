@@ -157,7 +157,7 @@ test.describe('Codex activity indicator', () => {
       await window.evaluate(({ ptyId: id, wsId, notifyPath, activityPath }) => {
         ;(window as any).api.pty.write(
           id,
-          `mkdir -p "${notifyPath}" && printf '%s\\n' "${wsId}" > "${notifyPath}/test-$(date +%s%N)-$$" && rm -f "${activityPath}/${wsId}"\n`
+          `mkdir -p "${notifyPath}" "${activityPath}" && printf '%s\\n' "${wsId}" > "${notifyPath}/test-$(date +%s%N)-$$" && rm -f "${activityPath}/${wsId}.codex."*\n`
         )
       }, { ptyId, wsId: workspaceId, notifyPath: notifyDir, activityPath: activityDir })
 
@@ -214,7 +214,7 @@ test.describe('Codex activity indicator', () => {
       await window.evaluate(({ ptyId: id, wsId, activityPath }) => {
         ;(window as any).api.pty.write(
           id,
-          `rm -f "${activityPath}/${wsId}"\n`
+          `rm -f "${activityPath}/${wsId}.codex."*\n`
         )
       }, { ptyId: ptyId1, wsId: workspaceId1, activityPath: activityDir })
 
@@ -234,6 +234,67 @@ test.describe('Codex activity indicator', () => {
         return (window as any).__store.getState().unreadWorkspaceIds.has(wsId)
       }, workspaceId1)
       expect(hasUnread).toBe(true)
+    } finally {
+      rmSync(FAKE_CODEX_BIN, { force: true })
+      await app.close()
+      rmSync(notifyDir, { recursive: true, force: true })
+      rmSync(activityDir, { recursive: true, force: true })
+    }
+  })
+
+  test('keeps Claude activity marker when another terminal in same workspace closes', async () => {
+    const repoPath = createTestRepo('claude-activity-multi-tab')
+    const { app, window, notifyDir, activityDir } = await launchApp('claude-activity-multi-tab')
+
+    try {
+      const { workspaceId, ptyId: primaryPtyId } = await setupWorkspace(window, repoPath)
+      await window.waitForTimeout(800)
+
+      const secondaryPtyId = await window.evaluate(async (wsId: string) => {
+        const state = (window as any).__store.getState()
+        const workspace = state.workspaces.find((w: { id: string; worktreePath: string }) => w.id === wsId)
+        if (!workspace) throw new Error('workspace not found')
+
+        const ptyId = await (window as any).api.pty.create(workspace.worktreePath, '/bin/bash', { AGENT_ORCH_WS_ID: wsId })
+        state.addTab({
+          id: crypto.randomUUID(),
+          workspaceId: wsId,
+          type: 'terminal',
+          title: 'Terminal extra',
+          ptyId,
+        })
+        return ptyId
+      }, workspaceId)
+
+      // Simulate Claude UserPromptSubmit hook writing its activity marker.
+      await window.evaluate(({ ptyId: id, wsId, activityPath }) => {
+        ;(window as any).api.pty.write(
+          id,
+          `mkdir -p "${activityPath}" && touch "${activityPath}/${wsId}.claude"\n`
+        )
+      }, { ptyId: primaryPtyId, wsId: workspaceId, activityPath: activityDir })
+
+      await window.waitForFunction(
+        (wsId: string) => (window as any).__store.getState().activeClaudeWorkspaceIds.has(wsId),
+        workspaceId,
+        { timeout: 5000 }
+      )
+
+      // Closing a different terminal in the same workspace should not clear Claude activity.
+      await window.evaluate((ptyId: string) => {
+        ;(window as any).api.pty.destroy(ptyId)
+      }, secondaryPtyId)
+      await window.waitForTimeout(1200)
+
+      const isStillActive = await window.evaluate((wsId: string) => {
+        return (window as any).__store.getState().activeClaudeWorkspaceIds.has(wsId)
+      }, workspaceId)
+      expect(isStillActive).toBe(true)
+
+      // Cleanup marker created by this test.
+      await window.evaluate(({ ptyId: id, wsId, activityPath }) => {
+        ;(window as any).api.pty.write(id, `rm -f "${activityPath}/${wsId}.claude"\n`)
+      }, { ptyId: primaryPtyId, wsId: workspaceId, activityPath: activityDir })
     } finally {
       rmSync(FAKE_CODEX_BIN, { force: true })
       await app.close()

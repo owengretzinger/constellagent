@@ -332,6 +332,11 @@ export function registerIpcHandlers(): void {
   // Stable identifiers to match our hook entries regardless of full path
   const HOOK_IDENTIFIERS = ['claude-hooks/notify.sh', 'claude-hooks/activity.sh']
 
+  function shellQuoteArg(value: string): string {
+    // Claude executes hook commands via /bin/sh; paths can contain spaces.
+    return `'${value.replace(/'/g, `'\"'\"'`)}'`
+  }
+
   function isOurHook(rule: { hooks?: Array<{ command?: string }> }): boolean {
     return !!rule.hooks?.some((h) => HOOK_IDENTIFIERS.some((id) => h.command?.includes(id)))
   }
@@ -358,7 +363,7 @@ export function registerIpcHandlers(): void {
     function ensureHook(event: string, scriptPath: string, matcher = '') {
       const rules = (hooks[event] ?? []) as Array<Record<string, unknown>>
       const filtered = rules.filter((rule) => !isOurHook(rule as { hooks?: Array<{ command?: string }> }))
-      filtered.push({ matcher, hooks: [{ type: 'command', command: scriptPath }] })
+      filtered.push({ matcher, hooks: [{ type: 'command', command: shellQuoteArg(scriptPath) }] })
       hooks[event] = filtered
     }
 

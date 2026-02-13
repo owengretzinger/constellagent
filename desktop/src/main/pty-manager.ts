@@ -58,6 +58,7 @@ function isLikelyCodexCommand(command: string): boolean {
 }
 
 const DEFAULT_ACTIVITY_DIR = '/tmp/constellagent-activity'
+const CODEX_MARKER_SEGMENT = '.codex.'
 
 function getActivityDir(): string {
   return process.env.CONSTELLAGENT_ACTIVITY_DIR || DEFAULT_ACTIVITY_DIR
@@ -116,7 +117,7 @@ export class PtyManager {
     }
 
     proc.onExit(({ exitCode }) => {
-      this.clearWorkspaceActivity(instance.workspaceId)
+      this.clearCodexWorkspaceActivity(instance.workspaceId, instance.process.pid)
       for (const cb of instance.onExitCallbacks) cb(exitCode)
       this.ptys.delete(id)
     })
@@ -137,7 +138,7 @@ export class PtyManager {
     // Codex doesn't expose a prompt-submit hook, so mark the workspace active
     // when Enter is sent while a Codex process is already running in this PTY.
     if (instance.workspaceId && /[\r\n]/.test(data) && this.isCodexRunningUnder(instance.process.pid)) {
-      this.markWorkspaceActive(instance.workspaceId)
+      this.markCodexWorkspaceActive(instance.workspaceId, instance.process.pid)
     }
 
     instance.process.write(data)
@@ -155,7 +156,7 @@ export class PtyManager {
   destroy(ptyId: string): void {
     const instance = this.ptys.get(ptyId)
     if (instance) {
-      this.clearWorkspaceActivity(instance.workspaceId)
+      this.clearCodexWorkspaceActivity(instance.workspaceId, instance.process.pid)
       instance.process.kill()
       this.ptys.delete(ptyId)
     }
@@ -204,20 +205,24 @@ export class PtyManager {
     return false
   }
 
-  private markWorkspaceActive(workspaceId: string): void {
+  private codexMarkerPath(workspaceId: string, ptyPid: number): string {
+    return `${getActivityDir()}/${workspaceId}${CODEX_MARKER_SEGMENT}${ptyPid}`
+  }
+
+  private markCodexWorkspaceActive(workspaceId: string, ptyPid: number): void {
     try {
       const activityDir = getActivityDir()
       mkdirSync(activityDir, { recursive: true })
-      writeFileSync(`${activityDir}/${workspaceId}`, '')
+      writeFileSync(this.codexMarkerPath(workspaceId, ptyPid), '')
     } catch {
       // Best-effort marker write
     }
   }
 
-  private clearWorkspaceActivity(workspaceId?: string): void {
+  private clearCodexWorkspaceActivity(workspaceId: string | undefined, ptyPid: number): void {
     if (!workspaceId) return
     try {
-      unlinkSync(`${getActivityDir()}/${workspaceId}`)
+      unlinkSync(this.codexMarkerPath(workspaceId, ptyPid))
     } catch {
       // Best-effort marker removal
     }

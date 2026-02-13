@@ -13,6 +13,11 @@ TMP_TARGET="${TARGET}.tmp"
 printf '%s\n' "$WS_ID" > "$TMP_TARGET"
 mv "$TMP_TARGET" "$TARGET"
 
-# Clear activity marker — Claude is no longer actively working
+# Clear Claude-specific activity marker.
 ACTIVITY_DIR="${CONSTELLAGENT_ACTIVITY_DIR:-/tmp/constellagent-activity}"
-rm -f "$ACTIVITY_DIR/$WS_ID"
+rm -f "$ACTIVITY_DIR/$WS_ID.claude"
+
+# Legacy cleanup: remove old shared marker only if no Codex marker remains.
+if ! compgen -G "$ACTIVITY_DIR/$WS_ID.codex.*" > /dev/null; then
+  rm -f "$ACTIVITY_DIR/$WS_ID"
+fi
