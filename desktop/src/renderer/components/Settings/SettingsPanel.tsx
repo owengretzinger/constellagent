@@ -167,33 +167,30 @@ function ClaudeHooksSection() {
   }
 
   return (
-    <div className={styles.section}>
-      <div className={styles.sectionTitle}>Claude Code Integration</div>
-      <div className={styles.row}>
-        <div className={styles.rowText}>
-          <div className={styles.rowLabel}>Notification hooks</div>
-          <div className={styles.rowDescription}>
-            Show an unread indicator when Claude Code finishes responding in a workspace
-          </div>
+    <div className={styles.row}>
+      <div className={styles.rowText}>
+        <div className={styles.rowLabel}>Claude Code hooks</div>
+        <div className={styles.rowDescription}>
+          Show an unread indicator when Claude Code finishes responding in a workspace
         </div>
-        {installed === true ? (
-          <button
-            className={styles.actionBtnDanger}
-            onClick={handleUninstall}
-            disabled={installing}
-          >
-            {installing ? 'Removing...' : 'Uninstall'}
-          </button>
-        ) : (
-          <button
-            className={styles.actionBtn}
-            onClick={handleInstall}
-            disabled={installing || installed === null}
-          >
-            {installing ? 'Installing...' : 'Install Hooks'}
-          </button>
-        )}
       </div>
+      {installed === true ? (
+        <button
+          className={styles.actionBtnDanger}
+          onClick={handleUninstall}
+          disabled={installing}
+        >
+          {installing ? 'Removing...' : 'Uninstall'}
+        </button>
+      ) : (
+        <button
+          className={styles.actionBtn}
+          onClick={handleInstall}
+          disabled={installing || installed === null}
+        >
+          {installing ? 'Installing...' : 'Install'}
+        </button>
+      )}
     </div>
   )
 }
@@ -233,33 +230,30 @@ function CodexNotifySection() {
   }
 
   return (
-    <div className={styles.section}>
-      <div className={styles.sectionTitle}>Codex Integration</div>
-      <div className={styles.row}>
-        <div className={styles.rowText}>
-          <div className={styles.rowLabel}>Notify hook</div>
-          <div className={styles.rowDescription}>
-            Show done/unread state for Codex turns and clear active state when a turn completes
-          </div>
+    <div className={styles.row}>
+      <div className={styles.rowText}>
+        <div className={styles.rowLabel}>Codex notify hook</div>
+        <div className={styles.rowDescription}>
+          Show done/unread state for Codex turns and clear active state when a turn completes
         </div>
-        {installed === true ? (
-          <button
-            className={styles.actionBtnDanger}
-            onClick={handleUninstall}
-            disabled={installing}
-          >
-            {installing ? 'Removing...' : 'Uninstall'}
-          </button>
-        ) : (
-          <button
-            className={styles.actionBtn}
-            onClick={handleInstall}
-            disabled={installing || installed === null}
-          >
-            {installing ? 'Installing...' : 'Install Notify'}
-          </button>
-        )}
       </div>
+      {installed === true ? (
+        <button
+          className={styles.actionBtnDanger}
+          onClick={handleUninstall}
+          disabled={installing}
+        >
+          {installing ? 'Removing...' : 'Uninstall'}
+        </button>
+      ) : (
+        <button
+          className={styles.actionBtn}
+          onClick={handleInstall}
+          disabled={installing || installed === null}
+        >
+          {installing ? 'Installing...' : 'Install'}
+        </button>
+      )}
     </div>
   )
 }
@@ -364,8 +358,11 @@ export function SettingsPanel() {
           />
         </div>
 
-        <ClaudeHooksSection />
-        <CodexNotifySection />
+        <div className={styles.section}>
+          <div className={styles.sectionTitle}>Agent Integrations</div>
+          <ClaudeHooksSection />
+          <CodexNotifySection />
+        </div>
 
         <div className={styles.section}>
           <div className={styles.sectionTitle}>Keyboard Shortcuts</div>
