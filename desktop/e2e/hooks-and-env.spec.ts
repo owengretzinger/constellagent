@@ -50,44 +50,68 @@ async function capturePtyOutput(window: Page, ptyId: string, command: string, ms
  * Set up a project + workspace via the store, then call createTerminalForActiveWorkspace.
  * Uses the repo path directly as worktreePath (no git worktree IPC) to avoid fetch issues.
  */
-async function setupProjectAndWorkspace(
+async function setupProjectAndWorkspace(window: Page, repoPath: string) {
+  return await window.evaluate(async (repo: string) => {
+    const store = (window as any).__store.getState()
+    store.hydrateState({ projects: [], workspaces: [] })
+
+    const projectId = crypto.randomUUID()
+    store.addProject({ id: projectId, name: 'test-repo', repoPath: repo })
+
+    const wsId = crypto.randomUUID()
+    store.addWorkspace({
+      id: wsId, name: 'test-ws', branch: 'main', worktreePath: repo, projectId,
+    })
+    store.setActiveWorkspace(wsId)
+
+    // Uses the store action which internally calls ptyEnv()
+    await store.createTerminalForActiveWorkspace()
+
+    const tabs = (window as any).__store.getState().tabs
+    const termTab = tabs.find((t: any) => t.type === 'terminal' && t.workspaceId === wsId)
+
+    return { projectId, wsId, worktreePath: repo, ptyId: termTab?.ptyId as string }
+  }, repoPath)
+}
+
+/**
+ * Open the ProjectSettingsDialog via the gear icon, add a hook with the given
+ * type and command, then click Save. Verifies the hook is persisted in the store.
+ */
+async function addHookViaUI(
   window: Page,
-  repoPath: string,
-  hooks?: Array<{ type: string; command: string }>,
+  hookType: 'setup' | 'run' | 'archive',
+  command: string,
 ) {
-  return await window.evaluate(
-    async (data) => {
-      const store = (window as any).__store.getState()
-      store.hydrateState({ projects: [], workspaces: [] })
+  // Hover the project header to reveal the gear icon, then click it
+  const projectHeader = window.locator('[class*="projectHeader"]').first()
+  await projectHeader.hover()
+  const settingsBtn = window.locator('[class*="settingsBtn"]').first()
+  await settingsBtn.click()
 
-      const projectId = crypto.randomUUID()
-      store.addProject({
-        id: projectId,
-        name: 'test-repo',
-        repoPath: data.repoPath,
-        ...(data.hooks && { hooks: data.hooks }),
-      })
+  // Wait for the dialog to appear
+  const dialog = window.locator('[class*="dialog"]')
+  await expect(dialog).toBeVisible()
 
-      const wsId = crypto.randomUUID()
-      store.addWorkspace({
-        id: wsId,
-        name: 'test-ws',
-        branch: 'main',
-        worktreePath: data.repoPath,
-        projectId,
-      })
-      store.setActiveWorkspace(wsId)
+  // Click "Add hook"
+  const addHookBtn = dialog.locator('[class*="addBtn"]', { hasText: 'Add hook' })
+  await expect(addHookBtn).toBeVisible()
+  await addHookBtn.click()
 
-      // Uses the store action which internally calls ptyEnv()
-      await store.createTerminalForActiveWorkspace()
+  // Select the hook type from the dropdown
+  const hookSelect = dialog.locator('[class*="hookSelect"]').last()
+  await hookSelect.selectOption(hookType)
 
-      const tabs = (window as any).__store.getState().tabs
-      const termTab = tabs.find((t: any) => t.type === 'terminal' && t.workspaceId === wsId)
+  // Type the command into the hook input
+  const hookInput = dialog.locator('[class*="hookRow"] input').last()
+  await hookInput.fill(command)
 
-      return { projectId, wsId, worktreePath: data.repoPath, ptyId: termTab?.ptyId as string }
-    },
-    { repoPath, hooks },
-  )
+  // Click Save
+  const saveBtn = dialog.locator('[class*="saveBtn"]')
+  await saveBtn.click()
+
+  // Wait for dialog to close
+  await expect(dialog).not.toBeVisible()
 }
 
 test.describe('PTY environment variables', () => {
@@ -145,17 +169,26 @@ test.describe('PTY environment variables', () => {
 })
 
 test.describe('Run hook', () => {
-  test('executeRunHook creates a Run tab and fires the command', async () => {
+  test('hook configured via UI creates a Run tab and fires the command', async () => {
     const repoPath = createTestRepo('run-hook')
     const { app, window } = await launchApp()
 
     try {
-      await setupProjectAndWorkspace(window, repoPath, [
-        { type: 'run', command: 'echo RUN_HOOK_FIRED' },
-      ])
+      await setupProjectAndWorkspace(window, repoPath)
+      await window.waitForTimeout(1000)
 
-      // Execute the run hook and immediately start listening on the new PTY
-      // so we don't miss the delayed write output
+      // Configure the run hook through the project settings dialog
+      await addHookViaUI(window, 'run', 'echo RUN_HOOK_FIRED')
+
+      // Verify hook was saved in the store
+      const hookSaved = await window.evaluate(() => {
+        const store = (window as any).__store.getState()
+        const project = store.projects[0]
+        return project?.hooks?.some((h: any) => h.type === 'run' && h.command === 'echo RUN_HOOK_FIRED')
+      })
+      expect(hookSaved).toBe(true)
+
+      // Execute the run hook and immediately listen for output
       const output = await window.evaluate(async () => {
         const store = (window as any).__store.getState()
         await store.executeRunHook()
@@ -174,7 +207,6 @@ test.describe('Run hook', () => {
               resolve(buffer)
             }
           })
-          // Timeout fallback
           setTimeout(() => { unsub(); resolve(buffer) }, 5000)
         })
       })
@@ -194,9 +226,10 @@ test.describe('Run hook', () => {
     const { app, window } = await launchApp()
 
     try {
-      await setupProjectAndWorkspace(window, repoPath, [
-        { type: 'run', command: 'echo RUN_AGAIN' },
-      ])
+      await setupProjectAndWorkspace(window, repoPath)
+      await window.waitForTimeout(1000)
+
+      await addHookViaUI(window, 'run', 'echo RUN_AGAIN')
 
       // First invocation
       await window.evaluate(async () => {
@@ -226,9 +259,10 @@ test.describe('Run hook', () => {
     const { app, window } = await launchApp()
 
     try {
-      await setupProjectAndWorkspace(window, repoPath, [
-        { type: 'run', command: 'echo done' },
-      ])
+      await setupProjectAndWorkspace(window, repoPath)
+      await window.waitForTimeout(1000)
+
+      await addHookViaUI(window, 'run', 'echo done')
 
       await window.evaluate(async () => {
         await (window as any).__store.getState().executeRunHook()
