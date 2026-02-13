@@ -8,6 +8,10 @@ export interface PrInfo {
   title: string
   url: string
   checkStatus: CheckStatus
+  hasPendingComments: boolean
+  pendingCommentCount: number
+  isBlockedByCi: boolean
+  isApproved: boolean
   updatedAt: string
 }
 

@@ -10,6 +10,7 @@ import styles from "./Sidebar.module.css";
 
 const PR_ICON_SIZE = 10;
 const START_TERMINAL_MESSAGE = "Starting terminal...";
+const MAX_COMMENT_COUNT_DISPLAY = 9;
 
 interface WorkspaceCreationState {
   requestId: string;
@@ -41,6 +42,27 @@ function PrStateIcon({ state }: { state: "open" | "merged" | "closed" }) {
   );
 }
 
+function CommentCountIcon({ count }: { count: number }) {
+  const text =
+    count > MAX_COMMENT_COUNT_DISPLAY
+      ? `${MAX_COMMENT_COUNT_DISPLAY}+`
+      : String(count);
+  return (
+    <span className={styles.prCommentIcon}>
+      <svg
+        className={styles.prCommentIconBubble}
+        width="18"
+        height="14"
+        viewBox="0 0 18 14"
+        aria-hidden="true"
+      >
+        <path d="M2.25 2.75C2.25 1.784 3.034 1 4 1h10c.966 0 1.75.784 1.75 1.75v6.5c0 .966-.784 1.75-1.75 1.75H9L5.5 13V11H4c-.966 0-1.75-.784-1.75-1.75Z" />
+      </svg>
+      <span className={styles.prCommentIconCount}>{text}</span>
+    </span>
+  );
+}
+
 function WorkspaceMeta({
   projectId,
   branch,
@@ -60,6 +82,12 @@ function WorkspaceMeta({
   if (!hasPr && !showBranch) return null;
 
   const stateClass = hasPr ? styles[`pr_${prInfo!.state}`] || "" : "";
+  const openPr = hasPr && prInfo!.state === "open";
+  const pendingCommentCount = openPr ? Math.max(0, prInfo!.pendingCommentCount || 0) : 0;
+  const hasPendingComments = pendingCommentCount > 0;
+  const isBlockedByCi = openPr && !!prInfo!.isBlockedByCi;
+  const isApproved = openPr && !!prInfo!.isApproved;
+  const isCiPassing = openPr && prInfo!.checkStatus === "passing" && !isBlockedByCi;
 
   return (
     <span className={styles.workspaceMeta}>
@@ -80,6 +108,42 @@ function WorkspaceMeta({
         >
           <PrStateIcon state={prInfo!.state} />
           <span className={styles.prNumber}>#{prInfo!.number}</span>
+          {openPr && (
+            <span className={styles.prSignals}>
+              {hasPendingComments && (
+                <span
+                  className={styles.prPendingComments}
+                  title={`${pendingCommentCount} unresolved review comment${pendingCommentCount === 1 ? "" : "s"}`}
+                >
+                  <CommentCountIcon count={pendingCommentCount} />
+                </span>
+              )}
+              {isBlockedByCi && (
+                <span
+                  className={`${styles.prBadge} ${styles.prBlockedCi}`}
+                  title="Blocked by CI checks"
+                >
+                  CI
+                </span>
+              )}
+              {isApproved && (
+                <span
+                  className={`${styles.prBadge} ${styles.prApproved}`}
+                  title="Approved"
+                >
+                  APP
+                </span>
+              )}
+              {isCiPassing && (
+                <span
+                  className={`${styles.prBadge} ${styles.prCiPassing}`}
+                  title="CI checks passing"
+                >
+                  CI
+                </span>
+              )}
+            </span>
+          )}
         </span>
       )}
       {hasPr && showBranch && <span style={{ marginRight: 4 }} />}

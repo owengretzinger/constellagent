@@ -286,6 +286,89 @@
   opacity: 0.8;
 }
 
+.prSignals {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: 2px;
+}
+
+.prBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 15px;
+  height: 13px;
+  padding: 0 4px;
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  font-size: 9px;
+  line-height: 1;
+  font-weight: var(--weight-semibold);
+  letter-spacing: 0.04em;
+}
+
+.prPendingComments {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 14px;
+  color: var(--accent-orange);
+}
+
+.prCommentIcon {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 14px;
+}
+
+.prCommentIconBubble {
+  width: 18px;
+  height: 14px;
+  display: block;
+  fill: var(--surface-2);
+  stroke: currentColor;
+  stroke-width: 0.95;
+}
+
+.prCommentIconCount {
+  position: absolute;
+  inset: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 8px;
+  font-weight: var(--weight-semibold);
+  line-height: 1;
+  color: var(--accent-orange);
+  letter-spacing: -0.03em;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  transform: translateY(-0.15px);
+}
+
+.prBlockedCi {
+  color: var(--accent-red);
+  border-color: var(--accent-red-dim);
+  background: rgba(247, 118, 142, 0.08);
+}
+
+.prApproved {
+  color: var(--accent-green);
+  border-color: var(--accent-green-dim);
+  background: rgba(158, 206, 106, 0.08);
+}
+
+.prCiPassing {
+  color: var(--accent-green);
+  border-color: var(--accent-green-dim);
+  background: rgba(158, 206, 106, 0.08);
+}
+
 /* PR state colors — applies to icon (currentColor) and number */
 .pr_open {
   color: var(--accent-green);

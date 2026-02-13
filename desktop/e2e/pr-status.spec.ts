@@ -6,7 +6,8 @@ import { execSync } from 'child_process'
 const appPath = resolve(__dirname, '../out/main/index.js')
 
 async function launchApp(): Promise<{ app: ElectronApplication; window: Page }> {
-  const app = await electron.launch({ args: [appPath], env: { ...process.env, CI_TEST: '1' } })
+  const { ELECTRON_RENDERER_URL: _ignoredRendererUrl, ...env } = process.env
+  const app = await electron.launch({ args: [appPath], env: { ...env, CI_TEST: '1' } })
   const window = await app.firstWindow()
   await window.waitForLoadState('domcontentloaded')
   await window.waitForSelector('#root', { timeout: 10000 })
@@ -78,6 +79,10 @@ test.describe('PR status indicators', () => {
             title: 'Add feature',
             url: 'https://github.com/test/repo/pull/42',
             checkStatus: 'passing',
+            hasPendingComments: false,
+            pendingCommentCount: 0,
+            isBlockedByCi: false,
+            isApproved: false,
             updatedAt: new Date().toISOString(),
           },
         })
@@ -154,6 +159,10 @@ test.describe('PR status indicators', () => {
             title: 'My cool PR',
             url: 'https://github.com/test/repo/pull/99',
             checkStatus: 'passing',
+            hasPendingComments: false,
+            pendingCommentCount: 0,
+            isBlockedByCi: false,
+            isApproved: false,
             updatedAt: new Date().toISOString(),
           },
         })
@@ -189,8 +198,8 @@ test.describe('PR status indicators', () => {
         store.addProject({ id: projectId, name: 'no-gh-project', repoPath: repo })
         store.addWorkspace({
           id: crypto.randomUUID(),
-          name: 'ws-no-gh',
-          branch: 'some-branch',
+          name: 'main',
+          branch: 'main',
           worktreePath: repo,
           projectId,
         })
@@ -198,12 +207,16 @@ test.describe('PR status indicators', () => {
         // Set gh as unavailable — PR badge should not render
         store.setGhAvailability(projectId, false)
         store.setPrStatuses(projectId, {
-          'some-branch': {
+          main: {
             number: 50,
             state: 'open',
             title: 'Should not show',
             url: 'https://github.com/test/repo/pull/50',
             checkStatus: 'passing',
+            hasPendingComments: false,
+            pendingCommentCount: 0,
+            isBlockedByCi: false,
+            isApproved: false,
             updatedAt: new Date().toISOString(),
           },
         })
@@ -213,6 +226,112 @@ test.describe('PR status indicators', () => {
 
       const prBadge = window.locator('[class*="prInline"]')
       await expect(prBadge).not.toBeVisible()
+    } finally {
+      await app.close()
+      cleanupTestRepo(repoPath)
+    }
+  })
+
+  test('open PR shows pending comments and CI blocked badges', async () => {
+    const repoPath = createTestRepo('pr-signals-blocked')
+    const { app, window } = await launchApp()
+
+    try {
+      await window.evaluate(async (repo: string) => {
+        const store = (window as any).__store.getState()
+        store.hydrateState({ projects: [], workspaces: [] })
+
+        const projectId = 'test-proj-signals-blocked'
+        store.addProject({ id: projectId, name: 'signals-project', repoPath: repo })
+        store.addWorkspace({
+          id: crypto.randomUUID(),
+          name: 'main',
+          branch: 'main',
+          worktreePath: repo,
+          projectId,
+        })
+      }, repoPath)
+
+      await window.waitForTimeout(4000)
+
+      await window.evaluate(() => {
+        const store = (window as any).__store.getState()
+        store.setGhAvailability('test-proj-signals-blocked', true)
+        store.setPrStatuses('test-proj-signals-blocked', {
+          main: {
+            number: 123,
+            state: 'open',
+            title: 'Blocked PR',
+            url: 'https://github.com/test/repo/pull/123',
+            checkStatus: 'failing',
+            hasPendingComments: true,
+            pendingCommentCount: 12,
+            isBlockedByCi: true,
+            isApproved: false,
+            updatedAt: new Date().toISOString(),
+          },
+        })
+      })
+
+      await window.waitForTimeout(500)
+
+      await expect(window.locator('[class*="prPendingComments"]')).toBeVisible()
+      await expect(window.locator('[class*="prBlockedCi"]')).toBeVisible()
+      await expect(window.locator('[class*="prApproved"]')).not.toBeVisible()
+      await expect(window.locator('[class*="prCiPassing"]')).not.toBeVisible()
+    } finally {
+      await app.close()
+      cleanupTestRepo(repoPath)
+    }
+  })
+
+  test('open PR shows approved badge', async () => {
+    const repoPath = createTestRepo('pr-signals-approved')
+    const { app, window } = await launchApp()
+
+    try {
+      await window.evaluate(async (repo: string) => {
+        const store = (window as any).__store.getState()
+        store.hydrateState({ projects: [], workspaces: [] })
+
+        const projectId = 'test-proj-signals-approved'
+        store.addProject({ id: projectId, name: 'approved-project', repoPath: repo })
+        store.addWorkspace({
+          id: crypto.randomUUID(),
+          name: 'main',
+          branch: 'main',
+          worktreePath: repo,
+          projectId,
+        })
+      }, repoPath)
+
+      await window.waitForTimeout(4000)
+
+      await window.evaluate(() => {
+        const store = (window as any).__store.getState()
+        store.setGhAvailability('test-proj-signals-approved', true)
+        store.setPrStatuses('test-proj-signals-approved', {
+          main: {
+            number: 124,
+            state: 'open',
+            title: 'Approved PR',
+            url: 'https://github.com/test/repo/pull/124',
+            checkStatus: 'passing',
+            hasPendingComments: false,
+            pendingCommentCount: 0,
+            isBlockedByCi: false,
+            isApproved: true,
+            updatedAt: new Date().toISOString(),
+          },
+        })
+      })
+
+      await window.waitForTimeout(500)
+
+      await expect(window.locator('[class*="prApproved"]')).toBeVisible()
+      await expect(window.locator('[class*="prPendingComments"]')).not.toBeVisible()
+      await expect(window.locator('[class*="prBlockedCi"]')).not.toBeVisible()
+      await expect(window.locator('[class*="prCiPassing"]')).toBeVisible()
     } finally {
       await app.close()
       cleanupTestRepo(repoPath)
@@ -255,6 +374,10 @@ test.describe('PR status indicators', () => {
             title: 'Already merged',
             url: 'https://github.com/test/repo/pull/77',
             checkStatus: 'passing',
+            hasPendingComments: false,
+            pendingCommentCount: 0,
+            isBlockedByCi: false,
+            isApproved: false,
             updatedAt: new Date().toISOString(),
           },
         })

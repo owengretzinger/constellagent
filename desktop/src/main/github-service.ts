@@ -15,6 +15,8 @@ interface GraphqlPullRequestNode {
   title: string
   url: string
   updatedAt: string
+  reviewDecision?: string | null
+  mergeStateStatus?: string | null
   commits?: {
     nodes?: Array<{
       commit?: {
@@ -37,19 +39,35 @@ interface GraphqlResponse {
   errors?: Array<{ message?: string }>
 }
 
+interface GraphqlReviewThreadsResponse {
+  data?: {
+    repository?: {
+      pullRequest?: {
+        reviewThreads?: {
+          nodes?: Array<{ isResolved?: boolean }>
+          pageInfo?: {
+            hasNextPage?: boolean
+            endCursor?: string | null
+          }
+        }
+      }
+    }
+  }
+  errors?: Array<{ message?: string }>
+}
+
 interface RepoResponseCache {
-  etag?: string
   data: Record<string, PrInfo | null>
 }
 
 class GithubAuthError extends Error {}
 
 export class GithubService {
-  private static MAX_GRAPHQL_GET_URL_LENGTH = 7000
   private static AUTH_TOKEN_REFRESH_MS = 60_000
   private static ghAvailable: boolean | null = null
   private static repoInfoCache = new Map<string, GithubRepoInfo | null>()
   private static responseCache = new Map<string, RepoResponseCache>()
+  private static unresolvedThreadCache = new Map<string, number>()
   private static authToken: string | null = null
   private static authTokenChecked = false
   private static authTokenFetchedAt = 0
@@ -118,19 +136,8 @@ export class GithubService {
     const cached = this.responseCache.get(cacheKey)
 
     try {
-      const result = await this.fetchRepoPrStatuses(repoInfo, normalizedBranches, token, cached?.etag)
-
-      if (result.notModified) {
-        if (cached) {
-          return { available: true, data: this.cloneData(cached.data) }
-        }
-        // 304 without local cache should be impossible, but recover safely.
-        const fallback = await this.fetchRepoPrStatuses(repoInfo, normalizedBranches, token)
-        this.setCachedResponse(cacheKey, fallback.etag, fallback.data)
-        return { available: true, data: this.cloneData(fallback.data) }
-      }
-
-      this.setCachedResponse(cacheKey, result.etag, result.data)
+      const result = await this.fetchRepoPrStatuses(repoInfo, normalizedBranches, token)
+      this.setCachedResponse(cacheKey, result.data)
       return { available: true, data: this.cloneData(result.data) }
     } catch (err) {
       if (err instanceof GithubAuthError) {
@@ -205,11 +212,9 @@ export class GithubService {
 
   private static setCachedResponse(
     cacheKey: string,
-    etag: string | undefined,
     data: Record<string, PrInfo | null>
   ): void {
     this.responseCache.set(cacheKey, {
-      etag,
       data: this.cloneData(data),
     })
   }
@@ -231,89 +236,38 @@ export class GithubService {
   private static async fetchRepoPrStatuses(
     repoInfo: GithubRepoInfo,
     branches: string[],
-    token: string,
-    ifNoneMatch?: string
-  ): Promise<{ data: Record<string, PrInfo | null>; etag?: string; notModified?: boolean }> {
+    token: string
+  ): Promise<{ data: Record<string, PrInfo | null> }> {
     const { query, variables } = this.buildGraphqlQuery(repoInfo, branches)
-    const headers: Record<string, string> = {
-      Authorization: `Bearer ${token}`,
-      Accept: 'application/vnd.github+json',
-      'User-Agent': 'constellagent-desktop',
-    }
-    if (ifNoneMatch) headers['If-None-Match'] = ifNoneMatch
-
-    const getUrl = this.buildGraphqlGetUrl(query, variables)
-    const useGet = getUrl.toString().length <= this.MAX_GRAPHQL_GET_URL_LENGTH
-
-    const controller = new AbortController()
-    const timeout = setTimeout(() => controller.abort(), 10_000)
-
-    let response: Response
-    try {
-      if (useGet) {
-        response = await fetch(getUrl, {
-          method: 'GET',
-          headers,
-          signal: controller.signal,
-        })
-      } else {
-        response = await fetch('https://api.github.com/graphql', {
-          method: 'POST',
-          headers: {
-            ...headers,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ query, variables }),
-          signal: controller.signal,
-        })
-      }
-    } finally {
-      clearTimeout(timeout)
-    }
-
-    if (response.status === 304) {
-      return { data: this.emptyResult(branches), etag: ifNoneMatch, notModified: true }
-    }
-
-    if (response.status === 401 || response.status === 403) {
-      throw new GithubAuthError(`GitHub API auth failed (${response.status})`)
-    }
-    if (!response.ok) {
-      throw new Error(`GitHub API request failed (${response.status})`)
-    }
-
-    const etag = response.headers.get('etag') ?? undefined
-    const payload = await response.json() as GraphqlResponse
-
-    if (payload.errors && payload.errors.length > 0) {
-      if (this.hasAuthError(payload.errors)) {
-        throw new GithubAuthError(payload.errors[0]?.message ?? 'GitHub auth error')
-      }
-      throw new Error(payload.errors[0]?.message ?? 'GraphQL query failed')
-    }
+    const payload = await this.fetchGraphqlJson<GraphqlResponse>(query, variables, token)
 
     const repository = payload.data?.repository
     if (!repository) {
-      return { data: this.emptyResult(branches), etag }
+      return { data: this.emptyResult(branches) }
     }
 
     const data: Record<string, PrInfo | null> = {}
+    const unresolvedLookups: Promise<void>[] = []
     for (let i = 0; i < branches.length; i++) {
       const branch = branches[i]
       const openNode = repository[`b${i}Open`]?.nodes?.[0]
       const anyNode = repository[`b${i}Any`]?.nodes?.[0]
       const picked = openNode ?? anyNode
-      data[branch] = picked ? this.mapPullRequest(picked) : null
+      const mapped = picked ? this.mapPullRequest(picked) : null
+      data[branch] = mapped
+
+      if (picked && mapped && mapped.state === 'open') {
+        unresolvedLookups.push(
+          this.attachUnresolvedReviewThreads(repoInfo, token, picked, mapped)
+        )
+      }
     }
 
-    return { data, etag }
-  }
+    if (unresolvedLookups.length > 0) {
+      await Promise.allSettled(unresolvedLookups)
+    }
 
-  private static buildGraphqlGetUrl(query: string, variables: Record<string, string>): URL {
-    const url = new URL('https://api.github.com/graphql')
-    url.searchParams.set('query', query)
-    url.searchParams.set('variables', JSON.stringify(variables))
-    return url
+    return { data }
   }
 
   private static buildGraphqlQuery(
@@ -356,6 +310,8 @@ export class GithubService {
         title
         url
         updatedAt
+        reviewDecision
+        mergeStateStatus
         commits(last: 1) {
           nodes {
             commit {
@@ -390,15 +346,163 @@ export class GithubService {
         ? rawState
         : 'open'
     const rollupState = pr.commits?.nodes?.[0]?.commit?.statusCheckRollup?.state
+    const checkStatus = this.rollupStateToStatus(rollupState)
+    const mergeStateStatus = pr.mergeStateStatus?.toUpperCase()
+    const isOpen = state === 'open'
+    const checksNotPassing = checkStatus === 'pending' || checkStatus === 'failing'
+    const reviewDecision = pr.reviewDecision?.toUpperCase()
 
     return {
       number: pr.number,
       state,
       title: pr.title,
       url: pr.url,
-      checkStatus: this.rollupStateToStatus(rollupState),
+      checkStatus,
+      hasPendingComments: false,
+      pendingCommentCount: 0,
+      isBlockedByCi: isOpen && checksNotPassing && (
+        mergeStateStatus ? mergeStateStatus === 'BLOCKED' : true
+      ),
+      isApproved: isOpen && reviewDecision === 'APPROVED',
       updatedAt: pr.updatedAt,
     }
+  }
+
+  private static reviewThreadCacheKey(
+    repoInfo: GithubRepoInfo,
+    number: number,
+    updatedAt: string
+  ): string {
+    return `${repoInfo.owner}/${repoInfo.name}#${number}@${updatedAt}`
+  }
+
+  private static updateReviewThreadCache(
+    repoInfo: GithubRepoInfo,
+    number: number,
+    updatedAt: string,
+    unresolvedCount: number
+  ): void {
+    const prefix = `${repoInfo.owner}/${repoInfo.name}#${number}@`
+    for (const key of this.unresolvedThreadCache.keys()) {
+      if (key.startsWith(prefix)) this.unresolvedThreadCache.delete(key)
+    }
+    this.unresolvedThreadCache.set(
+      this.reviewThreadCacheKey(repoInfo, number, updatedAt),
+      unresolvedCount
+    )
+  }
+
+  private static async attachUnresolvedReviewThreads(
+    repoInfo: GithubRepoInfo,
+    token: string,
+    prNode: GraphqlPullRequestNode,
+    info: PrInfo
+  ): Promise<void> {
+    const key = this.reviewThreadCacheKey(repoInfo, prNode.number, prNode.updatedAt)
+    const cached = this.unresolvedThreadCache.get(key)
+    if (cached !== undefined) {
+      info.pendingCommentCount = cached
+      info.hasPendingComments = cached > 0
+      return
+    }
+
+    const unresolvedCount = await this.fetchUnresolvedReviewThreadCount(repoInfo, token, prNode.number)
+    info.pendingCommentCount = unresolvedCount
+    info.hasPendingComments = unresolvedCount > 0
+    this.updateReviewThreadCache(repoInfo, prNode.number, prNode.updatedAt, unresolvedCount)
+  }
+
+  private static async fetchUnresolvedReviewThreadCount(
+    repoInfo: GithubRepoInfo,
+    token: string,
+    number: number
+  ): Promise<number> {
+    let cursor: string | null = null
+    let unresolvedCount = 0
+
+    while (true) {
+      const query = `
+        query ReviewThreads($owner: String!, $name: String!, $number: Int!, $cursor: String) {
+          repository(owner: $owner, name: $name) {
+            pullRequest(number: $number) {
+              reviewThreads(first: 100, after: $cursor) {
+                nodes {
+                  isResolved
+                }
+                pageInfo {
+                  hasNextPage
+                  endCursor
+                }
+              }
+            }
+          }
+        }
+      `
+
+      const payload = await this.fetchGraphqlJson<GraphqlReviewThreadsResponse>(query, {
+        owner: repoInfo.owner,
+        name: repoInfo.name,
+        number,
+        cursor,
+      }, token)
+
+      const threads = payload.data?.repository?.pullRequest?.reviewThreads
+      if (!threads) return 0
+
+      const nodes = Array.isArray(threads.nodes) ? threads.nodes : []
+      unresolvedCount += nodes.filter((thread) => !thread.isResolved).length
+
+      if (!threads.pageInfo?.hasNextPage) {
+        return unresolvedCount
+      }
+      cursor = threads.pageInfo.endCursor ?? null
+      if (!cursor) {
+        return unresolvedCount
+      }
+    }
+  }
+
+  private static async fetchGraphqlJson<T extends { errors?: Array<{ message?: string }> }>(
+    query: string,
+    variables: Record<string, string | number | null>,
+    token: string
+  ): Promise<T> {
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 10_000)
+
+    let response: Response
+    try {
+      response = await fetch('https://api.github.com/graphql', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: 'application/vnd.github+json',
+          'Content-Type': 'application/json',
+          'User-Agent': 'constellagent-desktop',
+        },
+        body: JSON.stringify({ query, variables }),
+        signal: controller.signal,
+      })
+    } finally {
+      clearTimeout(timeout)
+    }
+
+    if (response.status === 401 || response.status === 403) {
+      throw new GithubAuthError(`GitHub API auth failed (${response.status})`)
+    }
+    if (!response.ok) {
+      throw new Error(`GitHub API request failed (${response.status})`)
+    }
+
+    const payload = await response.json() as T
+    if (payload.errors && payload.errors.length > 0) {
+      if (this.hasAuthError(payload.errors)) {
+        throw new GithubAuthError(payload.errors[0]?.message ?? 'GitHub auth error')
+      }
+      throw new Error(payload.errors[0]?.message ?? 'GraphQL query failed')
+    }
+
+    return payload
   }
 
   private static rollupStateToStatus(rollupState: string | undefined): CheckStatus {
