@@ -1,4 +1,5 @@
 import { app, BrowserWindow, Menu, shell } from 'electron'
+import type { MenuItemConstructorOptions } from 'electron'
 import { join } from 'path'
 import { registerIpcHandlers } from './ipc'
 import { NotificationWatcher } from './notification-watcher'
@@ -58,9 +59,11 @@ if (process.env.CI_TEST) {
 }
 
 app.whenReady().then(() => {
+  const isDev = !!process.env.ELECTRON_RENDERER_URL
+
   // Custom menu: keep standard Edit shortcuts (copy/paste/undo) but remove
   // Cmd+W (close window) and Cmd+N (new window) so they reach the renderer
-  const menu = Menu.buildFromTemplate([
+  const menuTemplate: MenuItemConstructorOptions[] = [
     {
       label: app.name,
       submenu: [
@@ -85,11 +88,23 @@ app.whenReady().then(() => {
         { role: 'selectAll' },
       ],
     },
+    ...(isDev
+      ? [{
+          label: 'View',
+          submenu: [
+            { role: 'reload' },
+            { role: 'forceReload' },
+            { type: 'separator' },
+            { role: 'toggleDevTools' },
+          ],
+        }]
+      : []),
     {
       label: 'Window',
       submenu: [{ role: 'minimize' }, { role: 'zoom' }],
     },
-  ])
+  ]
+  const menu = Menu.buildFromTemplate(menuTemplate)
   Menu.setApplicationMenu(menu)
 
   registerIpcHandlers()
