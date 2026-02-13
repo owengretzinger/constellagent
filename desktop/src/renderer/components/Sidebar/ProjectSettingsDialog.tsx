@@ -1,16 +1,27 @@
 import { useState, useCallback } from 'react'
-import type { Project, StartupCommand } from '../../store/types'
+import { HookType } from '../../store/types'
+import type { Project, StartupCommand, ProjectHook } from '../../store/types'
 import styles from './ProjectSettingsDialog.module.css'
+
+const ALL_HOOK_TYPES: { type: HookType; label: string }[] = [
+  { type: HookType.Setup, label: 'Setup' },
+  { type: HookType.Run, label: 'Run' },
+  { type: HookType.Archive, label: 'Archive' },
+]
 
 interface Props {
   project: Project
-  onSave: (commands: StartupCommand[]) => void
+  onSave: (commands: StartupCommand[], hooks: ProjectHook[]) => void
   onCancel: () => void
 }
 
 export function ProjectSettingsDialog({ project, onSave, onCancel }: Props) {
   const [commands, setCommands] = useState<StartupCommand[]>(
     project.startupCommands?.length ? [...project.startupCommands] : []
+  )
+
+  const [hooks, setHooks] = useState<ProjectHook[]>(
+    project.hooks?.length ? [...project.hooks] : []
   )
 
   const handleAdd = useCallback(() => {
@@ -27,11 +38,40 @@ export function ProjectSettingsDialog({ project, onSave, onCancel }: Props) {
     )
   }, [])
 
+  const availableHookTypes = ALL_HOOK_TYPES.filter(
+    ({ type }) => !hooks.some((h) => h.type === type)
+  )
+
+  const handleAddHook = useCallback(() => {
+    setHooks((prev) => {
+      const used = new Set(prev.map((h) => h.type))
+      const next = ALL_HOOK_TYPES.find(({ type }) => !used.has(type))
+      if (!next) return prev
+      return [...prev, { type: next.type, command: '' }]
+    })
+  }, [])
+
+  const handleRemoveHook = useCallback((index: number) => {
+    setHooks((prev) => prev.filter((_, i) => i !== index))
+  }, [])
+
+  const handleHookTypeChange = useCallback((index: number, type: HookType) => {
+    setHooks((prev) =>
+      prev.map((h, i) => (i === index ? { ...h, type } : h))
+    )
+  }, [])
+
+  const handleHookCommandChange = useCallback((index: number, command: string) => {
+    setHooks((prev) =>
+      prev.map((h, i) => (i === index ? { ...h, command } : h))
+    )
+  }, [])
+
   const handleSave = useCallback(() => {
-    // Filter out entries with no command
     const filtered = commands.filter((c) => c.command.trim())
-    onSave(filtered.length > 0 ? filtered : [])
-  }, [commands, onSave])
+    const filteredHooks = hooks.filter((h) => h.command.trim())
+    onSave(filtered.length > 0 ? filtered : [], filteredHooks)
+  }, [commands, hooks, onSave])
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -80,6 +120,56 @@ export function ProjectSettingsDialog({ project, onSave, onCancel }: Props) {
             <span>+</span>
             <span>Add command</span>
           </button>
+        </div>
+
+        <div className={styles.hookSection}>
+          <label className={styles.label}>Hooks</label>
+          <div className={styles.hint}>
+            Commands that run at different stages of the workspace lifecycle.
+          </div>
+
+          <div className={styles.commandList}>
+            {hooks.map((hook, i) => (
+              <div key={i} className={styles.hookRow}>
+                <select
+                  className={styles.hookSelect}
+                  value={hook.type}
+                  onChange={(e) => handleHookTypeChange(i, e.target.value as HookType)}
+                >
+                  {ALL_HOOK_TYPES.map(({ type, label }) => (
+                    <option
+                      key={type}
+                      value={type}
+                      disabled={type !== hook.type && hooks.some((h) => h.type === type)}
+                    >
+                      {label}
+                    </option>
+                  ))}
+                </select>
+                <input
+                  className={styles.input}
+                  value={hook.command}
+                  onChange={(e) => handleHookCommandChange(i, e.target.value)}
+                  placeholder="command"
+                  autoFocus={i === hooks.length - 1}
+                />
+                <button
+                  className={styles.removeBtn}
+                  onClick={() => handleRemoveHook(i)}
+                  title="Remove"
+                >
+                  ✕
+                </button>
+              </div>
+            ))}
+
+            {availableHookTypes.length > 0 && (
+              <button className={styles.addBtn} onClick={handleAddHook}>
+                <span>+</span>
+                <span>Add hook</span>
+              </button>
+            )}
+          </div>
         </div>
 
         <div className={styles.actions}>

@@ -196,6 +196,14 @@ export function useShortcuts() {
         return
       }
 
+      // ── Run hook ──
+      // Cmd+R — execute run hook
+      if (!shift && !alt && e.key === 'r') {
+        consume()
+        store.executeRunHook()
+        return
+      }
+
       // ── Workspace creation ──
       // Cmd+N — new workspace dialog
       if (!shift && !alt && e.key === 'n') {

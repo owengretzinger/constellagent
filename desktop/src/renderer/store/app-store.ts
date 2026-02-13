@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import type { AppState, PersistedState, Tab } from './types'
-import { DEFAULT_SETTINGS } from './types'
+import { DEFAULT_SETTINGS, HookType } from './types'
 
 export const useAppStore = create<AppState>((set, get) => ({
   projects: [],
@@ -124,8 +124,13 @@ export const useAppStore = create<AppState>((set, get) => ({
       const newTabs = s.tabs.filter((t) => t.id !== id)
       const wasActive = s.activeTabId === id
       const wsTabs = newTabs.filter((t) => t.workspaceId === s.activeWorkspaceId)
+      // Clear runTerminalTabId if the closed tab was the run terminal
+      const workspaces = s.workspaces.map((w) =>
+        w.runTerminalTabId === id ? { ...w, runTerminalTabId: undefined } : w
+      )
       return {
         tabs: newTabs,
+        workspaces,
         activeTabId: wasActive ? (wsTabs[wsTabs.length - 1]?.id ?? null) : s.activeTabId,
       }
     }),
@@ -283,6 +288,48 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
 
+  executeRunHook: async () => {
+    const s = get()
+    if (!s.activeWorkspaceId) return
+    const ws = s.workspaces.find((w) => w.id === s.activeWorkspaceId)
+    if (!ws) return
+    const project = s.projects.find((p) => p.id === ws.projectId)
+    if (!project) return
+    const runHook = project.hooks?.find((h) => h.type === HookType.Run)
+    if (!runHook || !runHook.command.trim()) return
+
+    const existingTab = ws.runTerminalTabId
+      ? s.tabs.find((t) => t.id === ws.runTerminalTabId)
+      : null
+
+    if (existingTab && existingTab.type === 'terminal') {
+      set({ activeTabId: existingTab.id })
+      window.api.pty.write(existingTab.ptyId, runHook.command + '\n')
+    } else {
+      const shell = s.settings.defaultShell || undefined
+      const ptyId = await window.api.pty.create(ws.worktreePath, shell, { AGENT_ORCH_WS_ID: ws.id })
+      const tabId = crypto.randomUUID()
+
+      get().addTab({
+        id: tabId,
+        workspaceId: ws.id,
+        type: 'terminal',
+        title: 'Run',
+        ptyId,
+      })
+
+      set((state) => ({
+        workspaces: state.workspaces.map((w) =>
+          w.id === ws.id ? { ...w, runTerminalTabId: tabId } : w
+        ),
+      }))
+
+      setTimeout(() => {
+        window.api.pty.write(ptyId, runHook.command + '\n')
+      }, 500)
+    }
+  },
+
   openWorkspaceDialog: (projectId) => set({ workspaceDialogProjectId: projectId }),
 
   deleteWorkspace: async (workspaceId) => {
@@ -290,6 +337,21 @@ export const useAppStore = create<AppState>((set, get) => ({
     const ws = s.workspaces.find((w) => w.id === workspaceId)
     if (!ws) return
     const project = s.projects.find((p) => p.id === ws.projectId)
+
+    // Fire archive hook before destroying PTYs (fire-and-forget)
+    const archiveHook = project?.hooks?.find((h) => h.type === HookType.Archive)
+    if (archiveHook && archiveHook.command.trim()) {
+      const shell = s.settings.defaultShell || undefined
+      window.api.pty.create(ws.worktreePath, shell, { AGENT_ORCH_WS_ID: ws.id }).then((ptyId) => {
+        setTimeout(() => {
+          window.api.pty.write(ptyId, archiveHook.command + '\n')
+        }, 500)
+        // Destroy headless PTY after 30s
+        setTimeout(() => {
+          window.api.pty.destroy(ptyId)
+        }, 30_000)
+      }).catch(() => {})
+    }
 
     // Destroy PTYs for this workspace
     s.tabs.filter((t) => t.workspaceId === workspaceId && t.type === 'terminal').forEach((t) => {

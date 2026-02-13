@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useAppStore } from "../../store/app-store";
+import { HookType } from "../../store/types";
 import type { Project } from "../../store/types";
 import type { CreateWorktreeProgressEvent } from "../../../shared/workspace-creation";
 import { WorkspaceDialog } from "./WorkspaceDialog";
@@ -299,6 +300,22 @@ export function Sidebar() {
         }
         // Activate the first terminal tab
         if (firstTabId) useAppStore.getState().setActiveTab(firstTabId);
+      }
+
+      // Run setup hook if configured (in its own terminal)
+      const setupHook = project.hooks?.find((h) => h.type === HookType.Setup);
+      if (setupHook && setupHook.command.trim()) {
+        const ptyId = await window.api.pty.create(worktreePath, undefined, { AGENT_ORCH_WS_ID: wsId });
+        addTab({
+          id: crypto.randomUUID(),
+          workspaceId: wsId,
+          type: "terminal",
+          title: "Setup",
+          ptyId,
+        });
+        setTimeout(() => {
+          window.api.pty.write(ptyId, setupHook.command + "\n");
+        }, 500);
       }
     },
     [addWorkspace, addTab],
@@ -628,8 +645,8 @@ export function Sidebar() {
       {editingProject && (
         <ProjectSettingsDialog
           project={editingProject}
-          onSave={(cmds) => {
-            updateProject(editingProject.id, { startupCommands: cmds });
+          onSave={(cmds, hooks) => {
+            updateProject(editingProject.id, { startupCommands: cmds, hooks });
             setEditingProject(null);
           }}
           onCancel={() => setEditingProject(null)}

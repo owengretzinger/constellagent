@@ -5,6 +5,17 @@ export interface StartupCommand {
   command: string
 }
 
+export enum HookType {
+  Setup = 'setup',
+  Run = 'run',
+  Archive = 'archive',
+}
+
+export interface ProjectHook {
+  type: HookType
+  command: string
+}
+
 export interface Automation {
   id: string
   name: string
@@ -22,6 +33,7 @@ export interface Project {
   name: string
   repoPath: string
   startupCommands?: StartupCommand[]
+  hooks?: ProjectHook[]
 }
 
 export interface Workspace {
@@ -31,6 +43,7 @@ export interface Workspace {
   worktreePath: string
   projectId: string
   automationId?: string
+  runTerminalTabId?: string
 }
 
 export type Tab = {
@@ -122,6 +135,7 @@ export interface AppState {
   nextTab: () => void
   prevTab: () => void
   createTerminalForActiveWorkspace: () => Promise<void>
+  executeRunHook: () => Promise<void>
   closeActiveTab: () => void
   setTabUnsaved: (tabId: string, unsaved: boolean) => void
   notifyTabSaved: (tabId: string) => void
