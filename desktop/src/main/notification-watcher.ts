@@ -46,13 +46,28 @@ export class NotificationWatcher {
       const files = readdirSync(ACTIVITY_DIR)
       const sorted = files.sort().join(',')
       if (sorted !== this.lastActiveIds) {
+        const prevIds = this.lastActiveIds ? this.lastActiveIds.split(',').filter(Boolean) : []
+        const nextIdSet = new Set(files)
+        const becameInactive = prevIds.filter((id) => !nextIdSet.has(id))
+
         this.lastActiveIds = sorted
         this.sendActivity(files)
+
+        // Fallback completion signal: if a workspace was active and now is not,
+        // emit a notify event so renderer can show unread attention dots even
+        // when explicit notify files are missed.
+        for (const wsId of becameInactive) {
+          this.notifyRenderer(wsId)
+        }
       }
     } catch {
       if (this.lastActiveIds !== '') {
+        const prevIds = this.lastActiveIds.split(',').filter(Boolean)
         this.lastActiveIds = ''
         this.sendActivity([])
+        for (const wsId of prevIds) {
+          this.notifyRenderer(wsId)
+        }
       }
     }
   }
@@ -60,8 +75,9 @@ export class NotificationWatcher {
   private processFile(filePath: string): void {
     try {
       const wsId = readFileSync(filePath, 'utf-8').trim()
+      if (!wsId) return
+      this.notifyRenderer(wsId)
       unlinkSync(filePath)
-      if (wsId) this.notifyRenderer(wsId)
     } catch {
       // File may have been already processed or deleted
     }

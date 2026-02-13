@@ -152,7 +152,7 @@ export interface AppState {
   markWorkspaceUnread: (workspaceId: string) => void
   clearWorkspaceUnread: (workspaceId: string) => void
 
-  // Claude activity actions
+  // Agent activity actions (Claude + Codex)
   setActiveClaudeWorkspaces: (workspaceIds: string[]) => void
 
   // PR status actions

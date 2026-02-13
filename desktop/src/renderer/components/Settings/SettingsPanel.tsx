@@ -198,6 +198,72 @@ function ClaudeHooksSection() {
   )
 }
 
+function CodexNotifySection() {
+  const [installed, setInstalled] = useState<boolean | null>(null)
+  const [installing, setInstalling] = useState(false)
+
+  useEffect(() => {
+    window.api.codex.checkNotify().then((result: { installed: boolean }) => {
+      setInstalled(result.installed)
+    }).catch(() => setInstalled(false))
+  }, [])
+
+  const handleInstall = async () => {
+    setInstalling(true)
+    try {
+      await window.api.codex.installNotify()
+      setInstalled(true)
+    } catch {
+      setInstalled(false)
+    } finally {
+      setInstalling(false)
+    }
+  }
+
+  const handleUninstall = async () => {
+    setInstalling(true)
+    try {
+      await window.api.codex.uninstallNotify()
+      setInstalled(false)
+    } catch {
+      // keep current state
+    } finally {
+      setInstalling(false)
+    }
+  }
+
+  return (
+    <div className={styles.section}>
+      <div className={styles.sectionTitle}>Codex Integration</div>
+      <div className={styles.row}>
+        <div className={styles.rowText}>
+          <div className={styles.rowLabel}>Notify hook</div>
+          <div className={styles.rowDescription}>
+            Show done/unread state for Codex turns and clear active state when a turn completes
+          </div>
+        </div>
+        {installed === true ? (
+          <button
+            className={styles.actionBtnDanger}
+            onClick={handleUninstall}
+            disabled={installing}
+          >
+            {installing ? 'Removing...' : 'Uninstall'}
+          </button>
+        ) : (
+          <button
+            className={styles.actionBtn}
+            onClick={handleInstall}
+            disabled={installing || installed === null}
+          >
+            {installing ? 'Installing...' : 'Install Notify'}
+          </button>
+        )}
+      </div>
+    </div>
+  )
+}
+
 export function SettingsPanel() {
   const { settings, updateSettings, toggleSettings } = useAppStore()
 
@@ -299,6 +365,7 @@ export function SettingsPanel() {
         </div>
 
         <ClaudeHooksSection />
+        <CodexNotifySection />
 
         <div className={styles.section}>
           <div className={styles.sectionTitle}>Keyboard Shortcuts</div>

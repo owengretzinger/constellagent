@@ -110,6 +110,15 @@ const api = {
     },
   },
 
+  codex: {
+    installNotify: () =>
+      ipcRenderer.invoke(IPC.CODEX_INSTALL_NOTIFY),
+    uninstallNotify: () =>
+      ipcRenderer.invoke(IPC.CODEX_UNINSTALL_NOTIFY),
+    checkNotify: () =>
+      ipcRenderer.invoke(IPC.CODEX_CHECK_NOTIFY),
+  },
+
   automations: {
     create: (automation: unknown) =>
       ipcRenderer.invoke(IPC.AUTOMATION_CREATE, automation),

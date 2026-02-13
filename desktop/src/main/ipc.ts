@@ -11,6 +11,7 @@ import { GithubService } from './github-service'
 import { FileService } from './file-service'
 import { AutomationScheduler, type AutomationConfig } from './automation-scheduler'
 import { trustPathForClaude, loadClaudeSettings, saveClaudeSettings, loadJsonFile, saveJsonFile } from './claude-config'
+import { loadCodexConfigText, saveCodexConfigText } from './codex-config'
 
 const ptyManager = new PtyManager()
 const automationScheduler = new AutomationScheduler(ptyManager)
@@ -256,6 +257,13 @@ export function registerIpcHandlers(): void {
     return join(__dirname, '..', '..', 'claude-hooks', name)
   }
 
+  function getCodexHookScriptPath(name: string): string {
+    if (app.isPackaged) {
+      return join(process.resourcesPath, 'codex-hooks', name)
+    }
+    return join(__dirname, '..', '..', 'codex-hooks', name)
+  }
+
   // Stable identifiers to match our hook entries regardless of full path
   const HOOK_IDENTIFIERS = ['claude-hooks/notify.sh', 'claude-hooks/activity.sh']
 
@@ -315,6 +323,114 @@ export function registerIpcHandlers(): void {
 
     if (Object.keys(hooks).length === 0) delete settings.hooks
     await saveClaudeSettings(settings)
+    return { success: true }
+  })
+
+  // ── Codex notify hook ──
+  const CODEX_NOTIFY_IDENTIFIER = 'codex-hooks/notify.sh'
+  const TABLE_HEADER_RE = /^\s*\[[^\n]+\]\s*$/m
+  const NOTIFY_ASSIGNMENT_RE = /^\s*notify\s*=/
+
+  function tomlEscape(value: string): string {
+    return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
+  }
+
+  function firstTableHeaderIndex(configText: string): number {
+    const match = configText.match(TABLE_HEADER_RE)
+    return match?.index ?? -1
+  }
+
+  function topLevelSection(configText: string): string {
+    const firstTableIndex = firstTableHeaderIndex(configText)
+    return firstTableIndex === -1 ? configText : configText.slice(0, firstTableIndex)
+  }
+
+  function hasOurCodexNotify(configText: string): boolean {
+    return topLevelSection(configText).includes(CODEX_NOTIFY_IDENTIFIER)
+  }
+
+  function stripNotifyAssignments(configText: string, shouldStrip: (assignment: string) => boolean = () => true): string {
+    const lines = configText.split('\n')
+    const kept: string[] = []
+    let i = 0
+
+    while (i < lines.length) {
+      const line = lines[i]
+      if (!NOTIFY_ASSIGNMENT_RE.test(line)) {
+        kept.push(line)
+        i += 1
+        continue
+      }
+
+      let end = i
+      const startsArray = line.includes('[')
+      const endsArray = line.includes(']')
+      if (startsArray && !endsArray) {
+        let j = i + 1
+        while (j < lines.length) {
+          end = j
+          if (lines[j].includes(']')) break
+          j += 1
+        }
+      }
+
+      const assignment = lines.slice(i, end + 1).join('\n')
+      if (!shouldStrip(assignment)) {
+        kept.push(...lines.slice(i, end + 1))
+      }
+      i = end + 1
+    }
+
+    return kept.join('\n')
+  }
+
+  function insertTopLevelNotify(configText: string, notifyLine: string): string {
+    const withoutNotify = configText.trimEnd()
+    if (!withoutNotify) return `${notifyLine}\n`
+
+    const firstTableIndex = firstTableHeaderIndex(withoutNotify)
+    if (firstTableIndex === -1) {
+      return `${withoutNotify}\n${notifyLine}\n`
+    }
+
+    const beforeTables = withoutNotify.slice(0, firstTableIndex).trimEnd()
+    const tablesAndBelow = withoutNotify.slice(firstTableIndex).replace(/^\n+/, '')
+
+    const rebuilt = beforeTables
+      ? `${beforeTables}\n${notifyLine}\n\n${tablesAndBelow}`
+      : `${notifyLine}\n\n${tablesAndBelow}`
+
+    return `${rebuilt.replace(/\n{3,}/g, '\n\n').trimEnd()}\n`
+  }
+
+  ipcMain.handle(IPC.CODEX_CHECK_NOTIFY, async () => {
+    const config = await loadCodexConfigText()
+    return { installed: hasOurCodexNotify(config) }
+  })
+
+  ipcMain.handle(IPC.CODEX_INSTALL_NOTIFY, async () => {
+    const notifyPath = getCodexHookScriptPath('notify.sh')
+    const notifyLine = `notify = ["${tomlEscape(notifyPath)}"]`
+    let config = await loadCodexConfigText()
+
+    // `notify` must be at true top-level in TOML. Appending at EOF can accidentally
+    // nest it under the last table (for example `[projects."..."]`), which Codex ignores.
+    config = stripNotifyAssignments(config)
+    config = insertTopLevelNotify(config, notifyLine)
+
+    await saveCodexConfigText(config)
+    return { success: true }
+  })
+
+  ipcMain.handle(IPC.CODEX_UNINSTALL_NOTIFY, async () => {
+    let config = await loadCodexConfigText()
+    if (!config.includes(CODEX_NOTIFY_IDENTIFIER)) return { success: true }
+
+    config = stripNotifyAssignments(config, (assignment) => assignment.includes(CODEX_NOTIFY_IDENTIFIER))
+    config = config.replace(/\n{3,}/g, '\n\n').trimEnd()
+    if (config) config += '\n'
+
+    await saveCodexConfigText(config)
     return { success: true }
   })
 

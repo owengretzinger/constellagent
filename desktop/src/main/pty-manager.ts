@@ -1,4 +1,6 @@
 import * as pty from 'node-pty'
+import { execFileSync } from 'child_process'
+import { mkdirSync, unlinkSync, writeFileSync } from 'fs'
 import { WebContents } from 'electron'
 import { IPC } from '../shared/ipc-channels'
 
@@ -8,7 +10,54 @@ interface PtyInstance {
   onExitCallbacks: Array<(exitCode: number) => void>
   cols: number
   rows: number
+  workspaceId?: string
 }
+
+interface ProcessEntry {
+  pid: number
+  ppid: number
+  command: string
+}
+
+function parseProcessTable(output: string): ProcessEntry[] {
+  const entries: ProcessEntry[] = []
+  for (const rawLine of output.split('\n')) {
+    const line = rawLine.trim()
+    if (!line) continue
+    const match = line.match(/^(\d+)\s+(\d+)\s+(.*)$/)
+    if (!match) continue
+    entries.push({
+      pid: Number(match[1]),
+      ppid: Number(match[2]),
+      command: match[3],
+    })
+  }
+  return entries
+}
+
+function isLikelyCodexCommand(command: string): boolean {
+  const tokens = command.trim().split(/\s+/)
+  if (tokens.length === 0) return false
+
+  const first = tokens[0].toLowerCase()
+  const second = (tokens[1] ?? '').toLowerCase()
+
+  const isCodexPathToken = (token: string): boolean => {
+    if (!token) return false
+    const clean = token.replace(/^['"]|['"]$/g, '')
+    const basename = clean.split('/').pop() ?? clean
+    return basename === 'codex' || basename === 'codex.js' || basename.startsWith('codex-')
+  }
+
+  if (isCodexPathToken(first)) return true
+
+  const nodeOrBun = first === 'node' || first.endsWith('/node') || first === 'bun' || first.endsWith('/bun')
+  if (nodeOrBun && isCodexPathToken(second)) return true
+
+  return first.includes('/codex/') && first.endsWith('/codex')
+}
+
+const ACTIVITY_DIR = '/tmp/constellagent-activity'
 
 export class PtyManager {
   private ptys = new Map<string, PtyInstance>()
@@ -53,9 +102,17 @@ export class PtyManager {
       }
     })
 
-    const instance: PtyInstance = { process: proc, webContents, onExitCallbacks: [], cols: 80, rows: 24 }
+    const instance: PtyInstance = {
+      process: proc,
+      webContents,
+      onExitCallbacks: [],
+      cols: 80,
+      rows: 24,
+      workspaceId: extraEnv?.AGENT_ORCH_WS_ID,
+    }
 
     proc.onExit(({ exitCode }) => {
+      this.clearWorkspaceActivity(instance.workspaceId)
       for (const cb of instance.onExitCallbacks) cb(exitCode)
       this.ptys.delete(id)
     })
@@ -70,7 +127,16 @@ export class PtyManager {
   }
 
   write(ptyId: string, data: string): void {
-    this.ptys.get(ptyId)?.process.write(data)
+    const instance = this.ptys.get(ptyId)
+    if (!instance) return
+
+    // Codex doesn't expose a prompt-submit hook, so mark the workspace active
+    // when Enter is sent while a Codex process is already running in this PTY.
+    if (instance.workspaceId && /[\r\n]/.test(data) && this.isCodexRunningUnder(instance.process.pid)) {
+      this.markWorkspaceActive(instance.workspaceId)
+    }
+
+    instance.process.write(data)
   }
 
   resize(ptyId: string, cols: number, rows: number): void {
@@ -85,6 +151,7 @@ export class PtyManager {
   destroy(ptyId: string): void {
     const instance = this.ptys.get(ptyId)
     if (instance) {
+      this.clearWorkspaceActivity(instance.workspaceId)
       instance.process.kill()
       this.ptys.delete(ptyId)
     }
@@ -93,6 +160,62 @@ export class PtyManager {
   /** Return IDs of all live PTY processes */
   list(): string[] {
     return Array.from(this.ptys.keys())
+  }
+
+  private isCodexRunningUnder(rootPid: number): boolean {
+    let processTable = ''
+    try {
+      processTable = execFileSync('ps', ['-axo', 'pid=,ppid=,args='], { encoding: 'utf-8' })
+    } catch {
+      return false
+    }
+
+    const entries = parseProcessTable(processTable)
+    if (entries.length === 0) return false
+
+    const childrenByParent = new Map<number, ProcessEntry[]>()
+    for (const entry of entries) {
+      const children = childrenByParent.get(entry.ppid)
+      if (children) children.push(entry)
+      else childrenByParent.set(entry.ppid, [entry])
+    }
+
+    const stack = [rootPid]
+    const seen = new Set<number>()
+    while (stack.length > 0) {
+      const pid = stack.pop()!
+      if (seen.has(pid)) continue
+      seen.add(pid)
+
+      const children = childrenByParent.get(pid)
+      if (!children) continue
+
+      for (const child of children) {
+        if (isLikelyCodexCommand(child.command)) {
+          return true
+        }
+        stack.push(child.pid)
+      }
+    }
+    return false
+  }
+
+  private markWorkspaceActive(workspaceId: string): void {
+    try {
+      mkdirSync(ACTIVITY_DIR, { recursive: true })
+      writeFileSync(`${ACTIVITY_DIR}/${workspaceId}`, '')
+    } catch {
+      // Best-effort marker write
+    }
+  }
+
+  private clearWorkspaceActivity(workspaceId?: string): void {
+    if (!workspaceId) return
+    try {
+      unlinkSync(`${ACTIVITY_DIR}/${workspaceId}`)
+    } catch {
+      // Best-effort marker removal
+    }
   }
 
   /** Update the webContents reference for an existing PTY (e.g. after renderer reload) */

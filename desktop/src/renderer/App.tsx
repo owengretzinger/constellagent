@@ -31,10 +31,23 @@ export function App() {
     return unsub
   }, [])
 
-  // Listen for Claude Code activity updates
+  // Listen for agent activity updates (Claude hooks + Codex submit/notify markers)
   useEffect(() => {
+    let prevActive = new Set<string>()
     const unsub = window.api.claude.onActivityUpdate((workspaceIds: string[]) => {
-      useAppStore.getState().setActiveClaudeWorkspaces(workspaceIds)
+      const nextActive = new Set(workspaceIds)
+      const state = useAppStore.getState()
+
+      // Fallback unread signal on activity completion:
+      // if a workspace was active and is now inactive, mark unread unless it's open.
+      for (const wsId of prevActive) {
+        if (!nextActive.has(wsId) && wsId !== state.activeWorkspaceId && state.workspaces.some((w) => w.id === wsId)) {
+          state.markWorkspaceUnread(wsId)
+        }
+      }
+
+      state.setActiveClaudeWorkspaces(workspaceIds)
+      prevActive = nextActive
     })
     return unsub
   }, [])

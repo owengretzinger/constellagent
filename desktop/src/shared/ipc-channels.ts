@@ -47,6 +47,11 @@ export const IPC = {
   CLAUDE_NOTIFY_WORKSPACE: 'claude:notify-workspace',
   CLAUDE_ACTIVITY_UPDATE: 'claude:activity-update',
 
+  // Codex integration
+  CODEX_INSTALL_NOTIFY: 'codex:install-notify',
+  CODEX_UNINSTALL_NOTIFY: 'codex:uninstall-notify',
+  CODEX_CHECK_NOTIFY: 'codex:check-notify',
+
   // Automation operations
   AUTOMATION_CREATE: 'automation:create',
   AUTOMATION_UPDATE: 'automation:update',
