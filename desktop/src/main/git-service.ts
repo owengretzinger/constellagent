@@ -476,4 +476,12 @@ export class GitService {
   static async commit(worktreePath: string, message: string): Promise<void> {
     await git(['commit', '-m', message], worktreePath)
   }
+
+  static async showFileAtHead(worktreePath: string, filePath: string): Promise<string | null> {
+    try {
+      return await git(['show', 'HEAD:' + filePath], worktreePath)
+    } catch {
+      return null // File is new/untracked
+    }
+  }
 }

@@ -6,13 +6,14 @@ interface Props {
   paneId: string
   onFocus?: (paneId: string) => void
   isFocusedPane?: boolean
+  worktreePath?: string
 }
 
 /**
  * Thin wrapper around FileEditor for use inside split panes.
  * Adds focus tracking and split-specific styling without cluttering the standalone editor.
  */
-export function FileEditorPane({ filePath, paneId, onFocus, isFocusedPane }: Props) {
+export function FileEditorPane({ filePath, paneId, onFocus, isFocusedPane, worktreePath }: Props) {
   const handleMouseDown = () => {
     if (onFocus) onFocus(paneId)
   }
@@ -27,6 +28,7 @@ export function FileEditorPane({ filePath, paneId, onFocus, isFocusedPane }: Pro
         tabId={paneId}
         filePath={filePath}
         active={true}
+        worktreePath={worktreePath}
       />
     </div>
   )

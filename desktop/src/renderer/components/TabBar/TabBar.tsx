@@ -18,6 +18,14 @@ function getTabTitle(tab: Tab): string {
   return name
 }
 
+const STATUS_LETTER_MAP: Record<string, string> = {
+  modified: 'M',
+  added: 'A',
+  deleted: 'D',
+  renamed: 'R',
+  untracked: 'U',
+}
+
 export function TabBar() {
   const activeTabId = useAppStore((s) => s.activeTabId)
   const setActiveTab = useAppStore((s) => s.setActiveTab)
@@ -27,7 +35,25 @@ export function TabBar() {
   const createTerminalForActiveWorkspace = useAppStore((s) => s.createTerminalForActiveWorkspace)
   const lastSavedTabId = useAppStore((s) => s.lastSavedTabId)
   const settings = useAppStore((s) => s.settings)
+  const gitFileStatuses = useAppStore((s) => s.gitFileStatuses)
+  const workspaces = useAppStore((s) => s.workspaces)
   const tabs = allTabs.filter((t) => t.workspaceId === activeWorkspaceId)
+
+  const getFileGitStatus = useCallback((tab: Tab): string | null => {
+    if (tab.type !== 'file') return null
+    if (tab.deleted) return 'D'
+    const ws = workspaces.find((w) => w.id === tab.workspaceId)
+    if (!ws) return null
+    const statusMap = gitFileStatuses.get(ws.worktreePath)
+    if (!statusMap) return null
+    const relPath = tab.filePath.startsWith(ws.worktreePath)
+      ? tab.filePath.slice(ws.worktreePath.length).replace(/^\//, '')
+      : null
+    if (!relPath) return null
+    const status = statusMap.get(relPath)
+    if (!status) return null
+    return STATUS_LETTER_MAP[status] ?? null
+  }, [workspaces, gitFileStatuses])
 
   const handleClose = useCallback(
     (e: React.MouseEvent, tabId: string) => {
@@ -55,17 +81,24 @@ export function TabBar() {
         {tabs.map((tab) => {
           const { icon, className } = TAB_ICONS[tab.type]
           const isSaved = tab.id === lastSavedTabId
+          const gitStatus = getFileGitStatus(tab)
+          const isDeleted = tab.type === 'file' && tab.deleted
           return (
             <div
               key={tab.id}
-              className={`${styles.tab} ${tab.id === activeTabId ? styles.active : ''}`}
+              className={`${styles.tab} ${tab.id === activeTabId ? styles.active : ''} ${isDeleted ? styles.deleted : ''}`}
               onClick={() => setActiveTab(tab.id)}
             >
               <span className={`${styles.tabIcon} ${className}`}>{icon}</span>
-              <span className={`${styles.tabTitle} ${isSaved ? styles.savedFlash : ''}`}>
+              <span className={`${styles.tabTitle} ${isSaved ? styles.savedFlash : ''} ${isDeleted ? styles.deletedTitle : ''}`}>
                 {getTabTitle(tab)}
               </span>
-              {tab.type === 'file' && tab.unsaved ? (
+              {gitStatus && (
+                <span className={`${styles.gitBadge} ${styles[`git${gitStatus}`]}`}>
+                  {gitStatus}
+                </span>
+              )}
+              {tab.type === 'file' && tab.unsaved && !isDeleted ? (
                 <span className={styles.unsavedDot} />
               ) : (
                 <Tooltip label="Close tab" shortcut="⌘W">

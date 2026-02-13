@@ -19,7 +19,9 @@
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",
     "@pierre/diffs": "^1.0.10",
+    "@types/diff": "^8.0.0",
     "allotment": "^1.20.5",
+    "diff": "^8.0.3",
     "electron-vite": "^5.0.0",
     "ghostty-web": "^0.4.0",
     "monaco-editor": "^0.55.1",

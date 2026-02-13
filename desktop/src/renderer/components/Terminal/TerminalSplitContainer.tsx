@@ -11,9 +11,10 @@ type TerminalTab = Extract<Tab, { type: 'terminal' }>
 interface ContainerProps {
   tab: TerminalTab
   active: boolean
+  worktreePath?: string
 }
 
-export function TerminalSplitContainer({ tab, active }: ContainerProps) {
+export function TerminalSplitContainer({ tab, active, worktreePath }: ContainerProps) {
   const setFocusedPane = useAppStore((s) => s.setFocusedPane)
 
   const handlePaneFocus = useCallback(
@@ -41,6 +42,7 @@ export function TerminalSplitContainer({ tab, active }: ContainerProps) {
         node={tab.splitRoot}
         focusedPaneId={tab.focusedPaneId}
         onPaneFocus={handlePaneFocus}
+        worktreePath={worktreePath}
       />
     </div>
   )
@@ -50,9 +52,10 @@ interface SplitTreeProps {
   node: SplitNode
   focusedPaneId: string | undefined
   onPaneFocus: (paneId: string) => void
+  worktreePath?: string
 }
 
-function SplitTreeNode({ node, focusedPaneId, onPaneFocus }: SplitTreeProps) {
+function SplitTreeNode({ node, focusedPaneId, onPaneFocus, worktreePath }: SplitTreeProps) {
   if (node.type === 'leaf') {
     // Render file editor pane for file leaves
     if (node.contentType === 'file') {
@@ -62,6 +65,7 @@ function SplitTreeNode({ node, focusedPaneId, onPaneFocus }: SplitTreeProps) {
           paneId={node.id}
           onFocus={onPaneFocus}
           isFocusedPane={node.id === focusedPaneId}
+          worktreePath={worktreePath}
         />
       )
     }
@@ -90,6 +94,7 @@ function SplitTreeNode({ node, focusedPaneId, onPaneFocus }: SplitTreeProps) {
             node={child}
             focusedPaneId={focusedPaneId}
             onPaneFocus={onPaneFocus}
+            worktreePath={worktreePath}
           />
         </Allotment.Pane>
       ))}

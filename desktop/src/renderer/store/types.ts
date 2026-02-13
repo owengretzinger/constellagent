@@ -46,7 +46,7 @@ export type Tab = {
   workspaceId: string
 } & (
   | { type: 'terminal'; title: string; ptyId: string; splitRoot?: SplitNode; focusedPaneId?: string }
-  | { type: 'file'; filePath: string; unsaved?: boolean }
+  | { type: 'file'; filePath: string; unsaved?: boolean; deleted?: boolean }
   | { type: 'diff' }
 )
 
@@ -114,6 +114,7 @@ export interface AppState {
   activeClaudeWorkspaceIds: Set<string>
   prStatusMap: Map<string, PrInfo | null>
   ghAvailability: Map<string, boolean>
+  gitFileStatuses: Map<string, Map<string, string>>
 
   // Actions
   addProject: (project: Project) => void
@@ -166,6 +167,10 @@ export interface AppState {
 
   // Agent activity actions (Claude + Codex)
   setActiveClaudeWorkspaces: (workspaceIds: string[]) => void
+
+  // Git file status actions
+  setGitFileStatuses: (worktreePath: string, statuses: Map<string, string>) => void
+  setTabDeleted: (tabId: string, deleted: boolean) => void
 
   // PR status actions
   setPrStatuses: (projectId: string, statuses: Record<string, PrInfo | null>) => void

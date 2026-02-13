@@ -229,6 +229,35 @@ export function useShortcuts() {
         return
       }
 
+      // ── Delete file: Cmd+Backspace ──
+      // Only when a file tab is active (not terminal/diff) and target is not a text input
+      if (!shift && !alt && e.key === 'Backspace') {
+        const target = e.target as HTMLElement
+        // Don't intercept when focused inside Monaco editor or terminal
+        if (target?.closest?.('[class*="monaco-editor"]') || target?.closest?.('[class*="terminalInner"]')) {
+          return
+        }
+        const tab = store.tabs.find((t) => t.id === store.activeTabId)
+        if (tab?.type === 'file') {
+          consume()
+          const fileName = tab.filePath.split('/').pop() || tab.filePath
+          store.showConfirmDialog({
+            title: 'Delete File',
+            message: `Permanently delete "${fileName}"? This cannot be undone.`,
+            confirmLabel: 'Delete',
+            destructive: true,
+            onConfirm: () => {
+              store.dismissConfirmDialog()
+              window.api.fs.deleteFile(tab.filePath).catch((err: unknown) => {
+                const msg = err instanceof Error ? err.message : 'Failed to delete'
+                store.addToast({ id: crypto.randomUUID(), message: msg, type: 'error' })
+              })
+            },
+          })
+        }
+        return
+      }
+
       // ── Workspace creation ──
       // Cmd+N — new workspace dialog
       if (!shift && !alt && e.key === 'n') {

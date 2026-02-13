@@ -16,6 +16,7 @@ export const IPC = {
   GIT_COMMIT: 'git:commit',
   GIT_GET_CURRENT_BRANCH: 'git:get-current-branch',
   GIT_GET_DEFAULT_BRANCH: 'git:get-default-branch',
+  GIT_SHOW_FILE_AT_HEAD: 'git:show-file-at-head',
 
   // PTY operations
   PTY_CREATE: 'pty:create',
@@ -31,6 +32,7 @@ export const IPC = {
   FS_GET_TREE_WITH_STATUS: 'fs:get-tree-with-status',
   FS_READ_FILE: 'fs:read-file',
   FS_WRITE_FILE: 'fs:write-file',
+  FS_DELETE_FILE: 'fs:delete-file',
   FS_WATCH_START: 'fs:watch-start',
   FS_WATCH_STOP: 'fs:watch-stop',
   FS_WATCH_CHANGED: 'fs:watch-changed',

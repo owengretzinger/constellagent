@@ -38,6 +38,8 @@ const api = {
       ipcRenderer.invoke(IPC.GIT_GET_CURRENT_BRANCH, worktreePath) as Promise<string>,
     getDefaultBranch: (repoPath: string) =>
       ipcRenderer.invoke(IPC.GIT_GET_DEFAULT_BRANCH, repoPath) as Promise<string>,
+    showFileAtHead: (worktreePath: string, filePath: string) =>
+      ipcRenderer.invoke(IPC.GIT_SHOW_FILE_AT_HEAD, worktreePath, filePath) as Promise<string | null>,
   },
 
   pty: {
@@ -72,6 +74,8 @@ const api = {
       ipcRenderer.invoke(IPC.FS_READ_FILE, filePath),
     writeFile: (filePath: string, content: string) =>
       ipcRenderer.invoke(IPC.FS_WRITE_FILE, filePath, content),
+    deleteFile: (filePath: string) =>
+      ipcRenderer.invoke(IPC.FS_DELETE_FILE, filePath),
     watchDir: (dirPath: string) =>
       ipcRenderer.invoke(IPC.FS_WATCH_START, dirPath),
     unwatchDir: (dirPath: string) =>

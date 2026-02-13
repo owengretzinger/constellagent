@@ -100,6 +100,10 @@ export function registerIpcHandlers(): void {
     return GitService.getDefaultBranch(repoPath)
   })
 
+  ipcMain.handle(IPC.GIT_SHOW_FILE_AT_HEAD, async (_e, worktreePath: string, filePath: string) => {
+    return GitService.showFileAtHead(worktreePath, filePath)
+  })
+
   // ── GitHub handlers ──
   ipcMain.handle(IPC.GITHUB_GET_PR_STATUSES, async (_e, repoPath: string, branches: string[]) => {
     return GithubService.getPrStatuses(repoPath, branches)
@@ -197,11 +201,23 @@ export function registerIpcHandlers(): void {
   })
 
   ipcMain.handle(IPC.FS_READ_FILE, async (_e, filePath: string) => {
-    return FileService.readFile(filePath)
+    try {
+      return await FileService.readFile(filePath)
+    } catch (err: unknown) {
+      const code = (err as NodeJS.ErrnoException).code
+      if (code === 'ENOENT') {
+        return null
+      }
+      throw err
+    }
   })
 
   ipcMain.handle(IPC.FS_WRITE_FILE, async (_e, filePath: string, content: string) => {
     return FileService.writeFile(filePath, content)
+  })
+
+  ipcMain.handle(IPC.FS_DELETE_FILE, async (_e, filePath: string) => {
+    return FileService.deleteFile(filePath)
   })
 
   // ── Filesystem watcher handlers ──

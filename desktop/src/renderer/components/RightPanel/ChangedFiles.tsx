@@ -29,6 +29,7 @@ export function ChangedFiles({ worktreePath, workspaceId, isActive }: Props) {
   const [busy, setBusy] = useState(false)
   const [commitMsg, setCommitMsg] = useState('')
   const openDiffTab = useAppStore((s) => s.openDiffTab)
+  const setGitFileStatuses = useAppStore((s) => s.setGitFileStatuses)
 
   const refresh = useCallback(() => {
     window.api.git.getStatus(worktreePath).then(setFiles).catch(() => {})
@@ -69,6 +70,15 @@ export function ChangedFiles({ worktreePath, workspaceId, isActive }: Props) {
     if (isActive) refresh()
   }, [isActive, refresh])
 
+  // Push git file statuses to Zustand store for tab badges
+  useEffect(() => {
+    const statusMap = new Map<string, string>()
+    for (const f of files) {
+      statusMap.set(f.path, f.status)
+    }
+    setGitFileStatuses(worktreePath, statusMap)
+  }, [files, worktreePath, setGitFileStatuses])
+
   const staged = files.filter((f) => f.staged)
   const unstaged = files.filter((f) => !f.staged)
 
@@ -93,20 +103,28 @@ export function ChangedFiles({ worktreePath, workspaceId, isActive }: Props) {
   }, [worktreePath, runGitOp])
 
   const discardFiles = useCallback((file: FileStatus) => {
-    if (file.status === 'untracked') {
-      runGitOp(() => window.api.git.discard(worktreePath, [], [file.path]))
-    } else {
-      runGitOp(() => window.api.git.discard(worktreePath, [file.path], []))
-    }
+    const op = file.status === 'untracked'
+      ? () => window.api.git.discard(worktreePath, [], [file.path])
+      : () => window.api.git.discard(worktreePath, [file.path], [])
+    runGitOp(async () => {
+      await op()
+      window.dispatchEvent(new CustomEvent('git:files-changed', {
+        detail: { worktreePath, paths: [file.path] },
+      }))
+    })
   }, [worktreePath, runGitOp])
 
   const handleCommit = useCallback(() => {
     if (!commitMsg.trim() || staged.length === 0) return
+    const committedPaths = staged.map((f) => f.path)
     runGitOp(async () => {
       await window.api.git.commit(worktreePath, commitMsg.trim())
       setCommitMsg('')
+      window.dispatchEvent(new CustomEvent('git:files-changed', {
+        detail: { worktreePath, paths: committedPaths },
+      }))
     })
-  }, [worktreePath, commitMsg, staged.length, runGitOp])
+  }, [worktreePath, commitMsg, staged, runGitOp])
 
   const openDiff = useCallback((path: string) => {
     openDiffTab(workspaceId)
@@ -208,7 +226,13 @@ export function ChangedFiles({ worktreePath, workspaceId, isActive }: Props) {
                   onClick={() => {
                     const tracked = unstaged.filter((f) => f.status !== 'untracked').map((f) => f.path)
                     const untracked = unstaged.filter((f) => f.status === 'untracked').map((f) => f.path)
-                    runGitOp(() => window.api.git.discard(worktreePath, tracked, untracked))
+                    const allPaths = unstaged.map((f) => f.path)
+                    runGitOp(async () => {
+                      await window.api.git.discard(worktreePath, tracked, untracked)
+                      window.dispatchEvent(new CustomEvent('git:files-changed', {
+                        detail: { worktreePath, paths: allPaths },
+                      }))
+                    })
                   }}
                 >
                   ↩

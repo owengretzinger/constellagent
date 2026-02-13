@@ -16,6 +16,36 @@
   --vscode-editorGutter-background: var(--surface-0);
 }
 
+/* Git gutter decorations */
+.editorContainer :global(.git-gutter-added) {
+  margin-left: 3px;
+  width: 3px !important;
+  background: #2ea04370;
+}
+
+.editorContainer :global(.git-gutter-modified) {
+  margin-left: 3px;
+  width: 4px !important;
+  background-image: repeating-linear-gradient(
+    -45deg,
+    #c8a928,
+    #c8a928 2px,
+    transparent 2px,
+    transparent 4px
+  );
+  background-color: transparent;
+}
+
+.editorContainer :global(.git-gutter-deleted) {
+  margin-left: 2px;
+  width: 0 !important;
+  height: 0 !important;
+  overflow: visible;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-top: 5px solid #c74e39;
+}
+
 /* Diff editor controls */
 .diffToolbar {
   display: flex;

@@ -93,13 +93,17 @@ export function App() {
                 <div className={styles.contentArea}>
                   {/* Keep ALL terminal panels alive across workspaces so PTY
                       state (scrollback, TUI layout) is never lost */}
-                  {allTerminals.map((t) => (
-                    <TerminalSplitContainer
-                      key={t.id}
-                      tab={t}
-                      active={t.id === activeTabId}
-                    />
-                  ))}
+                  {allTerminals.map((t) => {
+                    const ws = workspaces.find((w) => w.id === t.workspaceId)
+                    return (
+                      <TerminalSplitContainer
+                        key={t.id}
+                        tab={t}
+                        active={t.id === activeTabId}
+                        worktreePath={ws?.worktreePath}
+                      />
+                    )
+                  })}
 
                   {!activeTab ? (
                     <div className={styles.welcome}>
@@ -119,6 +123,7 @@ export function App() {
                           tabId={activeTab.id}
                           filePath={activeTab.filePath}
                           active={true}
+                          worktreePath={workspace?.worktreePath}
                         />
                       )}
 

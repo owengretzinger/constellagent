@@ -137,6 +137,7 @@ export function DiffViewer({ worktreePath, active }: Props) {
               ? file.path
               : `${worktreePath}/${file.path}`
             const content = await window.api.fs.readFile(fullPath)
+            if (content === null) return { filePath: file.path, patch: '', status: file.status }
             const lines = content.split('\n')
             patch = [
               `--- /dev/null`,

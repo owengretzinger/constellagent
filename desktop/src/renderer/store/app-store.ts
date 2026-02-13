@@ -26,6 +26,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   activeClaudeWorkspaceIds: new Set<string>(),
   prStatusMap: new Map(),
   ghAvailability: new Map(),
+  gitFileStatuses: new Map(),
 
   addProject: (project) =>
     set((s) => ({ projects: [...s.projects, project] })),
@@ -326,11 +327,54 @@ export const useAppStore = create<AppState>((set, get) => ({
     const s = get()
     if (!s.activeTabId) return
     const tab = s.tabs.find((t) => t.id === s.activeTabId)
-    if (!tab || tab.type !== 'terminal') return
+    if (!tab) return
+
     const ws = s.workspaces.find((w) => w.id === tab.workspaceId)
     if (!ws) return
 
     const shell = s.settings.defaultShell || undefined
+
+    // Active tab is a file tab — convert to a split container with file + terminal panes
+    if (tab.type === 'file') {
+      const backingPtyId = await window.api.pty.create(ws.worktreePath, shell, { AGENT_ORCH_WS_ID: ws.id })
+      const newPtyId = await window.api.pty.create(ws.worktreePath, shell, { AGENT_ORCH_WS_ID: ws.id })
+
+      const originalLeafId = crypto.randomUUID()
+      const newLeafId = crypto.randomUUID()
+
+      const splitRoot: SplitNode = {
+        type: 'split' as const,
+        id: crypto.randomUUID(),
+        direction,
+        children: [
+          { type: 'leaf' as const, id: originalLeafId, contentType: 'file' as const, filePath: tab.filePath },
+          { type: 'leaf' as const, id: newLeafId, contentType: 'terminal' as const, ptyId: newPtyId },
+        ] as [SplitNode, SplitNode],
+      }
+
+      const fileName = tab.filePath.split('/').pop() || 'Split'
+      const tabId = tab.id
+      set((state) => ({
+        tabs: state.tabs.map((t) =>
+          t.id === tabId
+            ? {
+                id: tabId,
+                workspaceId: t.workspaceId,
+                type: 'terminal' as const,
+                title: fileName,
+                ptyId: backingPtyId,
+                splitRoot,
+                focusedPaneId: newLeafId,
+              }
+            : t
+        ),
+        activeTabId: tabId,
+      }))
+      return
+    }
+
+    if (tab.type !== 'terminal') return
+
     const newPtyId = await window.api.pty.create(ws.worktreePath, shell, { AGENT_ORCH_WS_ID: ws.id })
     const newLeafId = crypto.randomUUID()
 
@@ -627,6 +671,20 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   setActiveClaudeWorkspaces: (workspaceIds) =>
     set(() => ({ activeClaudeWorkspaceIds: new Set(workspaceIds) })),
+
+  setGitFileStatuses: (worktreePath, statuses) =>
+    set((s) => {
+      const m = new Map(s.gitFileStatuses)
+      m.set(worktreePath, statuses)
+      return { gitFileStatuses: m }
+    }),
+
+  setTabDeleted: (tabId, deleted) =>
+    set((s) => ({
+      tabs: s.tabs.map((t) =>
+        t.id === tabId && t.type === 'file' ? { ...t, deleted } : t
+      ),
+    })),
 
   setPrStatuses: (projectId, statuses) =>
     set((s) => {

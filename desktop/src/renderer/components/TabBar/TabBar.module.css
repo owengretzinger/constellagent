@@ -151,6 +151,33 @@
   color: var(--text-primary);
 }
 
+/* ── Git Status Badge ── */
+
+.gitBadge {
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+  font-family: var(--font-mono);
+  flex-shrink: 0;
+  margin-left: var(--space-1);
+}
+
+.gitM { color: var(--accent-orange); }
+.gitA { color: var(--accent-green); }
+.gitD { color: var(--accent-red); }
+.gitR { color: var(--accent-cyan); }
+.gitU { color: var(--text-tertiary); }
+
+/* ── Deleted File Tab ── */
+
+.tab.deleted {
+  opacity: 0.6;
+}
+
+.deletedTitle {
+  text-decoration: line-through;
+  color: var(--accent-red);
+}
+
 /* ── New Tab Button ── */
 
 .newTabButton {
