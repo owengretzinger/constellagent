@@ -1,6 +1,16 @@
 import { create } from 'zustand'
-import type { AppState, PersistedState, Tab } from './types'
+import type { AppState, PersistedState, Project, Tab, Workspace } from './types'
 import { DEFAULT_SETTINGS, HookType } from './types'
+
+/** Build the standard env vars injected into every PTY. */
+export function ptyEnv(ws: Workspace, project?: Project | null): Record<string, string> {
+  const env: Record<string, string> = {
+    AGENT_ORCH_WS_ID: ws.id,
+    AGENT_ORCH_WS_PATH: ws.worktreePath,
+  }
+  if (project) env.AGENT_ORCH_PRJ_PATH = project.repoPath
+  return env
+}
 
 export const useAppStore = create<AppState>((set, get) => ({
   projects: [],
@@ -166,9 +176,10 @@ export const useAppStore = create<AppState>((set, get) => ({
     if (!s.activeWorkspaceId) return
     const ws = s.workspaces.find((w) => w.id === s.activeWorkspaceId)
     if (!ws) return
+    const project = s.projects.find((p) => p.id === ws.projectId)
 
     const shell = s.settings.defaultShell || undefined
-    const ptyId = await window.api.pty.create(ws.worktreePath, shell, { AGENT_ORCH_WS_ID: ws.id })
+    const ptyId = await window.api.pty.create(ws.worktreePath, shell, ptyEnv(ws, project))
     const wsTabs = s.tabs.filter((t) => t.workspaceId === s.activeWorkspaceId)
     const termCount = wsTabs.filter((t) => t.type === 'terminal').length
 
@@ -307,7 +318,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       window.api.pty.write(existingTab.ptyId, runHook.command + '\n')
     } else {
       const shell = s.settings.defaultShell || undefined
-      const ptyId = await window.api.pty.create(ws.worktreePath, shell, { AGENT_ORCH_WS_ID: ws.id })
+      const ptyId = await window.api.pty.create(ws.worktreePath, shell, ptyEnv(ws, project))
       const tabId = crypto.randomUUID()
 
       get().addTab({
@@ -342,7 +353,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     const archiveHook = project?.hooks?.find((h) => h.type === HookType.Archive)
     if (archiveHook && archiveHook.command.trim()) {
       const shell = s.settings.defaultShell || undefined
-      window.api.pty.create(ws.worktreePath, shell, { AGENT_ORCH_WS_ID: ws.id }).then((ptyId) => {
+      window.api.pty.create(ws.worktreePath, shell, ptyEnv(ws, project)).then((ptyId) => {
         setTimeout(() => {
           window.api.pty.write(ptyId, archiveHook.command + '\n')
         }, 500)
@@ -602,7 +613,8 @@ export async function hydrateFromDisk(): Promise<void> {
         const ws = store.workspaces.find((w) => w.id === dead.workspaceId)
         if (!ws) continue
         try {
-          const newPtyId = await window.api.pty.create(ws.worktreePath, shell, { AGENT_ORCH_WS_ID: ws.id })
+          const project = store.projects.find((p) => p.id === ws.projectId)
+          const newPtyId = await window.api.pty.create(ws.worktreePath, shell, ptyEnv(ws, project))
           const idx = updatedTabs.findIndex((t) => t.id === dead.id)
           if (idx !== -1) updatedTabs[idx] = { ...dead, ptyId: newPtyId }
         } catch {
