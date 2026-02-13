@@ -60,14 +60,20 @@ interface RepoResponseCache {
   data: Record<string, PrInfo | null>
 }
 
+interface UnresolvedThreadCacheEntry {
+  count: number
+  fetchedAt: number
+}
+
 class GithubAuthError extends Error {}
 
 export class GithubService {
   private static AUTH_TOKEN_REFRESH_MS = 60_000
+  private static UNRESOLVED_THREAD_CACHE_TTL_MS = 30_000
   private static ghAvailable: boolean | null = null
   private static repoInfoCache = new Map<string, GithubRepoInfo | null>()
   private static responseCache = new Map<string, RepoResponseCache>()
-  private static unresolvedThreadCache = new Map<string, number>()
+  private static unresolvedThreadCache = new Map<string, UnresolvedThreadCacheEntry>()
   private static authToken: string | null = null
   private static authTokenChecked = false
   private static authTokenFetchedAt = 0
@@ -389,7 +395,10 @@ export class GithubService {
     }
     this.unresolvedThreadCache.set(
       this.reviewThreadCacheKey(repoInfo, number, updatedAt),
-      unresolvedCount
+      {
+        count: unresolvedCount,
+        fetchedAt: Date.now(),
+      }
     )
   }
 
@@ -401,9 +410,12 @@ export class GithubService {
   ): Promise<void> {
     const key = this.reviewThreadCacheKey(repoInfo, prNode.number, prNode.updatedAt)
     const cached = this.unresolvedThreadCache.get(key)
-    if (cached !== undefined) {
-      info.pendingCommentCount = cached
-      info.hasPendingComments = cached > 0
+    if (
+      cached &&
+      Date.now() - cached.fetchedAt < this.UNRESOLVED_THREAD_CACHE_TTL_MS
+    ) {
+      info.pendingCommentCount = cached.count
+      info.hasPendingComments = cached.count > 0
       return
     }
 
