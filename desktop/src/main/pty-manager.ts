@@ -57,8 +57,12 @@ function isLikelyCodexCommand(command: string): boolean {
   return first.includes('/codex/') && first.endsWith('/codex')
 }
 
-const ACTIVITY_DIR = '/tmp/constellagent-activity'
+const DEFAULT_ACTIVITY_DIR = '/tmp/constellagent-activity'
 const CODEX_MARKER_SEGMENT = '.codex.'
+
+function getActivityDir(): string {
+  return process.env.CONSTELLAGENT_ACTIVITY_DIR || DEFAULT_ACTIVITY_DIR
+}
 
 export class PtyManager {
   private ptys = new Map<string, PtyInstance>()
@@ -202,12 +206,13 @@ export class PtyManager {
   }
 
   private codexMarkerPath(workspaceId: string, ptyPid: number): string {
-    return `${ACTIVITY_DIR}/${workspaceId}${CODEX_MARKER_SEGMENT}${ptyPid}`
+    return `${getActivityDir()}/${workspaceId}${CODEX_MARKER_SEGMENT}${ptyPid}`
   }
 
   private markCodexWorkspaceActive(workspaceId: string, ptyPid: number): void {
     try {
-      mkdirSync(ACTIVITY_DIR, { recursive: true })
+      const activityDir = getActivityDir()
+      mkdirSync(activityDir, { recursive: true })
       writeFileSync(this.codexMarkerPath(workspaceId, ptyPid), '')
     } catch {
       // Best-effort marker write

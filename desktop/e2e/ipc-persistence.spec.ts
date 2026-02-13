@@ -1,5 +1,5 @@
 import { test, expect, _electron as electron, ElectronApplication, Page } from '@playwright/test'
-import { resolve, join } from 'path'
+import { resolve, join, relative } from 'path'
 import { mkdirSync, writeFileSync, rmSync, existsSync, readdirSync } from 'fs'
 import { execSync } from 'child_process'
 
@@ -183,6 +183,32 @@ test.describe('IPC handlers & state persistence', () => {
       await window.screenshot({
         path: resolve(__dirname, 'screenshots/full-flow-project.png'),
       })
+    } finally {
+      await app.close()
+      cleanupTestRepo(repoPath)
+    }
+  })
+
+  test('git:create-worktree sanitizes unsafe workspace names to stay under repo parent', async () => {
+    const repoPath = createTestRepo('safe-name')
+    const { app, window } = await launchApp()
+
+    try {
+      const worktreePath = await window.evaluate(async (repo: string) => {
+        return await (window as any).api.git.createWorktree(repo, '../../..//unsafe name', 'safe-branch', true)
+      }, repoPath)
+
+      expect(worktreePath).toBeTruthy()
+      expect(existsSync(worktreePath as string)).toBe(true)
+
+      const parentDir = resolve(repoPath, '..')
+      const relToParent = relative(parentDir, worktreePath as string)
+      expect(relToParent.startsWith('..')).toBe(false)
+
+      const leafName = (worktreePath as string).split('/').pop() || ''
+      expect(leafName).toContain('-ws-')
+      expect(leafName).not.toContain('..')
+      expect(leafName).not.toContain('/')
     } finally {
       await app.close()
       cleanupTestRepo(repoPath)

@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { IPC } from '../shared/ipc-channels'
+import type { AutomationConfig, AutomationRunStartedEvent } from '../shared/automation-types'
 import type { CreateWorktreeProgressEvent } from '../shared/workspace-creation'
 
 const api = {
@@ -89,8 +90,6 @@ const api = {
       ipcRenderer.invoke(IPC.APP_SELECT_DIRECTORY),
     addProjectPath: (dirPath: string) =>
       ipcRenderer.invoke(IPC.APP_ADD_PROJECT_PATH, dirPath),
-    getDataPath: () =>
-      ipcRenderer.invoke(IPC.APP_GET_DATA_PATH),
   },
 
   claude: {
@@ -128,18 +127,18 @@ const api = {
   },
 
   automations: {
-    create: (automation: unknown) =>
+    create: (automation: AutomationConfig) =>
       ipcRenderer.invoke(IPC.AUTOMATION_CREATE, automation),
-    update: (automation: unknown) =>
+    update: (automation: AutomationConfig) =>
       ipcRenderer.invoke(IPC.AUTOMATION_UPDATE, automation),
     delete: (automationId: string) =>
       ipcRenderer.invoke(IPC.AUTOMATION_DELETE, automationId),
-    runNow: (automation: unknown) =>
+    runNow: (automation: AutomationConfig) =>
       ipcRenderer.invoke(IPC.AUTOMATION_RUN_NOW, automation),
     stop: (automationId: string) =>
       ipcRenderer.invoke(IPC.AUTOMATION_STOP, automationId),
-    onRunStarted: (callback: (data: { automationId: string; automationName: string; projectId: string; ptyId: string; worktreePath: string; branch: string }) => void) => {
-      const listener = (_event: Electron.IpcRendererEvent, data: { automationId: string; automationName: string; projectId: string; ptyId: string; worktreePath: string; branch: string }) => callback(data)
+    onRunStarted: (callback: (data: AutomationRunStartedEvent) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, data: AutomationRunStartedEvent) => callback(data)
       ipcRenderer.on(IPC.AUTOMATION_RUN_STARTED, listener)
       return () => {
         ipcRenderer.removeListener(IPC.AUTOMATION_RUN_STARTED, listener)

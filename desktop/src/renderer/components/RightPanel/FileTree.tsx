@@ -59,7 +59,7 @@ const GIT_STATUS_CLASS: Record<string, string> = {
 function Node({ node, style }: NodeRendererProps<FileNode>) {
   const activeTabId = useAppStore((s) => s.activeTabId)
   const tabs = useAppStore((s) => s.tabs)
-  const { openFileTab } = useAppStore()
+  const openFileTab = useAppStore((s) => s.openFileTab)
 
   const activeTab = tabs.find((t) => t.id === activeTabId)
   const isActiveFile =

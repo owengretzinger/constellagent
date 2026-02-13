@@ -1,0 +1,736 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Constellagent • Star Orbit</title>
+  <meta name="description" content="A cinematic star-history landing page for the Constellagent GitHub repo.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=Manrope:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --ink-0: #f6f7ff;
+      --ink-1: #9da4c6;
+      --ink-2: #6f7896;
+      --bg: #06070d;
+      --panel: #10131f;
+      --panel-line: #20263b;
+      --cyan: #5ad9e8;
+      --purple: #c7a9ff;
+      --lime: #a6ff7a;
+      --orange: #ffcc7a;
+      --rose: #ff6ca3;
+    }
+
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      font-family: "Manrope", system-ui, sans-serif;
+      background: radial-gradient(circle at 10% 10%, rgba(122, 162, 247, 0.22), transparent 28%), radial-gradient(circle at 85% 15%, rgba(168, 130, 255, 0.18), transparent 32%), var(--bg);
+      color: var(--ink-0);
+      min-height: 100vh;
+    }
+
+    body {
+      padding: clamp(10px, 2vw, 20px);
+      position: relative;
+      overflow-x: hidden;
+    }
+
+    body::before,
+    body::after {
+      content: "";
+      position: fixed;
+      pointer-events: none;
+      inset: 0;
+      z-index: -1;
+    }
+
+    body::before {
+      background:
+        linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+        linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+      background-size: 72px 72px;
+      mask-image: radial-gradient(ellipse at center, rgba(0, 0, 0, 0.75) 0%, transparent 100%);
+      opacity: 0.35;
+    }
+
+    body::after {
+      background:
+        radial-gradient(circle at 20% 25%, rgba(90, 217, 232, 0.16), transparent 25%),
+        radial-gradient(circle at 80% 10%, rgba(197, 163, 255, 0.15), transparent 30%),
+        radial-gradient(circle at 50% 90%, rgba(255, 204, 122, 0.1), transparent 35%);
+      animation: drift 12s ease-in-out infinite alternate;
+    }
+
+    @keyframes drift {
+      from {
+        transform: scale(1) translate3d(-1%, -2%, 0);
+      }
+      to {
+        transform: scale(1.06) translate3d(2%, 1%, 0);
+      }
+    }
+
+    .shell {
+      max-width: 1080px;
+      margin: 0 auto;
+      position: relative;
+    }
+
+    .glow-border {
+      position: absolute;
+      inset: -1px;
+      border-radius: 28px;
+      background: linear-gradient(120deg, rgba(90, 217, 232, 0.22), rgba(199, 169, 255, 0.22), rgba(166, 255, 122, 0.15), rgba(255, 204, 122, 0.2));
+      filter: blur(14px);
+      opacity: 0.7;
+      z-index: -1;
+    }
+
+    .page {
+      background:
+        linear-gradient(165deg, rgba(16, 19, 31, 0.9), rgba(16, 19, 31, 0.82));
+      border: 1px solid rgba(89, 102, 157, 0.35);
+      border-radius: 22px;
+      padding: clamp(14px, 2.4vw, 28px);
+      position: relative;
+      backdrop-filter: blur(4px);
+      box-shadow:
+        0 0 0 1px rgba(16, 19, 31, 0.7) inset,
+        0 30px 80px rgba(0, 0, 0, 0.45);
+      overflow: hidden;
+    }
+
+    .kicker {
+      display: inline-flex;
+      gap: 10px;
+      align-items: center;
+      letter-spacing: 0.14em;
+      font-size: 0.74rem;
+      text-transform: uppercase;
+      color: var(--ink-1);
+      margin-bottom: 10px;
+      font-family: "IBM Plex Mono", monospace;
+      animation: reveal 0.75s both;
+    }
+
+    .eyebrow-dot {
+      width: 8px;
+      height: 8px;
+      background: var(--cyan);
+      border-radius: 50%;
+      box-shadow: 0 0 16px rgba(90, 217, 232, 0.8);
+    }
+
+    h1 {
+      font-family: "Syne", "Segoe UI", sans-serif;
+      font-size: clamp(2rem, 7vw, 4rem);
+      line-height: 1.02;
+      letter-spacing: -0.03em;
+      margin: 0;
+      max-width: 12ch;
+      text-wrap: balance;
+      animation: rise 1s cubic-bezier(0.23, 1, 0.32, 1) both;
+      animation-delay: .1s;
+    }
+
+    h1 span {
+      background: linear-gradient(120deg, var(--cyan), var(--purple), var(--orange));
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+    }
+
+    .subtitle {
+      margin: 10px 0 20px;
+      color: var(--ink-1);
+      font-size: 1.06rem;
+      max-width: 62ch;
+      animation: rise 1s cubic-bezier(0.23, 1, 0.32, 1) both;
+      animation-delay: .2s;
+    }
+
+    .stats {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      gap: 16px;
+      margin-bottom: 18px;
+      animation: rise 0.8s cubic-bezier(0.23, 1, 0.32, 1) both;
+      animation-delay: .3s;
+    }
+
+    .stat {
+      border-radius: 16px;
+      border: 1px solid var(--panel-line);
+      background: linear-gradient(160deg, #11172a, var(--panel));
+      padding: 16px 18px 18px;
+      position: relative;
+      overflow: hidden;
+      min-height: 140px;
+      display: flex;
+      justify-content: space-between;
+      gap: 18px;
+      align-items: flex-end;
+    }
+
+    .stat::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.03), transparent);
+      pointer-events: none;
+    }
+
+    .stat-label {
+      font-family: "IBM Plex Mono", monospace;
+      font-size: 0.72rem;
+      color: var(--ink-2);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      margin-bottom: 6px;
+      position: relative;
+      z-index: 1;
+    }
+
+    .stat-value {
+      font-size: clamp(2.6rem, 8vw, 5rem);
+      line-height: 1;
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      color: #f9faff;
+      margin-top: 0;
+      margin-bottom: 4px;
+      font-family: "Syne", sans-serif;
+      position: relative;
+      z-index: 1;
+    }
+
+    .stat-note {
+      position: relative;
+      z-index: 1;
+      color: var(--ink-1);
+      font-size: 0.9rem;
+      margin: 0;
+    }
+
+    .stat-main {
+      position: relative;
+      z-index: 1;
+    }
+
+    .stat-link {
+      position: relative;
+      z-index: 1;
+      display: inline-flex;
+      align-items: center;
+      text-decoration: none;
+      border: 1px solid rgba(90, 217, 232, 0.35);
+      background: rgba(15, 23, 39, 0.7);
+      color: #dffbff;
+      border-radius: 999px;
+      padding: 8px 12px;
+      font-family: "IBM Plex Mono", monospace;
+      font-size: 0.75rem;
+      letter-spacing: 0.02em;
+      white-space: nowrap;
+    }
+
+    .chart-panel {
+      border-radius: 16px;
+      background: linear-gradient(175deg, rgba(21, 25, 39, 0.82), var(--panel));
+      border: 1px solid var(--panel-line);
+      padding: 12px;
+      position: relative;
+      animation: rise 1s cubic-bezier(0.23, 1, 0.32, 1) both;
+      animation-delay: .4s;
+      overflow: hidden;
+    }
+
+    .chart-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      align-items: center;
+      flex-wrap: wrap;
+      margin-bottom: 8px;
+    }
+
+    .chart-head h2 {
+      margin: 0;
+      font-family: "Syne", sans-serif;
+      font-weight: 700;
+      font-size: 1.05rem;
+      letter-spacing: -0.01em;
+    }
+
+    .chart-head time {
+      color: var(--ink-2);
+      font-size: 0.75rem;
+      font-family: "IBM Plex Mono", monospace;
+      background: rgba(12, 16, 28, 0.65);
+      border: 1px solid rgba(123, 137, 191, 0.25);
+      border-radius: 999px;
+      padding: 6px 10px;
+    }
+
+    .chart-frame {
+      border: 1px solid rgba(90, 108, 157, 0.25);
+      border-radius: 12px;
+      min-height: 300px;
+      position: relative;
+      background:
+        radial-gradient(circle at 80% 20%, rgba(90, 217, 232, 0.05), transparent 46%),
+        #090d17;
+      overflow: hidden;
+    }
+
+    #chartCanvas,
+    #chartFallback {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      border: none;
+      display: block;
+    }
+
+    #chartCanvas {
+      z-index: 2;
+    }
+
+    #chartFallback {
+      z-index: 1;
+      opacity: 0;
+      transition: opacity .5s ease;
+      pointer-events: none;
+    }
+
+    #chartFallback.visible { opacity: 0.8; }
+
+    .chart-state {
+      position: absolute;
+      inset: 0;
+      z-index: 3;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 18px;
+      font-family: "IBM Plex Mono", monospace;
+      color: var(--ink-1);
+      font-size: 0.92rem;
+      background: rgba(6, 7, 13, 0.55);
+      transition: opacity .3s ease;
+    }
+
+    .chart-state.hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .chart-state.error { color: var(--rose); }
+
+    .footnote {
+      margin-top: 10px;
+      color: var(--ink-2);
+      font-size: 0.78rem;
+      font-family: "IBM Plex Mono", monospace;
+    }
+
+    .cta {
+      margin-top: 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 14px;
+      color: var(--ink-1);
+    }
+
+    .button {
+      border: 1px solid rgba(90, 217, 232, 0.35);
+      background: linear-gradient(90deg, rgba(90, 217, 232, 0.2), rgba(199, 169, 255, 0.18));
+      color: #f4f7ff;
+      font-weight: 600;
+      border-radius: 999px;
+      padding: 8px 14px;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.88rem;
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .button:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 10px 30px rgba(90, 217, 232, 0.2);
+    }
+
+    .repo {
+      color: var(--ink-0);
+      font-weight: 600;
+    }
+
+    @keyframes reveal {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+
+    @keyframes rise {
+      from {
+        opacity: 0;
+        transform: translateY(18px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    @media (max-width: 640px) {
+      .stat {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+
+      .chart-frame {
+        min-height: 280px;
+      }
+
+      .chart-head {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <div class="glow-border"></div>
+    <main class="page">
+      <p class="kicker"><span class="eyebrow-dot"></span> Repository star history</p>
+      <h1>GitHub <span>Stars</span></h1>
+      <p class="subtitle">
+        <strong>constellagent</strong> star timeline and total count from GitHub.
+      </p>
+
+      <section class="stats" aria-live="polite">
+        <article class="stat">
+          <div class="stat-main">
+            <p class="stat-label">Total stars</p>
+            <p id="totalCount" class="stat-value">—</p>
+            <p id="dateSpan" class="stat-note">Loading…</p>
+          </div>
+          <a class="stat-link" href="https://github.com/owengretzinger/constellagent/stargazers" target="_blank" rel="noopener">Open stargazers ↗</a>
+        </article>
+      </section>
+
+      <section class="chart-panel">
+        <div class="chart-head">
+          <h2>Star history</h2>
+          <time id="updatedAt" datetime="">Synced: loading…</time>
+        </div>
+        <div class="chart-frame">
+          <img
+            id="chartFallback"
+            src="https://api.star-history.com/svg?repos=owengretzinger/constellagent&type=Date&theme=dark"
+            alt="Fallback star history chart"
+          />
+          <canvas id="chartCanvas" width="1200" height="420"></canvas>
+          <div id="chartState" class="chart-state">Loading chart…</div>
+        </div>
+        <p class="footnote">Counts are cumulative daily totals from GitHub stargazer timestamps.</p>
+      </section>
+
+      <div class="cta">
+        <p class="repo">Repository: <strong>owengretzinger/constellagent</strong></p>
+        <a class="button" href="https://github.com/owengretzinger/constellagent" target="_blank" rel="noopener">
+          Open GitHub repo
+          <span aria-hidden="true">↗</span>
+        </a>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    (() => {
+      const repo = 'owengretzinger/constellagent';
+      const repoUrl = 'https://api.github.com/repos/' + repo;
+
+      const statTotal = document.getElementById('totalCount');
+      const dateSpan = document.getElementById('dateSpan');
+      const updatedAt = document.getElementById('updatedAt');
+      const chartCanvas = document.getElementById('chartCanvas');
+      const fallback = document.getElementById('chartFallback');
+      const chartState = document.getElementById('chartState');
+      const ctx = chartCanvas.getContext('2d');
+      const apiTimeoutMs = 8000;
+
+      const fmt = (n) => new Intl.NumberFormat('en-US').format(n);
+      const shortDate = (d) => {
+        return new Intl.DateTimeFormat('en-US', {
+          month: 'short',
+          day: 'numeric',
+          year: 'numeric',
+        }).format(d);
+      };
+
+      const hasNext = (linkHeader) => /<[^>]+>; rel="next"/.test(linkHeader || '');
+
+      const fetchWithTimeout = async (url, options = {}, timeoutMs = apiTimeoutMs) => {
+        const controller = new AbortController();
+        const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
+        try {
+          const response = await fetch(url, { ...options, signal: controller.signal });
+          return response;
+        } finally {
+          clearTimeout(timeout);
+        }
+      };
+
+      function setError(msg) {
+        chartState.textContent = msg;
+        chartState.classList.remove('hidden');
+        chartState.classList.add('error');
+        fallback.classList.add('visible');
+      }
+
+      function clearState() {
+        chartState.classList.add('hidden');
+        chartState.classList.remove('error');
+      }
+
+      function animateValue(el, finalValue) {
+        const start = 0;
+        const endTime = performance.now() + 650;
+        const tick = (now) => {
+          const progress = Math.min(1, 1 - (endTime - now) / 650);
+          const shown = Math.round(start + (finalValue - start) * progress);
+          el.textContent = fmt(shown);
+          if (progress < 1) requestAnimationFrame(tick);
+          else el.textContent = fmt(finalValue);
+        };
+        requestAnimationFrame(tick);
+      }
+
+      async function loadRepoMeta() {
+        const response = await fetchWithTimeout(repoUrl);
+        if (!response.ok) throw new Error('GitHub repo request failed (' + response.status + ')');
+        return response.json();
+      }
+
+      async function loadStargazers() {
+        const records = [];
+        let page = 1;
+        const maxPages = 20;
+        while (page <= maxPages) {
+          const response = await fetchWithTimeout(
+            repoUrl + '/stargazers?per_page=100&page=' + page,
+            {
+              headers: { Accept: 'application/vnd.github.v3.star+json' },
+              credentials: 'omit',
+            }
+          );
+          if (!response) throw new Error('GitHub star events request failed (timeout)');
+          if (!response.ok) throw new Error('GitHub star events request failed (' + response.status + ')');
+          const payload = await response.json();
+          if (!Array.isArray(payload) || payload.length === 0) break;
+          for (let i = 0; i < payload.length; i++) {
+            const event = payload[i];
+            if (!event.starred_at) continue;
+            const date = new Date(event.starred_at);
+            if (!Number.isNaN(date.getTime())) records.push({ starredAt: date });
+          }
+          if (!hasNext(response.headers.get('link'))) break;
+          page += 1;
+        }
+        records.sort((a, b) => a.starredAt - b.starredAt);
+        return records;
+      }
+
+      function buildTimeline(events) {
+        if (!events.length) return [];
+        const firstDay = new Date(events[0].starredAt);
+        const start = new Date(firstDay);
+        start.setDate(start.getDate() - 1);
+        const end = new Date(events[events.length - 1].starredAt);
+        start.setHours(0, 0, 0, 0);
+        end.setHours(0, 0, 0, 0);
+
+        const perDay = Object.create(null);
+        for (let i = 0; i < events.length; i++) {
+          const d = events[i].starredAt;
+          const key = d.toISOString().slice(0, 10);
+          perDay[key] = (perDay[key] || 0) + 1;
+        }
+
+        const timeline = [];
+        const cursor = new Date(start.getTime());
+        let cumulative = 0;
+        const totalDays = Math.max(1, Math.round((end - start) / 86400000) + 1);
+        for (let day = 0; day < totalDays; day += 1) {
+          const key = cursor.toISOString().slice(0, 10);
+          cumulative += perDay[key] || 0;
+          timeline.push({ date: new Date(cursor.getTime()), count: cumulative });
+          cursor.setDate(cursor.getDate() + 1);
+        }
+        return timeline;
+      }
+
+      function drawTimeline(timeline) {
+        const frame = chartCanvas.parentElement;
+        const rect = frame.getBoundingClientRect();
+        const width = Math.max(300, rect.width);
+        const height = Math.max(260, rect.height);
+        const dpr = window.devicePixelRatio || 1;
+
+        chartCanvas.width = width * dpr;
+        chartCanvas.height = height * dpr;
+        chartCanvas.style.width = width + 'px';
+        chartCanvas.style.height = height + 'px';
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+        const pad = { top: 24, right: 20, bottom: 42, left: 68 };
+        const plotW = Math.max(1, width - pad.left - pad.right);
+        const plotH = Math.max(1, height - pad.top - pad.bottom);
+
+        ctx.clearRect(0, 0, width, height);
+        ctx.fillStyle = '#090d17';
+        ctx.fillRect(0, 0, width, height);
+
+        const maxY = Math.max(1, timeline[timeline.length - 1].count);
+        const rowCount = 5;
+        ctx.strokeStyle = 'rgba(122, 139, 199, 0.24)';
+        ctx.lineWidth = 1;
+        ctx.fillStyle = '#d3d8ff';
+        ctx.font = '11px "IBM Plex Mono", monospace';
+        ctx.textAlign = 'right';
+        ctx.textBaseline = 'middle';
+
+        for (let i = 0; i <= rowCount; i += 1) {
+          const y = pad.top + (plotH / rowCount) * i;
+          ctx.beginPath();
+          ctx.moveTo(pad.left, y);
+          ctx.lineTo(width - pad.right, y);
+          ctx.stroke();
+
+          const label = Math.round(maxY - (maxY / rowCount) * i);
+          ctx.fillText(fmt(label), pad.left - 10, y);
+        }
+
+        const labelsEvery = Math.max(1, Math.floor(timeline.length / 7));
+        const xStep = plotW / Math.max(1, timeline.length - 1);
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'top';
+        for (let i = 0; i < timeline.length; i += labelsEvery) {
+          const x = pad.left + xStep * i;
+          ctx.fillText(
+            shortDate(timeline[i].date).replace(',', ''),
+            x,
+            pad.top + plotH + 12
+          );
+        }
+
+        const line = new Path2D();
+        for (let i = 0; i < timeline.length; i += 1) {
+          const point = timeline[i];
+          const x = pad.left + xStep * i;
+          const y = pad.top + plotH - (point.count / maxY) * plotH;
+          if (i === 0) line.moveTo(x, y);
+          else line.lineTo(x, y);
+        }
+
+        const fill = new Path2D(line);
+        fill.lineTo(pad.left + plotW, pad.top + plotH);
+        fill.lineTo(pad.left, pad.top + plotH);
+        fill.closePath();
+
+        const gradient = ctx.createLinearGradient(0, pad.top, 0, pad.top + plotH);
+        gradient.addColorStop(0, 'rgba(90, 217, 232, 0.36)');
+        gradient.addColorStop(1, 'rgba(90, 217, 232, 0.02)');
+        ctx.fillStyle = gradient;
+        ctx.fill(fill);
+
+        ctx.lineWidth = 2.6;
+        ctx.lineJoin = 'round';
+        ctx.lineCap = 'round';
+        ctx.strokeStyle = '#8ee7f3';
+        ctx.shadowColor = 'rgba(90, 217, 232, 0.35)';
+        ctx.shadowBlur = 12;
+        ctx.stroke(line);
+        ctx.shadowBlur = 0;
+
+        const dotEvery = Math.max(1, Math.floor(timeline.length / 12));
+        for (let i = 0; i < timeline.length; i += dotEvery) {
+          const point = timeline[i];
+          const x = pad.left + xStep * i;
+          const y = pad.top + plotH - (point.count / maxY) * plotH;
+          ctx.fillStyle = '#f3f6ff';
+          ctx.beginPath();
+          ctx.arc(x, y, 2.6, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.strokeStyle = '#5ad9e8';
+          ctx.lineWidth = 1;
+          ctx.stroke();
+        }
+
+      }
+
+      async function init() {
+        let repoMeta = null;
+        try {
+          const now = new Date();
+          repoMeta = await loadRepoMeta();
+          const starred = await loadStargazers();
+          const total = typeof repoMeta.stargazers_count === 'number' ? repoMeta.stargazers_count : starred.length;
+          statTotal.textContent = total.toString();
+          animateValue(statTotal, total);
+          const until = starred[starred.length - 1]?.starredAt;
+          if (until) {
+            dateSpan.textContent = 'As of ' + shortDate(until);
+          } else {
+            dateSpan.textContent = 'As of ' + shortDate(now);
+          }
+
+          const timeline = buildTimeline(starred);
+          if (!timeline.length) throw new Error('No star timeline available');
+          drawTimeline(timeline);
+          fallback.classList.remove('visible');
+          clearState();
+          updatedAt.textContent = 'Synced: ' + now.toLocaleString();
+          updatedAt.setAttribute('datetime', now.toISOString());
+        } catch (error) {
+          if (repoMeta && typeof repoMeta.stargazers_count === 'number') {
+            statTotal.textContent = fmt(repoMeta.stargazers_count);
+            dateSpan.textContent = 'Live chart unavailable';
+          } else {
+            statTotal.textContent = '—';
+            dateSpan.textContent = 'Live data unavailable';
+          }
+          setError('Live GitHub data unavailable. Showing fallback chart image.');
+          const now = new Date();
+          updatedAt.textContent = 'Sync failed: ' + now.toLocaleString();
+          updatedAt.setAttribute('datetime', now.toISOString());
+          console.error(error);
+        }
+      }
+
+      init();
+      window.addEventListener('resize', () => {
+        const canvasWasVisible = !fallback.classList.contains('visible');
+        if (canvasWasVisible && statTotal.textContent !== '—') {
+          loadStargazers().then((events) => {
+            const timeline = buildTimeline(events);
+            drawTimeline(timeline);
+          }).catch(() => {
+            // keep fallback state as is
+          });
+        }
+      });
+    })();
+  </script>
+</body>
+</html>

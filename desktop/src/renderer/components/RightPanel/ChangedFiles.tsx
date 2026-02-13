@@ -28,7 +28,7 @@ export function ChangedFiles({ worktreePath, workspaceId, isActive }: Props) {
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
   const [commitMsg, setCommitMsg] = useState('')
-  const { openDiffTab } = useAppStore()
+  const openDiffTab = useAppStore((s) => s.openDiffTab)
 
   const refresh = useCallback(() => {
     window.api.git.getStatus(worktreePath).then(setFiles).catch(() => {})

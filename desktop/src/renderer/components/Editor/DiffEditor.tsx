@@ -118,7 +118,9 @@ export function DiffViewer({ worktreePath, active }: Props) {
   const [loading, setLoading] = useState(true)
   const [activeFile, setActiveFile] = useState<string | null>(null)
   const scrollAreaRef = useRef<HTMLDivElement>(null)
-  const { settings, updateSettings, openFileTab } = useAppStore()
+  const settings = useAppStore((s) => s.settings)
+  const updateSettings = useAppStore((s) => s.updateSettings)
+  const openFileTab = useAppStore((s) => s.openFileTab)
   const inline = settings.diffInline
 
   // Load all changed files

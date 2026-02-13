@@ -33,16 +33,14 @@ function AutomationList({
   onNew: () => void
   onEdit: (a: Automation) => void
 }) {
-  const {
-    automations,
-    projects,
-    updateAutomation,
-    removeAutomation,
-    showConfirmDialog,
-    dismissConfirmDialog,
-    workspaces,
-    deleteWorkspace,
-  } = useAppStore()
+  const automations = useAppStore((s) => s.automations)
+  const projects = useAppStore((s) => s.projects)
+  const updateAutomation = useAppStore((s) => s.updateAutomation)
+  const removeAutomation = useAppStore((s) => s.removeAutomation)
+  const showConfirmDialog = useAppStore((s) => s.showConfirmDialog)
+  const dismissConfirmDialog = useAppStore((s) => s.dismissConfirmDialog)
+  const workspaces = useAppStore((s) => s.workspaces)
+  const deleteWorkspace = useAppStore((s) => s.deleteWorkspace)
 
   const handleToggleEnabled = useCallback(async (automation: Automation) => {
     const newEnabled = !automation.enabled
@@ -147,7 +145,9 @@ function AutomationForm({
   editingAutomation: Automation | null
   onBack: () => void
 }) {
-  const { projects, addAutomation, updateAutomation } = useAppStore()
+  const projects = useAppStore((s) => s.projects)
+  const addAutomation = useAppStore((s) => s.addAutomation)
+  const updateAutomation = useAppStore((s) => s.updateAutomation)
   const isEditing = !!editingAutomation
 
   const [projectId, setProjectId] = useState(editingAutomation?.projectId || projects[0]?.id || '')
@@ -289,7 +289,7 @@ function AutomationForm({
 // ── Panel ──
 
 export function AutomationsPanel() {
-  const { toggleAutomations } = useAppStore()
+  const toggleAutomations = useAppStore((s) => s.toggleAutomations)
   const [view, setView] = useState<'list' | 'form'>('list')
   const [editingAutomation, setEditingAutomation] = useState<Automation | null>(null)
 
