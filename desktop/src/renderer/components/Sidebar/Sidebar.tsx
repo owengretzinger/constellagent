@@ -9,6 +9,7 @@ import { Tooltip } from "../Tooltip/Tooltip";
 import styles from "./Sidebar.module.css";
 
 const PR_ICON_SIZE = 10;
+const PR_REVIEW_ICON_SIZE = 10;
 const START_TERMINAL_MESSAGE = "Starting terminal...";
 const MAX_COMMENT_COUNT_DISPLAY = 9;
 
@@ -63,6 +64,26 @@ function CommentCountIcon({ count }: { count: number }) {
   );
 }
 
+function PrReviewDecisionIcon({
+  decision,
+}: {
+  decision: "approved" | "changes_requested";
+}) {
+  if (decision === "approved") {
+    return (
+      <svg width={PR_REVIEW_ICON_SIZE} height={PR_REVIEW_ICON_SIZE} viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+        <path d="M13.78 4.22a.75.75 0 0 1 0 1.06l-6.25 6.25a.75.75 0 0 1-1.06 0L2.22 7.28a.75.75 0 1 1 1.06-1.06L7 9.94l5.72-5.72a.75.75 0 0 1 1.06 0Z" />
+      </svg>
+    );
+  }
+
+  return (
+    <svg width={PR_REVIEW_ICON_SIZE} height={PR_REVIEW_ICON_SIZE} viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+      <path d="M6.78 2.97a.75.75 0 0 1 0 1.06L4.81 6H9.5A4.5 4.5 0 0 1 14 10.5v1.75a.75.75 0 0 1-1.5 0V10.5A3 3 0 0 0 9.5 7.5H4.81l1.97 1.97a.75.75 0 1 1-1.06 1.06L2.47 7.28a.75.75 0 0 1 0-1.06l3.25-3.25a.75.75 0 0 1 1.06 0Z" />
+    </svg>
+  );
+}
+
 function WorkspaceMeta({
   projectId,
   branch,
@@ -87,6 +108,12 @@ function WorkspaceMeta({
   const hasPendingComments = pendingCommentCount > 0;
   const isBlockedByCi = openPr && !!prInfo!.isBlockedByCi;
   const isApproved = openPr && !!prInfo!.isApproved;
+  const isChangesRequested = openPr && !!prInfo!.isChangesRequested;
+  const reviewDecision: "approved" | "changes_requested" | null = isChangesRequested
+    ? "changes_requested"
+    : isApproved
+      ? "approved"
+      : null;
   const isCiPassing = openPr && prInfo!.checkStatus === "passing" && !isBlockedByCi;
 
   return (
@@ -108,6 +135,16 @@ function WorkspaceMeta({
         >
           <PrStateIcon state={prInfo!.state} />
           <span className={styles.prNumber}>#{prInfo!.number}</span>
+          {openPr && reviewDecision && (
+            <span
+              className={`${styles.prReviewDecisionIcon} ${styles.prReviewDecisionInline} ${
+                reviewDecision === "approved" ? styles.prApproved : styles.prChangesRequested
+              }`}
+              title={reviewDecision === "approved" ? "Approved" : "Changes requested"}
+            >
+              <PrReviewDecisionIcon decision={reviewDecision} />
+            </span>
+          )}
           {openPr && (
             <span className={styles.prSignals}>
               {hasPendingComments && (
@@ -124,14 +161,6 @@ function WorkspaceMeta({
                   title="Blocked by CI checks"
                 >
                   CI
-                </span>
-              )}
-              {isApproved && (
-                <span
-                  className={`${styles.prBadge} ${styles.prApproved}`}
-                  title="Approved"
-                >
-                  APP
                 </span>
               )}
               {isCiPassing && (

@@ -364,6 +364,7 @@ export class GithubService {
         mergeStateStatus ? mergeStateStatus === 'BLOCKED' : true
       ),
       isApproved: isOpen && reviewDecision === 'APPROVED',
+      isChangesRequested: isOpen && reviewDecision === 'CHANGES_REQUESTED',
       updatedAt: pr.updatedAt,
     }
   }
