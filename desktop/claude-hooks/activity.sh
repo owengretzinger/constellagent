@@ -7,5 +7,5 @@ WS_ID="${AGENT_ORCH_WS_ID:-}"
 
 ACTIVITY_DIR="/tmp/constellagent-activity"
 mkdir -p "$ACTIVITY_DIR"
-touch "$ACTIVITY_DIR/$WS_ID"
+touch "$ACTIVITY_DIR/$WS_ID.claude"
 exit 0
