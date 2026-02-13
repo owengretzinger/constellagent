@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useRef, memo } from 'react'
 import { PatchDiff } from '@pierre/diffs/react'
 import { useAppStore } from '../../store/app-store'
+import { useResolvedTheme } from '../../hooks/useResolvedTheme'
 import styles from './Editor.module.css'
 
 interface FileStatus {
@@ -122,14 +123,7 @@ export function DiffViewer({ worktreePath, active }: Props) {
   const scrollAreaRef = useRef<HTMLDivElement>(null)
   const { settings, updateSettings, openFileTab } = useAppStore()
   const inline = settings.diffInline
-
-  // Resolve theme type for diff viewer
-  const themeType = (() => {
-    if (settings.theme === 'system') {
-      return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
-    }
-    return settings.theme
-  })() as 'dark' | 'light'
+  const themeType = useResolvedTheme()
 
   // Load all changed files
   const loadFiles = useCallback(async () => {

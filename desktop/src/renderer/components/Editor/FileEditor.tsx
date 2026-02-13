@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import Editor, { type BeforeMount, loader } from '@monaco-editor/react'
 import { useAppStore } from '../../store/app-store'
+import { useResolvedTheme } from '../../hooks/useResolvedTheme'
 import styles from './Editor.module.css'
 
 // Disable TS/JS semantic diagnostics globally once — Monaco can't resolve project modules
@@ -53,14 +54,10 @@ export function FileEditor({ tabId, filePath, active }: Props) {
   const editorRef = useRef<any>(null)
   const currentContentRef = useRef<string>('')
   const { setTabUnsaved, notifyTabSaved, settings } = useAppStore()
+  const resolvedTheme = useResolvedTheme()
 
-  // Resolve theme for Monaco
-  const resolvedTheme = (() => {
-    if (settings.theme === 'system') {
-      return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'vs-dark' : 'vs'
-    }
-    return settings.theme === 'dark' ? 'vs-dark' : 'vs'
-  })()
+  // Map resolved theme to Monaco theme
+  const monacoTheme = resolvedTheme === 'dark' ? 'vs-dark' : 'vs'
 
   // Load file content
   useEffect(() => {
@@ -136,7 +133,7 @@ export function FileEditor({ tabId, filePath, active }: Props) {
         height="100%"
         language={getLanguage(filePath)}
         value={content}
-        theme={resolvedTheme}
+        theme={monacoTheme}
         onChange={handleChange}
         onMount={handleEditorMount}
         options={{
