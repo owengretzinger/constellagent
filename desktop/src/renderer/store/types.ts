@@ -17,6 +17,23 @@ export interface Automation {
   lastRunStatus?: 'success' | 'failed' | 'timeout'
 }
 
+export interface SkillEntry {
+  id: string
+  name: string
+  description: string
+  sourcePath: string
+  enabled: boolean
+}
+
+export interface SubagentEntry {
+  id: string
+  name: string
+  description: string
+  sourcePath: string
+  tools?: string
+  enabled: boolean
+}
+
 export interface Project {
   id: string
   name: string
@@ -100,6 +117,8 @@ export interface Settings {
   agentMcpAssignments: AgentMcpAssignments
   contextCaptureEnabled: boolean
   sessionResumeEnabled: boolean
+  skills: SkillEntry[]
+  subagents: SubagentEntry[]
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -116,6 +135,8 @@ export const DEFAULT_SETTINGS: Settings = {
   agentMcpAssignments: { 'claude-code': [], 'codex': [], 'gemini': [], 'cursor': [] },
   contextCaptureEnabled: false,
   sessionResumeEnabled: true,
+  skills: [],
+  subagents: [],
 }
 
 export interface Toast {
@@ -226,6 +247,14 @@ export interface AppState {
   addAutomation: (automation: Automation) => void
   updateAutomation: (id: string, partial: Partial<Omit<Automation, 'id'>>) => void
   removeAutomation: (id: string) => void
+
+  // Skills & Subagents actions
+  addSkill: (skill: SkillEntry) => void
+  removeSkill: (id: string) => void
+  updateSkill: (id: string, partial: Partial<Omit<SkillEntry, 'id'>>) => void
+  addSubagent: (subagent: SubagentEntry) => void
+  removeSubagent: (id: string) => void
+  updateSubagent: (id: string, partial: Partial<Omit<SubagentEntry, 'id'>>) => void
 
   // Hydration
   hydrateState: (data: PersistedState) => void

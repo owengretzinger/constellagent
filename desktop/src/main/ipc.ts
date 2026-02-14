@@ -20,6 +20,7 @@ import { syncMcpConfigs, loadMcpServersFromConfig, removeServerFromConfig } from
 import { CLAUDE_CONFIG_PATH } from './claude-config'
 import { LspService } from './lsp/lsp-service'
 import type { McpServer, AgentMcpAssignments } from '../renderer/store/types'
+import { SkillsService } from './skills-service'
 
 import { ContextDb } from './context-db'
 
@@ -1136,6 +1137,42 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle(IPC.LSP_GET_AVAILABLE_LANGUAGES, async () => {
     return lspService.getAvailableLanguages()
+  })
+
+  // ── App file picker ──
+  ipcMain.handle(IPC.APP_SELECT_FILE, async (_e, filters?: { name: string; extensions: string[] }[]) => {
+    const result = await dialog.showOpenDialog({
+      properties: ['openFile'],
+      title: 'Select File',
+      filters: filters || [],
+    })
+    if (result.canceled || result.filePaths.length === 0) return null
+    return result.filePaths[0]
+  })
+
+  // ── Skills & Subagents handlers ──
+  ipcMain.handle(IPC.SKILLS_SCAN, async (_e, skillPath: string) => {
+    return SkillsService.scanSkillDir(skillPath)
+  })
+
+  ipcMain.handle(IPC.SKILLS_SYNC, async (_e, skillPath: string, projectPath: string) => {
+    await SkillsService.syncSkillToAgents(skillPath, projectPath)
+  })
+
+  ipcMain.handle(IPC.SKILLS_REMOVE, async (_e, skillName: string, projectPath: string) => {
+    await SkillsService.removeSkillFromAgents(skillName, projectPath)
+  })
+
+  ipcMain.handle(IPC.SUBAGENTS_SCAN, async (_e, filePath: string) => {
+    return SkillsService.scanSubagentFile(filePath)
+  })
+
+  ipcMain.handle(IPC.SUBAGENTS_SYNC, async (_e, subagentPath: string, projectPath: string) => {
+    await SkillsService.syncSubagentToAgents(subagentPath, projectPath)
+  })
+
+  ipcMain.handle(IPC.SUBAGENTS_REMOVE, async (_e, subagentName: string, projectPath: string) => {
+    await SkillsService.removeSubagentFromAgents(subagentName, projectPath)
   })
 
   // ── Clipboard handlers ──

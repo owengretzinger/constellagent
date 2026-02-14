@@ -94,6 +94,17 @@ export const IPC = {
   // Session
   SESSION_GET_LAST: 'session:get-last',
 
+  // Skills & Subagents
+  SKILLS_SCAN: 'skills:scan',
+  SKILLS_SYNC: 'skills:sync',
+  SKILLS_REMOVE: 'skills:remove',
+  SUBAGENTS_SCAN: 'subagents:scan',
+  SUBAGENTS_SYNC: 'subagents:sync',
+  SUBAGENTS_REMOVE: 'subagents:remove',
+
+  // App file picker
+  APP_SELECT_FILE: 'app:select-file',
+
   // State persistence
   STATE_SAVE: 'state:save',
   STATE_SAVE_SYNC: 'state:save-sync',
