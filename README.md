@@ -7,7 +7,7 @@ A macOS desktop app for running multiple AI agents in parallel. Each agent gets 
 ## Features
 
 - Run separate agent sessions side-by-side, each in its own workspace with an isolated git worktree
-- Full terminal emulator (ghostty-web + node-pty)
+- Full terminal emulator (`xterm.js` + node-pty)
 - Monaco code editor with syntax highlighting and diffs
 - Git staging, committing, branching, and worktree management
 - File tree navigation

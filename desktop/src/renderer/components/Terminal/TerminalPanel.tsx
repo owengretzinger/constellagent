@@ -1,4 +1,7 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef } from 'react'
+import { Terminal } from '@xterm/xterm'
+import { FitAddon } from '@xterm/addon-fit'
+import { WebLinksAddon } from '@xterm/addon-web-links'
 import { useAppStore } from '../../store/app-store'
 import styles from './TerminalPanel.module.css'
 
@@ -11,34 +14,11 @@ interface Props {
   active: boolean
 }
 
-interface TerminalMetrics {
-  width: number
-  height: number
-}
-
-interface TerminalLike {
-  cols: number
-  rows: number
-  renderer?: {
-    getMetrics?: () => TerminalMetrics | undefined
-  }
-  open: (element: HTMLElement) => void
-  write: (data: string) => void
-  resize: (cols: number, rows: number) => void
-  focus: () => void
-  dispose: () => void
-  onData: (callback: (data: string) => void) => void
-  onResize: (callback: (size: { cols: number; rows: number }) => void) => void
-  setOption: (key: string, value: unknown) => void
-}
-
 export function TerminalPanel({ ptyId, active }: Props) {
-  const containerRef = useRef<HTMLDivElement>(null)
   const termDivRef = useRef<HTMLDivElement>(null)
-  const termRef = useRef<TerminalLike | null>(null)
+  const termRef = useRef<Terminal | null>(null)
   const fitFnRef = useRef<(() => void) | null>(null)
   const inputLineRef = useRef('')
-  const [loading, setLoading] = useState(true)
   const terminalFontSize = useAppStore((s) => s.settings.terminalFontSize)
 
   const emitPrPollHint = (command: string) => {
@@ -86,26 +66,20 @@ export function TerminalPanel({ ptyId, active }: Props) {
     }
   }
 
-  // Single effect for terminal lifecycle — StrictMode safe
   useEffect(() => {
     if (!termDivRef.current) return
-    const termDiv = termDivRef.current!
+
+    const termDiv = termDivRef.current
     inputLineRef.current = ''
 
     let disposed = false
     let cleanup: (() => void) | null = null
 
-    async function setup() {
+    const setup = () => {
       try {
-        const ghostty = await import('ghostty-web')
-        await ghostty.init()
-
-        if (disposed) return
-
-        // Clear any leftover DOM from a previous terminal instance
         termDiv.innerHTML = ''
 
-        const term = new ghostty.Terminal({
+        const term = new Terminal({
           fontSize: useAppStore.getState().settings.terminalFontSize,
           fontFamily: "'SF Mono', Menlo, 'Cascadia Code', monospace",
           cursorBlink: true,
@@ -133,8 +107,12 @@ export function TerminalPanel({ ptyId, active }: Props) {
             brightCyan: '#7dcfff',
             brightWhite: '#c0caf5',
           },
-        }) as TerminalLike
+        })
 
+        const fitAddon = new FitAddon()
+        const webLinksAddon = new WebLinksAddon()
+        term.loadAddon(fitAddon)
+        term.loadAddon(webLinksAddon)
         term.open(termDiv)
 
         if (disposed) {
@@ -142,75 +120,44 @@ export function TerminalPanel({ ptyId, active }: Props) {
           return
         }
 
-        // ghostty-web's FitAddon reserves 15px for a scrollbar, which creates
-        // a visible empty strip on the right edge in this layout. Fit using
-        // the real container width so the canvas reaches the pane divider.
         const fitTerminal = () => {
-          const renderer = term.renderer
-          const metrics = renderer?.getMetrics?.()
-          if (!metrics?.width || !metrics?.height) return
-
-          const styles = window.getComputedStyle(termDiv)
-          const paddingTop = Number.parseInt(styles.getPropertyValue('padding-top'), 10) || 0
-          const paddingBottom = Number.parseInt(styles.getPropertyValue('padding-bottom'), 10) || 0
-          const paddingLeft = Number.parseInt(styles.getPropertyValue('padding-left'), 10) || 0
-          const paddingRight = Number.parseInt(styles.getPropertyValue('padding-right'), 10) || 0
-
-          const availableWidth = termDiv.clientWidth - paddingLeft - paddingRight
-          const availableHeight = termDiv.clientHeight - paddingTop - paddingBottom
-          if (availableWidth <= 0 || availableHeight <= 0) return
-
-          const cols = Math.max(2, Math.floor(availableWidth / metrics.width))
-          const rows = Math.max(1, Math.floor(availableHeight / metrics.height))
-          if (cols !== term.cols || rows !== term.rows) {
-            term.resize(cols, rows)
-          }
+          if (disposed) return
+          if (termDiv.clientWidth <= 0 || termDiv.clientHeight <= 0) return
+          fitAddon.fit()
         }
         fitFnRef.current = fitTerminal
 
-        // Defer fit until container has real dimensions
+        // Defer fit until container has real dimensions.
         let fitAttempts = 0
-        function tryFit() {
+        const tryFit = () => {
           if (disposed) return
           if (termDiv.clientWidth > 0 && termDiv.clientHeight > 0) {
             fitTerminal()
-            setLoading(false)
           } else if (++fitAttempts < 30) {
             requestAnimationFrame(tryFit)
-          } else {
-            setLoading(false)
           }
         }
         requestAnimationFrame(tryFit)
 
-        // Own ResizeObserver instead of fitAddon.observeResize() — ghostty's
-        // built-in observer silently drops resize events that fire during its
-        // 50ms _isResizing lock, causing the terminal to stay at a wrong width
-        // when Allotment settles after the initial fit.
-        let resizeTimer: ReturnType<typeof setTimeout>
+        let resizeTimer: ReturnType<typeof setTimeout> | null = null
         const resizeObserver = new ResizeObserver(() => {
-          clearTimeout(resizeTimer)
+          if (resizeTimer) clearTimeout(resizeTimer)
           resizeTimer = setTimeout(() => {
             if (!disposed) fitTerminal()
-          }, 150)
+          }, 100)
         })
         resizeObserver.observe(termDiv)
 
-        // Delayed refit — catches cases where the container was already the
-        // right size but ghostty-web's renderer metrics weren't ready yet
-        // (font not measured, canvas not initialized). The ResizeObserver
-        // won't fire in that case because the container never changes size.
         const settleTimer = setTimeout(() => {
           if (!disposed) fitTerminal()
-        }, 500)
+        }, 200)
 
-        // Connect to PTY via IPC
-        term.onData((data: string) => {
+        const onDataDisposable = term.onData((data: string) => {
           detectPrPollHint(data)
           window.api.pty.write(ptyId, data)
         })
 
-        term.onResize(({ cols, rows }: { cols: number; rows: number }) => {
+        const onResizeDisposable = term.onResize(({ cols, rows }: { cols: number; rows: number }) => {
           window.api.pty.resize(ptyId, cols, rows)
         })
 
@@ -223,18 +170,19 @@ export function TerminalPanel({ ptyId, active }: Props) {
 
         cleanup = () => {
           resizeObserver.disconnect()
-          clearTimeout(resizeTimer)
+          if (resizeTimer) clearTimeout(resizeTimer)
           clearTimeout(settleTimer)
+          onDataDisposable.dispose()
+          onResizeDisposable.dispose()
           unsubData()
           term.dispose()
         }
 
         setTimeout(() => {
-          if (!disposed) term.focus()
+          if (!disposed && active) term.focus()
         }, 50)
       } catch (err) {
         console.error('Failed to initialize terminal:', err)
-        if (!disposed) setLoading(false)
       }
     }
 
@@ -250,40 +198,27 @@ export function TerminalPanel({ ptyId, active }: Props) {
     }
   }, [ptyId])
 
-  // Update font size on live terminals
+  // Update font size on live terminals.
   useEffect(() => {
     const term = termRef.current
     if (!term) return
-    try {
-      term.setOption('fontSize', terminalFontSize)
-      fitFnRef.current?.()
-    } catch {
-      // ghostty-web may not support setOption — font applies on next terminal create
-    }
+
+    term.options.fontSize = terminalFontSize
+    fitFnRef.current?.()
   }, [terminalFontSize])
 
-  // Focus + refit when this tab becomes active
+  // Focus + refit when this tab becomes active.
   useEffect(() => {
     if (!active || !termRef.current) return
 
-    // Terminals keep real dimensions via visibility:hidden, so fit is reliable
     fitFnRef.current?.()
-    termRef.current?.focus()
+    termRef.current.focus()
   }, [active])
 
   return (
-    <div
-      className={`${styles.terminalContainer} ${active ? styles.active : styles.hidden}`}
-      ref={containerRef}
-    >
-      {/* Separate div for ghostty-web — not managed by React */}
+    <div className={`${styles.terminalContainer} ${active ? styles.active : styles.hidden}`}>
+      {/* Separate div for xterm — not managed by React. */}
       <div ref={termDivRef} className={styles.terminalInner} />
-      {loading && (
-        <div className={styles.loading}>
-          <span className={styles.loadingDot}>●</span>
-          &nbsp;Loading terminal...
-        </div>
-      )}
     </div>
   )
 }

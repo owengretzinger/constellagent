@@ -2,6 +2,7 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { App } from './App'
 import { useAppStore, hydrateFromDisk } from './store/app-store'
+import '@xterm/xterm/css/xterm.css'
 import './styles/global.css'
 
 // Expose store for e2e testing
