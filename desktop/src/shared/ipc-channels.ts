@@ -4,6 +4,7 @@ export const IPC = {
   // Git operations
   GIT_LIST_WORKTREES: 'git:list-worktrees',
   GIT_CREATE_WORKTREE: 'git:create-worktree',
+  GIT_CREATE_WORKTREE_FROM_PR: 'git:create-worktree-from-pr',
   GIT_CREATE_WORKTREE_PROGRESS: 'git:create-worktree-progress',
   GIT_REMOVE_WORKTREE: 'git:remove-worktree',
   GIT_GET_STATUS: 'git:get-status',
@@ -62,6 +63,7 @@ export const IPC = {
 
   // GitHub operations
   GITHUB_GET_PR_STATUSES: 'github:get-pr-statuses',
+  GITHUB_LIST_OPEN_PRS: 'github:list-open-prs',
 
   // Clipboard operations
   CLIPBOARD_SAVE_IMAGE: 'clipboard:save-image',
