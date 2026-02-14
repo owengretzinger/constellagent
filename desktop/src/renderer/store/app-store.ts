@@ -39,6 +39,61 @@ export const useAppStore = create<AppState>((set, get) => ({
       ],
     })),
 
+  addProjectWithRootWorkspace: async (project) => {
+    get().addProject(project)
+
+    let branch = ''
+    try {
+      branch = await window.api.git.getCurrentBranch(project.repoPath)
+    } catch { /* fallback to empty */ }
+
+    const wsId = crypto.randomUUID()
+    get().addWorkspace({
+      id: wsId,
+      name: project.name,
+      branch,
+      worktreePath: project.repoPath,
+      projectId: project.id,
+      isRoot: true,
+    })
+
+    const commands = project.startupCommands ?? []
+    const shell = get().settings.defaultShell || undefined
+
+    if (commands.length === 0) {
+      const ptyId = await window.api.pty.create(project.repoPath, shell, { AGENT_ORCH_WS_ID: wsId })
+      get().addTab({
+        id: crypto.randomUUID(),
+        workspaceId: wsId,
+        type: 'terminal',
+        title: 'Terminal',
+        ptyId,
+      })
+    } else {
+      // Pre-trust worktree in Claude Code if any command uses claude
+      if (commands.some((c) => c.command.trim().startsWith('claude'))) {
+        await window.api.claude.trustPath(project.repoPath).catch(() => {})
+      }
+      let firstTabId: string | null = null
+      for (const cmd of commands) {
+        const ptyId = await window.api.pty.create(project.repoPath, shell, { AGENT_ORCH_WS_ID: wsId })
+        const tabId = crypto.randomUUID()
+        if (!firstTabId) firstTabId = tabId
+        get().addTab({
+          id: tabId,
+          workspaceId: wsId,
+          type: 'terminal',
+          title: cmd.name || cmd.command,
+          ptyId,
+        })
+        setTimeout(() => {
+          window.api.pty.write(ptyId, cmd.command + '\n')
+        }, 500)
+      }
+      if (firstTabId) get().setActiveTab(firstTabId)
+    }
+  },
+
   removeProject: (id) =>
     set((s) => {
       // Clean up automations for this project in main process
@@ -266,9 +321,11 @@ export const useAppStore = create<AppState>((set, get) => ({
   nextWorkspace: () => {
     const s = get()
     if (s.workspaces.length <= 1) return
-    // Build visual order: workspaces grouped by project, matching sidebar display
+    // Build visual order: workspaces grouped by project, root first within each
     const ordered = s.projects.flatMap((p) =>
-      s.workspaces.filter((w) => w.projectId === p.id),
+      s.workspaces
+        .filter((w) => w.projectId === p.id)
+        .sort((a, b) => (a.isRoot ? -1 : b.isRoot ? 1 : 0)),
     )
     if (ordered.length <= 1) return
     const idx = ordered.findIndex((w) => w.id === s.activeWorkspaceId)
@@ -280,7 +337,9 @@ export const useAppStore = create<AppState>((set, get) => ({
     const s = get()
     if (s.workspaces.length <= 1) return
     const ordered = s.projects.flatMap((p) =>
-      s.workspaces.filter((w) => w.projectId === p.id),
+      s.workspaces
+        .filter((w) => w.projectId === p.id)
+        .sort((a, b) => (a.isRoot ? -1 : b.isRoot ? 1 : 0)),
     )
     if (ordered.length <= 1) return
     const idx = ordered.findIndex((w) => w.id === s.activeWorkspaceId)
@@ -330,6 +389,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     const s = get()
     const ws = s.workspaces.find((w) => w.id === workspaceId)
     if (!ws) return
+    if (ws.isRoot) return // Root workspace can only be removed by deleting the project
     const project = s.projects.find((p) => p.id === ws.projectId)
 
     // Destroy PTYs for this workspace
@@ -605,6 +665,48 @@ export async function hydrateFromDisk(): Promise<void> {
     }
   } catch (err) {
     console.error('Failed to reconcile PTY tabs:', err)
+  }
+
+  // Ensure every project has a root workspace (migration for existing users)
+  try {
+    const storeAfterPty = useAppStore.getState()
+    for (const project of storeAfterPty.projects) {
+      const hasRoot = storeAfterPty.workspaces.some(
+        (w) => w.projectId === project.id && w.isRoot
+      )
+      if (!hasRoot) {
+        let branch = ''
+        try {
+          branch = await window.api.git.getCurrentBranch(project.repoPath)
+        } catch { /* fallback to empty */ }
+
+        const wsId = crypto.randomUUID()
+        useAppStore.getState().addWorkspace({
+          id: wsId,
+          name: project.name,
+          branch,
+          worktreePath: project.repoPath,
+          projectId: project.id,
+          isRoot: true,
+        })
+
+        const shell = storeAfterPty.settings.defaultShell || undefined
+        try {
+          const ptyId = await window.api.pty.create(project.repoPath, shell, { AGENT_ORCH_WS_ID: wsId })
+          useAppStore.getState().addTab({
+            id: crypto.randomUUID(),
+            workspaceId: wsId,
+            type: 'terminal',
+            title: 'Terminal',
+            ptyId,
+          })
+        } catch {
+          // If PTY creation fails, workspace still exists without a terminal
+        }
+      }
+    }
+  } catch (err) {
+    console.error('Failed to create root workspaces:', err)
   }
 
   // Schedule all enabled automations on startup
