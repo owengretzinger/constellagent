@@ -33,7 +33,7 @@ bun run dist      # Package signed macOS DMG
 
 ## Tech Stack
 
-Electron 40 · React 19 · TypeScript (strict) · Zustand · Monaco Editor · ghostty-web · node-pty · electron-vite · Playwright · bun
+Electron 40 · React 19 · TypeScript (strict) · Zustand · Monaco Editor · xterm.js · node-pty · electron-vite · Playwright · bun
 
 ## Git Conventions
 

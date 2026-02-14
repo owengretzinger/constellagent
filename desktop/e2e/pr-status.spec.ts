@@ -83,6 +83,7 @@ test.describe('PR status indicators', () => {
             pendingCommentCount: 0,
             isBlockedByCi: false,
             isApproved: false,
+            isChangesRequested: false,
             updatedAt: new Date().toISOString(),
           },
         })
@@ -163,6 +164,7 @@ test.describe('PR status indicators', () => {
             pendingCommentCount: 0,
             isBlockedByCi: false,
             isApproved: false,
+            isChangesRequested: false,
             updatedAt: new Date().toISOString(),
           },
         })
@@ -217,6 +219,7 @@ test.describe('PR status indicators', () => {
             pendingCommentCount: 0,
             isBlockedByCi: false,
             isApproved: false,
+            isChangesRequested: false,
             updatedAt: new Date().toISOString(),
           },
         })
@@ -268,6 +271,7 @@ test.describe('PR status indicators', () => {
             pendingCommentCount: 12,
             isBlockedByCi: true,
             isApproved: false,
+            isChangesRequested: false,
             updatedAt: new Date().toISOString(),
           },
         })
@@ -376,6 +380,7 @@ test.describe('PR status indicators', () => {
             pendingCommentCount: 0,
             isBlockedByCi: false,
             isApproved: true,
+            isChangesRequested: false,
             updatedAt: new Date().toISOString(),
           },
         })
@@ -384,6 +389,62 @@ test.describe('PR status indicators', () => {
       await window.waitForTimeout(500)
 
       await expect(window.locator('[class*="prApproved"]')).toBeVisible()
+      await expect(window.locator('[class*="prChangesRequested"]')).not.toBeVisible()
+      await expect(window.locator('[class*="prPendingComments"]')).not.toBeVisible()
+      await expect(window.locator('[class*="prBlockedCi"]')).not.toBeVisible()
+      await expect(window.locator('[class*="prCiPassing"]')).toBeVisible()
+    } finally {
+      await app.close()
+      cleanupTestRepo(repoPath)
+    }
+  })
+
+  test('open PR shows changes requested icon', async () => {
+    const repoPath = createTestRepo('pr-signals-changes-requested')
+    const { app, window } = await launchApp()
+
+    try {
+      await window.evaluate(async (repo: string) => {
+        const store = (window as any).__store.getState()
+        store.hydrateState({ projects: [], workspaces: [] })
+
+        const projectId = 'test-proj-signals-changes-requested'
+        store.addProject({ id: projectId, name: 'changes-requested-project', repoPath: repo })
+        store.addWorkspace({
+          id: crypto.randomUUID(),
+          name: 'main',
+          branch: 'main',
+          worktreePath: repo,
+          projectId,
+        })
+      }, repoPath)
+
+      await window.waitForTimeout(4000)
+
+      await window.evaluate(() => {
+        const store = (window as any).__store.getState()
+        store.setGhAvailability('test-proj-signals-changes-requested', true)
+        store.setPrStatuses('test-proj-signals-changes-requested', {
+          main: {
+            number: 125,
+            state: 'open',
+            title: 'Changes Requested PR',
+            url: 'https://github.com/test/repo/pull/125',
+            checkStatus: 'passing',
+            hasPendingComments: false,
+            pendingCommentCount: 0,
+            isBlockedByCi: false,
+            isApproved: false,
+            isChangesRequested: true,
+            updatedAt: new Date().toISOString(),
+          },
+        })
+      })
+
+      await window.waitForTimeout(500)
+
+      await expect(window.locator('[class*="prChangesRequested"]')).toBeVisible()
+      await expect(window.locator('[class*="prApproved"]')).not.toBeVisible()
       await expect(window.locator('[class*="prPendingComments"]')).not.toBeVisible()
       await expect(window.locator('[class*="prBlockedCi"]')).not.toBeVisible()
       await expect(window.locator('[class*="prCiPassing"]')).toBeVisible()
@@ -433,6 +494,7 @@ test.describe('PR status indicators', () => {
             pendingCommentCount: 0,
             isBlockedByCi: false,
             isApproved: false,
+            isChangesRequested: false,
             updatedAt: new Date().toISOString(),
           },
         })

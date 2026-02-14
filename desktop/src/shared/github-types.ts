@@ -12,6 +12,7 @@ export interface PrInfo {
   pendingCommentCount: number
   isBlockedByCi: boolean
   isApproved: boolean
+  isChangesRequested: boolean
   updatedAt: string
 }
 
