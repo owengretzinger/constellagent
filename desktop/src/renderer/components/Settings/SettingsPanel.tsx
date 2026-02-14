@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useAppStore } from '../../store/app-store'
-import type { Settings } from '../../store/types'
+import type { Settings, SkillEntry, SubagentEntry } from '../../store/types'
 import { Tooltip } from '../Tooltip/Tooltip'
 import styles from './SettingsPanel.module.css'
 
@@ -128,6 +128,144 @@ function SelectRow({ label, description, value, onChange, options }: {
           <option key={o.value} value={o.value}>{o.label}</option>
         ))}
       </select>
+    </div>
+  )
+}
+
+function SkillsSubagentsSection() {
+  const { settings, addSkill, removeSkill, updateSkill, addSubagent, removeSubagent, updateSubagent, addToast } = useAppStore()
+  const activeProject = useAppStore((s) => s.activeProject())
+
+  const handleAddSkill = async () => {
+    const dirPath = await window.api.app.selectDirectory()
+    if (!dirPath) return
+    const info = await window.api.skills.scan(dirPath)
+    if (!info) {
+      addToast({ id: crypto.randomUUID(), message: 'No SKILL.md found in selected directory', type: 'error' })
+      return
+    }
+    const skill: SkillEntry = {
+      id: crypto.randomUUID(),
+      name: info.name,
+      description: info.description,
+      sourcePath: dirPath,
+      enabled: true,
+    }
+    addSkill(skill)
+    if (activeProject) {
+      await window.api.skills.sync(dirPath, activeProject.repoPath)
+    }
+  }
+
+  const handleRemoveSkill = async (skill: SkillEntry) => {
+    if (activeProject) {
+      await window.api.skills.remove(skill.name, activeProject.repoPath)
+    }
+    removeSkill(skill.id)
+  }
+
+  const handleToggleSkill = async (skill: SkillEntry) => {
+    const newEnabled = !skill.enabled
+    updateSkill(skill.id, { enabled: newEnabled })
+    if (activeProject) {
+      if (newEnabled) {
+        await window.api.skills.sync(skill.sourcePath, activeProject.repoPath)
+      } else {
+        await window.api.skills.remove(skill.name, activeProject.repoPath)
+      }
+    }
+  }
+
+  const handleAddSubagent = async () => {
+    const filePath = await window.api.app.selectFile([{ name: 'Markdown', extensions: ['md'] }])
+    if (!filePath) return
+    const info = await window.api.subagents.scan(filePath)
+    if (!info) {
+      addToast({ id: crypto.randomUUID(), message: 'Could not parse subagent file (needs YAML frontmatter with name)', type: 'error' })
+      return
+    }
+    const subagent: SubagentEntry = {
+      id: crypto.randomUUID(),
+      name: info.name,
+      description: info.description,
+      sourcePath: filePath,
+      tools: info.tools,
+      enabled: true,
+    }
+    addSubagent(subagent)
+    if (activeProject) {
+      await window.api.subagents.sync(filePath, activeProject.repoPath)
+    }
+  }
+
+  const handleRemoveSubagent = async (subagent: SubagentEntry) => {
+    if (activeProject) {
+      await window.api.subagents.remove(subagent.name, activeProject.repoPath)
+    }
+    removeSubagent(subagent.id)
+  }
+
+  const handleToggleSubagent = async (subagent: SubagentEntry) => {
+    const newEnabled = !subagent.enabled
+    updateSubagent(subagent.id, { enabled: newEnabled })
+    if (activeProject) {
+      if (newEnabled) {
+        await window.api.subagents.sync(subagent.sourcePath, activeProject.repoPath)
+      } else {
+        await window.api.subagents.remove(subagent.name, activeProject.repoPath)
+      }
+    }
+  }
+
+  return (
+    <div className={styles.section}>
+      <div className={styles.sectionTitle}>Skills & Subagents</div>
+
+      <div className={styles.subsectionLabel}>Skills</div>
+      {settings.skills.length === 0 && (
+        <div className={styles.emptyHint}>No skills configured. Add a directory containing a SKILL.md file.</div>
+      )}
+      {settings.skills.map((skill) => (
+        <div key={skill.id} className={styles.entryRow}>
+          <div className={styles.rowText}>
+            <div className={styles.rowLabel}>{skill.name}</div>
+            <div className={styles.rowDescription}>{skill.description}</div>
+          </div>
+          <button
+            className={`${styles.toggle} ${skill.enabled ? styles.toggleOn : ''}`}
+            onClick={() => handleToggleSkill(skill)}
+          >
+            <span className={styles.toggleKnob} />
+          </button>
+          <button className={styles.removeEntryBtn} onClick={() => handleRemoveSkill(skill)} title="Remove">
+            ✕
+          </button>
+        </div>
+      ))}
+      <button className={styles.addEntryBtn} onClick={handleAddSkill}>+ Add Skill</button>
+
+      <div className={styles.subsectionLabel} style={{ marginTop: 16 }}>Subagents</div>
+      {settings.subagents.length === 0 && (
+        <div className={styles.emptyHint}>No subagents configured. Add a .md file with YAML frontmatter.</div>
+      )}
+      {settings.subagents.map((sa) => (
+        <div key={sa.id} className={styles.entryRow}>
+          <div className={styles.rowText}>
+            <div className={styles.rowLabel}>{sa.name}</div>
+            <div className={styles.rowDescription}>{sa.description}{sa.tools ? ` · Tools: ${sa.tools}` : ''}</div>
+          </div>
+          <button
+            className={`${styles.toggle} ${sa.enabled ? styles.toggleOn : ''}`}
+            onClick={() => handleToggleSubagent(sa)}
+          >
+            <span className={styles.toggleKnob} />
+          </button>
+          <button className={styles.removeEntryBtn} onClick={() => handleRemoveSubagent(sa)} title="Remove">
+            ✕
+          </button>
+        </div>
+      ))}
+      <button className={styles.addEntryBtn} onClick={handleAddSubagent}>+ Add Subagent</button>
     </div>
   )
 }
@@ -299,6 +437,8 @@ export function SettingsPanel() {
         </div>
 
         <ClaudeHooksSection />
+
+        <SkillsSubagentsSection />
 
         <div className={styles.section}>
           <div className={styles.sectionTitle}>Keyboard Shortcuts</div>

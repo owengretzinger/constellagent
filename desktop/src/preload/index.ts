@@ -79,10 +79,30 @@ const api = {
   app: {
     selectDirectory: () =>
       ipcRenderer.invoke(IPC.APP_SELECT_DIRECTORY),
+    selectFile: (filters?: { name: string; extensions: string[] }[]) =>
+      ipcRenderer.invoke(IPC.APP_SELECT_FILE, filters) as Promise<string | null>,
     addProjectPath: (dirPath: string) =>
       ipcRenderer.invoke(IPC.APP_ADD_PROJECT_PATH, dirPath),
     getDataPath: () =>
       ipcRenderer.invoke(IPC.APP_GET_DATA_PATH),
+  },
+
+  skills: {
+    scan: (skillPath: string) =>
+      ipcRenderer.invoke(IPC.SKILLS_SCAN, skillPath) as Promise<{ name: string; description: string } | null>,
+    sync: (skillPath: string, projectPath: string) =>
+      ipcRenderer.invoke(IPC.SKILLS_SYNC, skillPath, projectPath),
+    remove: (skillName: string, projectPath: string) =>
+      ipcRenderer.invoke(IPC.SKILLS_REMOVE, skillName, projectPath),
+  },
+
+  subagents: {
+    scan: (filePath: string) =>
+      ipcRenderer.invoke(IPC.SUBAGENTS_SCAN, filePath) as Promise<{ name: string; description: string; tools?: string } | null>,
+    sync: (subagentPath: string, projectPath: string) =>
+      ipcRenderer.invoke(IPC.SUBAGENTS_SYNC, subagentPath, projectPath),
+    remove: (subagentName: string, projectPath: string) =>
+      ipcRenderer.invoke(IPC.SUBAGENTS_REMOVE, subagentName, projectPath),
   },
 
   claude: {

@@ -11,6 +11,7 @@ import { GithubService } from './github-service'
 import { FileService } from './file-service'
 import { AutomationScheduler, type AutomationConfig } from './automation-scheduler'
 import { trustPathForClaude, loadClaudeSettings, saveClaudeSettings, loadJsonFile, saveJsonFile } from './claude-config'
+import { SkillsService } from './skills-service'
 
 const ptyManager = new PtyManager()
 const automationScheduler = new AutomationScheduler(ptyManager)
@@ -342,6 +343,42 @@ export function registerIpcHandlers(): void {
     // List is just for init — renderer manages the list in store
     // Main process uses this to bootstrap scheduler from persisted state
     return null
+  })
+
+  // ── App file picker ──
+  ipcMain.handle(IPC.APP_SELECT_FILE, async (_e, filters?: { name: string; extensions: string[] }[]) => {
+    const result = await dialog.showOpenDialog({
+      properties: ['openFile'],
+      title: 'Select File',
+      filters: filters || [],
+    })
+    if (result.canceled || result.filePaths.length === 0) return null
+    return result.filePaths[0]
+  })
+
+  // ── Skills & Subagents handlers ──
+  ipcMain.handle(IPC.SKILLS_SCAN, async (_e, skillPath: string) => {
+    return SkillsService.scanSkillDir(skillPath)
+  })
+
+  ipcMain.handle(IPC.SKILLS_SYNC, async (_e, skillPath: string, projectPath: string) => {
+    await SkillsService.syncSkillToAgents(skillPath, projectPath)
+  })
+
+  ipcMain.handle(IPC.SKILLS_REMOVE, async (_e, skillName: string, projectPath: string) => {
+    await SkillsService.removeSkillFromAgents(skillName, projectPath)
+  })
+
+  ipcMain.handle(IPC.SUBAGENTS_SCAN, async (_e, filePath: string) => {
+    return SkillsService.scanSubagentFile(filePath)
+  })
+
+  ipcMain.handle(IPC.SUBAGENTS_SYNC, async (_e, subagentPath: string, projectPath: string) => {
+    await SkillsService.syncSubagentToAgents(subagentPath, projectPath)
+  })
+
+  ipcMain.handle(IPC.SUBAGENTS_REMOVE, async (_e, subagentName: string, projectPath: string) => {
+    await SkillsService.removeSubagentFromAgents(subagentName, projectPath)
   })
 
   // ── Clipboard handlers ──

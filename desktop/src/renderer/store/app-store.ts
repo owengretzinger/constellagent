@@ -404,6 +404,19 @@ export const useAppStore = create<AppState>((set, get) => ({
   removeAutomation: (id) =>
     set((s) => ({ automations: s.automations.filter((a) => a.id !== id) })),
 
+  addSkill: (skill) =>
+    set((s) => ({ settings: { ...s.settings, skills: [...s.settings.skills, skill] } })),
+  removeSkill: (id) =>
+    set((s) => ({ settings: { ...s.settings, skills: s.settings.skills.filter((sk) => sk.id !== id) } })),
+  updateSkill: (id, partial) =>
+    set((s) => ({ settings: { ...s.settings, skills: s.settings.skills.map((sk) => sk.id === id ? { ...sk, ...partial } : sk) } })),
+  addSubagent: (subagent) =>
+    set((s) => ({ settings: { ...s.settings, subagents: [...s.settings.subagents, subagent] } })),
+  removeSubagent: (id) =>
+    set((s) => ({ settings: { ...s.settings, subagents: s.settings.subagents.filter((sa) => sa.id !== id) } })),
+  updateSubagent: (id, partial) =>
+    set((s) => ({ settings: { ...s.settings, subagents: s.settings.subagents.map((sa) => sa.id === id ? { ...sa, ...partial } : sa) } })),
+
   openDiffTab: (workspaceId) => {
     const s = get()
     const existing = s.tabs.find(
