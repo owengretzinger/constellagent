@@ -359,6 +359,14 @@
   background: rgba(247, 118, 142, 0.08);
 }
 
+.prCiPending {
+  color: var(--accent-orange);
+  border-color: var(--accent-orange-dim);
+  background: rgba(255, 158, 100, 0.08);
+  animation: ciPendingTint 1.9s ease-in-out infinite;
+  will-change: color, border-color, text-shadow;
+}
+
 .prApproved {
   color: var(--accent-green);
   border-color: var(--accent-green-dim);
@@ -430,4 +438,24 @@
   opacity: 0.5;
   width: 16px;
   text-align: center;
+}
+
+@keyframes ciPendingTint {
+  0%,
+  100% {
+    color: #ff9e64;
+    border-color: rgba(255, 158, 100, 0.14);
+    text-shadow: none;
+  }
+  50% {
+    color: #ffd2ad;
+    border-color: rgba(255, 158, 100, 0.3);
+    text-shadow: 0 0 6px rgba(255, 158, 100, 0.2);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .prCiPending {
+    animation: none;
+  }
 }

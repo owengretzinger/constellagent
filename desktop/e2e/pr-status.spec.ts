@@ -277,8 +277,63 @@ test.describe('PR status indicators', () => {
 
       await expect(window.locator('[class*="prPendingComments"]')).toBeVisible()
       await expect(window.locator('[class*="prBlockedCi"]')).toBeVisible()
+      await expect(window.locator('[class*="prCiPending"]')).not.toBeVisible()
       await expect(window.locator('[class*="prApproved"]')).not.toBeVisible()
       await expect(window.locator('[class*="prCiPassing"]')).not.toBeVisible()
+    } finally {
+      await app.close()
+      cleanupTestRepo(repoPath)
+    }
+  })
+
+  test('open PR shows pending CI badge without red failure badge', async () => {
+    const repoPath = createTestRepo('pr-signals-pending')
+    const { app, window } = await launchApp()
+
+    try {
+      await window.evaluate(async (repo: string) => {
+        const store = (window as any).__store.getState()
+        store.hydrateState({ projects: [], workspaces: [] })
+
+        const projectId = 'test-proj-signals-pending'
+        store.addProject({ id: projectId, name: 'pending-project', repoPath: repo })
+        store.addWorkspace({
+          id: crypto.randomUUID(),
+          name: 'main',
+          branch: 'main',
+          worktreePath: repo,
+          projectId,
+        })
+      }, repoPath)
+
+      await window.waitForTimeout(4000)
+
+      await window.evaluate(() => {
+        const store = (window as any).__store.getState()
+        store.setGhAvailability('test-proj-signals-pending', true)
+        store.setPrStatuses('test-proj-signals-pending', {
+          main: {
+            number: 125,
+            state: 'open',
+            title: 'Pending CI PR',
+            url: 'https://github.com/test/repo/pull/125',
+            checkStatus: 'pending',
+            hasPendingComments: false,
+            pendingCommentCount: 0,
+            // Keep true to ensure UI no longer renders this as red while running.
+            isBlockedByCi: true,
+            isApproved: false,
+            updatedAt: new Date().toISOString(),
+          },
+        })
+      })
+
+      await window.waitForTimeout(500)
+
+      await expect(window.locator('[class*="prCiPending"]')).toBeVisible()
+      await expect(window.locator('[class*="prBlockedCi"]')).not.toBeVisible()
+      await expect(window.locator('[class*="prCiPassing"]')).not.toBeVisible()
+      await expect(window.locator('[class*="prApproved"]')).not.toBeVisible()
     } finally {
       await app.close()
       cleanupTestRepo(repoPath)
