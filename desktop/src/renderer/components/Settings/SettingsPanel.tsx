@@ -321,6 +321,13 @@ export function SettingsPanel() {
             placeholder="/bin/zsh"
           />
 
+          <ToggleRow
+            label="Use login shell"
+            description="Start terminal as a login shell to load profile PATH"
+            value={settings.useLoginShell}
+            onChange={(v) => update('useLoginShell', v)}
+          />
+
           <div className={styles.row}>
             <div className={styles.rowText}>
               <div className={styles.rowLabel}>PR link provider</div>

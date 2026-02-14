@@ -204,7 +204,12 @@ export const useAppStore = create<AppState>((set, get) => ({
     if (!ws) return
 
     const shell = s.settings.defaultShell || undefined
-    const ptyId = await window.api.pty.create(ws.worktreePath, shell, { AGENT_ORCH_WS_ID: ws.id })
+    const ptyId = await window.api.pty.create(
+      ws.worktreePath,
+      shell,
+      { AGENT_ORCH_WS_ID: ws.id },
+      s.settings.useLoginShell,
+    )
     const wsTabs = s.tabs.filter((t) => t.workspaceId === s.activeWorkspaceId)
     const termCount = wsTabs.filter((t) => t.type === 'terminal').length
 
@@ -585,7 +590,12 @@ export async function hydrateFromDisk(): Promise<void> {
         const ws = store.workspaces.find((w) => w.id === dead.workspaceId)
         if (!ws) continue
         try {
-          const newPtyId = await window.api.pty.create(ws.worktreePath, shell, { AGENT_ORCH_WS_ID: ws.id })
+          const newPtyId = await window.api.pty.create(
+            ws.worktreePath,
+            shell,
+            { AGENT_ORCH_WS_ID: ws.id },
+            store.settings.useLoginShell,
+          )
           const idx = updatedTabs.findIndex((t) => t.id === dead.id)
           if (idx !== -1) updatedTabs[idx] = { ...dead, ptyId: newPtyId }
         } catch {

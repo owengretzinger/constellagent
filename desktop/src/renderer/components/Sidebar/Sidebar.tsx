@@ -283,6 +283,7 @@ export function Sidebar() {
   const setActiveTab = useAppStore((s) => s.setActiveTab);
   const setPrStatuses = useAppStore((s) => s.setPrStatuses);
   const setGhAvailability = useAppStore((s) => s.setGhAvailability);
+  const useLoginShell = useAppStore((s) => s.settings.useLoginShell);
 
   const [manualCollapsed, setManualCollapsed] = useState<Set<string>>(
     new Set(),
@@ -420,7 +421,7 @@ export function Sidebar() {
         // Default: one blank terminal
         const ptyId = await window.api.pty.create(worktreePath, undefined, {
           AGENT_ORCH_WS_ID: wsId,
-        });
+        }, useLoginShell);
         addTab({
           id: crypto.randomUUID(),
           workspaceId: wsId,
@@ -433,7 +434,7 @@ export function Sidebar() {
         for (const cmd of commands) {
           const ptyId = await window.api.pty.create(worktreePath, undefined, {
             AGENT_ORCH_WS_ID: wsId,
-          });
+          }, useLoginShell);
           const tabId = crypto.randomUUID();
           if (!firstTabId) firstTabId = tabId;
           addTab({
@@ -452,7 +453,7 @@ export function Sidebar() {
         if (firstTabId) setActiveTab(firstTabId);
       }
     },
-    [addWorkspace, addTab, setActiveTab],
+    [addWorkspace, addTab, setActiveTab, useLoginShell],
   );
 
   const handleCreateWorkspace = useCallback(

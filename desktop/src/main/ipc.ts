@@ -235,10 +235,10 @@ export function registerIpcHandlers(): void {
   })
 
   // ── PTY handlers ──
-  ipcMain.handle(IPC.PTY_CREATE, async (_e, workingDir: string, shell?: string, extraEnv?: Record<string, string>) => {
+  ipcMain.handle(IPC.PTY_CREATE, async (_e, workingDir: string, shell?: string, extraEnv?: Record<string, string>, useLoginShell?: boolean) => {
     const win = BrowserWindow.fromWebContents(_e.sender)
     if (!win) throw new Error('No window found')
-    return ptyManager.create(workingDir, win.webContents, shell, undefined, undefined, extraEnv)
+    return ptyManager.create(workingDir, win.webContents, shell, undefined, undefined, extraEnv, useLoginShell ?? true)
   })
 
   ipcMain.on(IPC.PTY_WRITE, (_e, ptyId: string, data: string) => {

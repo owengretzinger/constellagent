@@ -80,7 +80,15 @@ export class PtyManager {
   private ptys = new Map<string, PtyInstance>()
   private nextId = 0
 
-  create(workingDir: string, webContents: WebContents, shell?: string, command?: string[], initialWrite?: string, extraEnv?: Record<string, string>): string {
+  create(
+    workingDir: string,
+    webContents: WebContents,
+    shell?: string,
+    command?: string[],
+    initialWrite?: string,
+    extraEnv?: Record<string, string>,
+    useLoginShell = true,
+  ): string {
     const id = `pty-${++this.nextId}`
 
     let file: string
@@ -90,7 +98,7 @@ export class PtyManager {
       args = command.slice(1)
     } else {
       file = (shell && shell.trim()) || process.env.SHELL || '/bin/zsh'
-      args = []
+      args = useLoginShell ? ['-l'] : []
     }
 
     const proc = pty.spawn(file, args, {
