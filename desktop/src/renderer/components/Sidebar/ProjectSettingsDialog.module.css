@@ -118,6 +118,57 @@
   color: var(--text-secondary);
 }
 
+.hookSection {
+  border-top: 1px solid var(--border-default);
+  padding-top: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.hookRow {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.hookRow .input {
+  flex: 1;
+  padding: var(--space-3) var(--space-4);
+  background: var(--surface-0);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  font-family: var(--font-mono);
+  outline: none;
+  transition: border-color var(--transition-fast);
+  min-width: 0;
+}
+
+.hookRow .input:focus {
+  border-color: var(--accent-blue);
+}
+
+.hookSelect {
+  flex-shrink: 0;
+  width: 80px;
+  padding: var(--space-3) var(--space-3);
+  background: var(--surface-0);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  font-family: var(--font-ui);
+  outline: none;
+  cursor: pointer;
+  transition: border-color var(--transition-fast);
+}
+
+.hookSelect:focus {
+  border-color: var(--accent-blue);
+}
+
 .actions {
   display: flex;
   gap: var(--space-3);

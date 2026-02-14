@@ -1,0 +1,42 @@
+.runBar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-4) var(--space-6);
+  border-top: 1px solid var(--border-default);
+  background: var(--surface-1);
+  flex-shrink: 0;
+}
+
+.runButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  width: 100%;
+  padding: var(--space-3) var(--space-4);
+  border: none;
+  border-radius: var(--radius-md);
+  background: var(--accent-green-dim);
+  color: var(--accent-green);
+  font-size: var(--text-sm);
+  font-family: var(--font-ui);
+  font-weight: var(--weight-medium);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.runButton:hover {
+  background: var(--accent-green);
+  color: #fff;
+}
+
+.runIcon {
+  font-size: 10px;
+}
+
+.shortcut {
+  font-size: var(--text-xs);
+  opacity: 0.6;
+  margin-left: var(--space-1);
+}

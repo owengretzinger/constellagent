@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { useAppStore } from "../../store/app-store";
+import { useAppStore, ptyEnv } from "../../store/app-store";
+import { HookType } from "../../store/types";
 import type { Project } from "../../store/types";
 import type { CreateWorktreeProgressEvent } from "../../../shared/workspace-creation";
 import type { OpenPrInfo, GithubLookupError } from "../../../shared/github-types";
@@ -396,14 +397,15 @@ export function Sidebar() {
       branch: string,
       worktreePath: string,
     ) => {
-      const wsId = crypto.randomUUID();
-      addWorkspace({
-        id: wsId,
+      const ws = {
+        id: crypto.randomUUID(),
         name,
         branch,
         worktreePath,
         projectId: project.id,
-      });
+      };
+      addWorkspace(ws);
+      const env = ptyEnv(ws, project);
 
       const commands = project.startupCommands ?? [];
 
@@ -414,12 +416,10 @@ export function Sidebar() {
 
       if (commands.length === 0) {
         // Default: one blank terminal
-        const ptyId = await window.api.pty.create(worktreePath, undefined, {
-          AGENT_ORCH_WS_ID: wsId,
-        });
+        const ptyId = await window.api.pty.create(worktreePath, undefined, env);
         addTab({
           id: crypto.randomUUID(),
-          workspaceId: wsId,
+          workspaceId: ws.id,
           type: "terminal",
           title: "Terminal",
           ptyId,
@@ -427,14 +427,12 @@ export function Sidebar() {
       } else {
         let firstTabId: string | null = null;
         for (const cmd of commands) {
-          const ptyId = await window.api.pty.create(worktreePath, undefined, {
-            AGENT_ORCH_WS_ID: wsId,
-          });
+          const ptyId = await window.api.pty.create(worktreePath, undefined, env);
           const tabId = crypto.randomUUID();
           if (!firstTabId) firstTabId = tabId;
           addTab({
             id: tabId,
-            workspaceId: wsId,
+            workspaceId: ws.id,
             type: "terminal",
             title: cmd.name || cmd.command,
             ptyId,
@@ -446,6 +444,22 @@ export function Sidebar() {
         }
         // Activate the first terminal tab
         if (firstTabId) setActiveTab(firstTabId);
+      }
+
+      // Run setup hook if configured (in its own terminal)
+      const setupHook = project.hooks?.find((h) => h.type === HookType.Setup);
+      if (setupHook && setupHook.command.trim()) {
+        const ptyId = await window.api.pty.create(worktreePath, undefined, env);
+        addTab({
+          id: crypto.randomUUID(),
+          workspaceId: ws.id,
+          type: "terminal",
+          title: "Setup",
+          ptyId,
+        });
+        setTimeout(() => {
+          window.api.pty.write(ptyId, setupHook.command + "\n");
+        }, 500);
       }
     },
     [addWorkspace, addTab, setActiveTab],
@@ -1162,8 +1176,8 @@ export function Sidebar() {
       {editingProject && (
         <ProjectSettingsDialog
           project={editingProject}
-          onSave={(cmds) => {
-            updateProject(editingProject.id, { startupCommands: cmds });
+          onSave={(cmds, hooks) => {
+            updateProject(editingProject.id, { startupCommands: cmds, hooks });
             setEditingProject(null);
           }}
           onCancel={() => setEditingProject(null)}
