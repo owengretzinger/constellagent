@@ -163,8 +163,8 @@ const api = {
       ipcRenderer.invoke(IPC.GITHUB_GET_PR_STATUSES, repoPath, branches),
     listOpenPrs: (repoPath: string) =>
       ipcRenderer.invoke(IPC.GITHUB_LIST_OPEN_PRS, repoPath),
-    resolvePr: (repoPath: string, prNumber: number) =>
-      ipcRenderer.invoke(IPC.GITHUB_RESOLVE_PR, repoPath, prNumber) as Promise<{ branch: string; title: string; number: number }>,
+    resolvePr: (repoPath: string, prNumber: number, repoSlug?: string) =>
+      ipcRenderer.invoke(IPC.GITHUB_RESOLVE_PR, repoPath, prNumber, repoSlug) as Promise<{ branch: string; title: string; number: number }>,
   },
 
   lsp: {

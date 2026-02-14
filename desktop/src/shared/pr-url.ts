@@ -21,8 +21,9 @@ export function parsePrUrl(url: string): ParsedPrUrl | null {
   }
 
   // Graphite: https://app.graphite.dev/github/pr/{owner}/{repo}/{number}
+  // Also matches app.graphite.com (Graphite uses both domains)
   const grMatch = trimmed.match(
-    /^https?:\/\/app\.graphite\.dev\/github\/pr\/([^/]+)\/([^/]+)\/(\d+)/
+    /^https?:\/\/app\.graphite\.(?:dev|com)\/github\/pr\/([^/]+)\/([^/]+)\/(\d+)/
   )
   if (grMatch) {
     return {

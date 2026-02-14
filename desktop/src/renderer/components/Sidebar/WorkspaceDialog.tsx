@@ -26,11 +26,13 @@ function isPrRef(value: string): boolean {
   return parsePrUrl(value) !== null || parsePrNumber(value) !== null
 }
 
-/** Extract PR number from a PR reference string */
-function extractPrNumber(value: string): number | null {
+/** Extract PR info from a PR reference string */
+function extractPrInfo(value: string): { number: number; repoSlug?: string } | null {
   const parsed = parsePrUrl(value)
-  if (parsed) return parsed.number
-  return parsePrNumber(value)
+  if (parsed) return { number: parsed.number, repoSlug: `${parsed.owner}/${parsed.repo}` }
+  const num = parsePrNumber(value)
+  if (num !== null) return { number: num }
+  return null
 }
 
 export function WorkspaceDialog({
@@ -82,13 +84,13 @@ export function WorkspaceDialog({
 
   /** Resolve a PR reference to its branch name via gh CLI */
   const resolvePr = useCallback(async (value: string, target: 'branch' | 'baseBranch') => {
-    const prNumber = extractPrNumber(value)
-    if (prNumber === null) return false
+    const prInfo = extractPrInfo(value)
+    if (prInfo === null) return false
 
     setPrResolving(true)
     setPrError('')
     try {
-      const result = await window.api.github.resolvePr(project.repoPath, prNumber)
+      const result = await window.api.github.resolvePr(project.repoPath, prInfo.number, prInfo.repoSlug)
       if (target === 'branch') {
         setSelectedBranch(result.branch)
         setName(`pr-${result.number}`)
@@ -106,11 +108,27 @@ export function WorkspaceDialog({
     }
   }, [project.repoPath])
 
-  const handleSubmit = useCallback(() => {
+  const handleSubmit = useCallback(async () => {
     if (isCreating || prResolving) return
     const branch = isNewBranch ? (newBranchName || name) : selectedBranch
-    onConfirm(name, branch, isNewBranch, isNewBranch ? baseBranch : undefined)
-  }, [name, isNewBranch, newBranchName, selectedBranch, baseBranch, onConfirm, isCreating, prResolving])
+    const base = isNewBranch ? baseBranch : undefined
+
+    // Auto-resolve PR references on submit instead of passing raw URLs as branch names
+    if (!isNewBranch && isPrRef(branch)) {
+      const resolved = await resolvePr(branch, 'branch')
+      // resolvePr updates selectedBranch on success; the user can then submit again
+      if (!resolved) return
+      // Don't proceed — let the user review the resolved branch and submit again
+      return
+    }
+    if (isNewBranch && base && isPrRef(base)) {
+      const resolved = await resolvePr(base, 'baseBranch')
+      if (!resolved) return
+      return
+    }
+
+    onConfirm(name, branch, isNewBranch, base)
+  }, [name, isNewBranch, newBranchName, selectedBranch, baseBranch, onConfirm, isCreating, prResolving, resolvePr])
 
   // Close pickers on click outside
   useEffect(() => {

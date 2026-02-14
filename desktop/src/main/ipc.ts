@@ -391,8 +391,8 @@ export function registerIpcHandlers(): void {
     return GithubService.listOpenPrs(repoPath)
   })
 
-  ipcMain.handle(IPC.GITHUB_RESOLVE_PR, async (_e, repoPath: string, prNumber: number) => {
-    return GithubService.resolvePr(repoPath, prNumber)
+  ipcMain.handle(IPC.GITHUB_RESOLVE_PR, async (_e, repoPath: string, prNumber: number, repoSlug?: string) => {
+    return GithubService.resolvePr(repoPath, prNumber, repoSlug)
   })
 
   // ── PTY handlers ──

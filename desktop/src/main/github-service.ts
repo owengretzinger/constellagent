@@ -227,19 +227,22 @@ export class GithubService {
   /**
    * Resolve a PR number to its head branch name and title.
    * Uses `gh pr view` which works for open, closed, and merged PRs.
+   * When `repoSlug` is provided (e.g. "owner/repo"), `--repo` is passed to
+   * `gh` so the PR is looked up in that repository instead of the one inferred
+   * from `repoPath`.
    */
   static async resolvePr(
     repoPath: string,
     prNumber: number,
+    repoSlug?: string,
   ): Promise<{ branch: string; title: string; number: number }> {
     if (!(await this.isGhAvailable())) {
       throw new Error('GitHub CLI (gh) is not installed')
     }
     try {
-      const { stdout } = await execFileAsync('gh', [
-        'pr', 'view', String(prNumber),
-        '--json', 'headRefName,title,number',
-      ], { cwd: repoPath, timeout: 15_000 })
+      const args = ['pr', 'view', String(prNumber), '--json', 'headRefName,title,number']
+      if (repoSlug) args.push('--repo', repoSlug)
+      const { stdout } = await execFileAsync('gh', args, { cwd: repoPath, timeout: 15_000 })
       const parsed = JSON.parse(stdout.trim()) as {
         headRefName?: string
         title?: string
