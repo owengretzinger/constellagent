@@ -4,7 +4,7 @@ import 'allotment/dist/style.css'
 import { useAppStore } from './store/app-store'
 import { Sidebar } from './components/Sidebar/Sidebar'
 import { TabBar } from './components/TabBar/TabBar'
-import { TerminalPanel } from './components/Terminal/TerminalPanel'
+import { TerminalSplitContainer } from './components/Terminal/TerminalSplitContainer'
 import { FileEditor } from './components/Editor/FileEditor'
 import { DiffViewer } from './components/Editor/DiffEditor'
 import { RightPanel } from './components/RightPanel/RightPanel'
@@ -93,13 +93,17 @@ export function App() {
                 <div className={styles.contentArea}>
                   {/* Keep ALL terminal panels alive across workspaces so PTY
                       state (scrollback, TUI layout) is never lost */}
-                  {allTerminals.map((t) => (
-                    <TerminalPanel
-                      key={t.id}
-                      ptyId={t.ptyId}
-                      active={t.id === activeTabId}
-                    />
-                  ))}
+                  {allTerminals.map((t) => {
+                    const ws = workspaces.find((w) => w.id === t.workspaceId)
+                    return (
+                      <TerminalSplitContainer
+                        key={t.id}
+                        tab={t}
+                        active={t.id === activeTabId}
+                        worktreePath={ws?.worktreePath}
+                      />
+                    )
+                  })}
 
                   {!activeTab ? (
                     <div className={styles.welcome}>
@@ -119,15 +123,18 @@ export function App() {
                           tabId={activeTab.id}
                           filePath={activeTab.filePath}
                           active={true}
+                          worktreePath={workspace?.worktreePath}
                         />
                       )}
 
                       {/* Render active diff viewer */}
                       {activeTab?.type === 'diff' && workspace && (
                         <DiffViewer
-                          key={activeTab.id}
+                          key={activeTab.commitHash || activeTab.id}
                           worktreePath={workspace.worktreePath}
                           active={true}
+                          commitHash={activeTab.commitHash}
+                          commitMessage={activeTab.commitMessage}
                         />
                       )}
                     </>

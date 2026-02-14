@@ -224,6 +224,47 @@ export class GithubService {
     }
   }
 
+  /**
+   * Resolve a PR number to its head branch name and title.
+   * Uses `gh pr view` which works for open, closed, and merged PRs.
+   */
+  static async resolvePr(
+    repoPath: string,
+    prNumber: number,
+  ): Promise<{ branch: string; title: string; number: number }> {
+    if (!(await this.isGhAvailable())) {
+      throw new Error('GitHub CLI (gh) is not installed')
+    }
+    try {
+      const { stdout } = await execFileAsync('gh', [
+        'pr', 'view', String(prNumber),
+        '--json', 'headRefName,title,number',
+      ], { cwd: repoPath, timeout: 15_000 })
+      const parsed = JSON.parse(stdout.trim()) as {
+        headRefName?: string
+        title?: string
+        number?: number
+      }
+      if (!parsed.headRefName) {
+        throw new Error(`PR #${prNumber} has no head branch`)
+      }
+      return {
+        branch: parsed.headRefName,
+        title: parsed.title ?? '',
+        number: parsed.number ?? prNumber,
+      }
+    } catch (err) {
+      if (err instanceof SyntaxError) {
+        throw new Error(`Failed to parse PR #${prNumber} response`)
+      }
+      const msg = err instanceof Error ? err.message : String(err)
+      if (msg.includes('Could not resolve')) {
+        throw new Error(`PR #${prNumber} not found`)
+      }
+      throw err
+    }
+  }
+
   private static async getAuthToken(): Promise<string | null> {
     const now = Date.now()
     if (

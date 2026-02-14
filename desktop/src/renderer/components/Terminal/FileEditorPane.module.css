@@ -1,0 +1,21 @@
+/* FileEditorPane — wrapper for Monaco editor inside split panes */
+
+.fileEditorPane {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  overflow: hidden;
+  background: var(--surface-1);
+  border-left: 1px solid transparent;
+  border-top: 1px solid transparent;
+}
+
+/* First child in a split doesn't need the separator border */
+.fileEditorPane:first-child {
+  border-left: none;
+  border-top: none;
+}
+
+.fileEditorPane.focusedPane {
+  border-color: var(--accent, #7aa2f7);
+}

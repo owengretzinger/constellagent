@@ -1,0 +1,17 @@
+/* Outer wrapper for split terminal — handles visibility toggling like standalone terminals */
+
+.splitWrapper {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+.splitWrapper.active {
+  visibility: visible;
+  z-index: 1;
+}
+
+.splitWrapper.hidden {
+  visibility: hidden;
+  z-index: 0;
+}

@@ -8,6 +8,19 @@ files:
   - '!electron.vite.config.{js,ts,mjs,cjs}'
   - '!{.env,.env.*,.npmrc,bun.lock}'
   - '!{tsconfig.json,tsconfig.node.json}'
+extraResources:
+  - from: claude-hooks
+    to: claude-hooks
+    filter:
+      - '**/*'
+  - from: codex-hooks
+    to: codex-hooks
+    filter:
+      - '**/*'
+  - from: bin
+    to: bin
+    filter:
+      - '**/*'
 mac:
   icon: build/icon.icns
   target:

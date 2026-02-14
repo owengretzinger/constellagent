@@ -18,6 +18,8 @@ interface DiffFileData {
 interface Props {
   worktreePath: string
   active: boolean
+  commitHash?: string
+  commitMessage?: string
 }
 
 const STATUS_LABELS: Record<string, string> = {
@@ -113,7 +115,7 @@ function FileStrip({
 
 // ── Main DiffViewer ──
 
-export function DiffViewer({ worktreePath, active }: Props) {
+export function DiffViewer({ worktreePath, active, commitHash, commitMessage }: Props) {
   const [files, setFiles] = useState<DiffFileData[]>([])
   const [loading, setLoading] = useState(true)
   const [activeFile, setActiveFile] = useState<string | null>(null)
@@ -123,8 +125,38 @@ export function DiffViewer({ worktreePath, active }: Props) {
   const openFileTab = useAppStore((s) => s.openFileTab)
   const inline = settings.diffInline
 
-  // Load all changed files
+  // Load commit-specific diff
+  const loadCommitDiff = useCallback(async () => {
+    if (!commitHash) return
+    try {
+      const patchOutput = await window.api.git.getCommitDiff(worktreePath, commitHash)
+      if (!patchOutput) {
+        setFiles([])
+        return
+      }
+      // Split by file boundaries
+      const parts = patchOutput.split(/^diff --git /m).filter(Boolean)
+      const results: DiffFileData[] = parts.map((part) => {
+        const firstLine = part.split('\n')[0]
+        const match = firstLine.match(/b\/(.+)$/)
+        const filePath = match ? match[1] : 'unknown'
+        return {
+          filePath,
+          patch: 'diff --git ' + part,
+          status: 'modified', // commit diffs don't distinguish status easily
+        }
+      })
+      setFiles(results)
+    } catch (err) {
+      console.error('Failed to load commit diff:', err)
+    } finally {
+      setLoading(false)
+    }
+  }, [worktreePath, commitHash])
+
+  // Load working-tree changed files
   const loadFiles = useCallback(async () => {
+    if (commitHash) return // handled by loadCommitDiff
     try {
       const statuses: FileStatus[] = await window.api.git.getStatus(worktreePath)
       const results = await Promise.all(
@@ -137,6 +169,7 @@ export function DiffViewer({ worktreePath, active }: Props) {
               ? file.path
               : `${worktreePath}/${file.path}`
             const content = await window.api.fs.readFile(fullPath)
+            if (content === null) return { filePath: file.path, patch: '', status: file.status }
             const lines = content.split('\n')
             patch = [
               `--- /dev/null`,
@@ -160,14 +193,20 @@ export function DiffViewer({ worktreePath, active }: Props) {
     } finally {
       setLoading(false)
     }
-  }, [worktreePath])
+  }, [worktreePath, commitHash])
 
   useEffect(() => {
-    loadFiles()
-  }, [loadFiles])
+    setLoading(true)
+    if (commitHash) {
+      loadCommitDiff()
+    } else {
+      loadFiles()
+    }
+  }, [commitHash, loadCommitDiff, loadFiles])
 
-  // Auto-refresh on filesystem changes
+  // Auto-refresh on filesystem changes (only for working-tree diffs)
   useEffect(() => {
+    if (commitHash) return // commit diffs are immutable
     window.api.fs.watchDir(worktreePath)
     const unsub = window.api.fs.onDirChanged((changedDir: string) => {
       if (changedDir === worktreePath) loadFiles()
@@ -176,7 +215,7 @@ export function DiffViewer({ worktreePath, active }: Props) {
       unsub()
       window.api.fs.unwatchDir(worktreePath)
     }
-  }, [worktreePath, loadFiles])
+  }, [worktreePath, loadFiles, commitHash])
 
   // Listen for scroll-to-file events from ChangedFiles panel
   useEffect(() => {
@@ -244,7 +283,10 @@ export function DiffViewer({ worktreePath, active }: Props) {
       {/* Toolbar */}
       <div className={styles.diffToolbar}>
         <span className={styles.diffFileCount}>
-          {files.length} changed file{files.length !== 1 ? 's' : ''}
+          {commitHash
+            ? `${commitHash.slice(0, 7)} ${commitMessage || ''}`
+            : `${files.length} changed file${files.length !== 1 ? 's' : ''}`
+          }
         </span>
         <div className={styles.diffToggle}>
           <button

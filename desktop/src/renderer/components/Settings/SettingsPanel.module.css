@@ -274,6 +274,21 @@
   cursor: default;
 }
 
+.actionBtnSuccess {
+  padding: var(--space-2) var(--space-4);
+  background: rgba(115, 218, 202, 0.15);
+  border: 1px solid var(--accent-green);
+  border-radius: var(--radius-md);
+  color: var(--accent-green);
+  font-size: var(--text-xs);
+  font-family: var(--font-ui);
+  font-weight: var(--weight-medium);
+  cursor: default;
+  flex-shrink: 0;
+  transition: all var(--transition-fast);
+  white-space: nowrap;
+}
+
 .actionBtnDanger {
   padding: var(--space-2) var(--space-4);
   background: var(--accent-red-dim, rgba(247, 118, 142, 0.15));

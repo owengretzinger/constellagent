@@ -1,17 +1,21 @@
 import { useEffect, useState } from 'react'
 import { useAppStore } from '../../store/app-store'
-import type { Settings } from '../../store/types'
+import type { Settings, FavoriteEditor } from '../../store/types'
 import { Tooltip } from '../Tooltip/Tooltip'
 import styles from './SettingsPanel.module.css'
 
 const SHORTCUTS = [
   { action: 'Quick open file', keys: '⌘P' },
   { action: 'New terminal', keys: '⌘T' },
-  { action: 'Close tab', keys: '⌘W' },
+  { action: 'Close pane / tab', keys: '⌘W' },
   { action: 'Close all tabs', keys: '⇧⌘W' },
   { action: 'Next tab', keys: '⇧⌘]' },
   { action: 'Previous tab', keys: '⇧⌘[' },
   { action: 'Tab 1–9', keys: '⌘1 – ⌘9' },
+  { action: 'Split terminal right', keys: '⌘D' },
+  { action: 'Split terminal down', keys: '⇧⌘D' },
+  { action: 'Open file in split', keys: '⌘\\' },
+  { action: 'Open file in split pane', keys: '⌘+Click' },
   { action: 'Next workspace', keys: '⇧⌘↓' },
   { action: 'Previous workspace', keys: '⇧⌘↑' },
   { action: 'New workspace', keys: '⌘N' },
@@ -23,6 +27,7 @@ const SHORTCUTS = [
   { action: 'Increase font size', keys: '⌘+' },
   { action: 'Decrease font size', keys: '⌘−' },
   { action: 'Reset font size', keys: '⌘0' },
+  { action: 'Open in editor', keys: '⇧⌘O' },
   { action: 'Settings', keys: '⌘,' },
 ]
 
@@ -102,6 +107,32 @@ function NumberRow({ label, description, value, onChange, min = 8, max = 32 }: {
           +
         </button>
       </div>
+    </div>
+  )
+}
+
+function SelectRow({ label, description, value, onChange, options }: {
+  label: string
+  description: string
+  value: string
+  onChange: (v: string) => void
+  options: { value: string; label: string }[]
+}) {
+  return (
+    <div className={styles.row}>
+      <div className={styles.rowText}>
+        <div className={styles.rowLabel}>{label}</div>
+        <div className={styles.rowDescription}>{description}</div>
+      </div>
+      <select
+        className={styles.textInput}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+      >
+        {options.map((o) => (
+          <option key={o.value} value={o.value}>{o.label}</option>
+        ))}
+      </select>
     </div>
   )
 }
@@ -329,6 +360,31 @@ export function SettingsPanel() {
               </div>
             </div>
           </div>
+
+          <SelectRow
+            label="Favorite editor"
+            description="External editor to open workspaces in (⇧⌘O)"
+            value={settings.favoriteEditor}
+            onChange={(v) => update('favoriteEditor', v as FavoriteEditor)}
+            options={[
+              { value: 'cursor', label: 'Cursor' },
+              { value: 'vscode', label: 'VS Code' },
+              { value: 'zed', label: 'Zed' },
+              { value: 'sublime', label: 'Sublime Text' },
+              { value: 'webstorm', label: 'WebStorm' },
+              { value: 'custom', label: 'Custom...' },
+            ]}
+          />
+
+          {settings.favoriteEditor === 'custom' && (
+            <TextRow
+              label="Custom editor command"
+              description="CLI command used to open a directory (e.g. nvim, emacs)"
+              value={settings.favoriteEditorCustom}
+              onChange={(v) => update('favoriteEditorCustom', v)}
+              placeholder="code"
+            />
+          )}
         </div>
 
         <div className={styles.section}>

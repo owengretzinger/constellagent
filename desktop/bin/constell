@@ -1,0 +1,46 @@
+#!/bin/sh
+# constell — open Constellagent
+# Usage: constell [dir]   (opens the app, optionally with a workspace)
+
+set -e
+
+APP_NAME="Constellagent"
+
+# Resolve symlinks to find the real script location
+REAL_SCRIPT="$0"
+while [ -L "$REAL_SCRIPT" ]; do
+  LINK_TARGET="$(readlink "$REAL_SCRIPT")"
+  case "$LINK_TARGET" in
+    /*) REAL_SCRIPT="$LINK_TARGET" ;;
+    *)  REAL_SCRIPT="$(dirname "$REAL_SCRIPT")/$LINK_TARGET" ;;
+  esac
+done
+
+# Try to locate the packaged .app bundle
+APP_PATH="/Applications/${APP_NAME}.app"
+[ ! -d "$APP_PATH" ] && APP_PATH="$HOME/Applications/${APP_NAME}.app"
+
+if [ -d "$APP_PATH" ]; then
+  open -a "$APP_PATH"
+else
+  # Dev mode: find the repo root (bin/ lives inside desktop/)
+  SCRIPT_DIR="$(cd "$(dirname "$REAL_SCRIPT")" && pwd)"
+  DESKTOP_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+  # If node_modules missing, run bun install first
+  if [ ! -d "$DESKTOP_DIR/node_modules" ]; then
+    echo "constell: installing dependencies..."
+    (cd "$DESKTOP_DIR" && bun install)
+  fi
+
+  # Check if a dev server is already running (Electron renderer URL port 5173)
+  if lsof -i :5173 -sTCP:LISTEN >/dev/null 2>&1; then
+    # Dev server running — just launch electron pointing at existing build
+    echo "constell: dev server already running, opening app..."
+    exec "$DESKTOP_DIR/node_modules/.bin/electron" "$DESKTOP_DIR/out/main/index.js"
+  else
+    # Start full dev server (bun run dev)
+    echo "constell: starting dev server..."
+    cd "$DESKTOP_DIR/.." && exec bun run dev
+  fi
+fi

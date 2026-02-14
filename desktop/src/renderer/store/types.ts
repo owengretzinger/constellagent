@@ -34,18 +34,45 @@ export interface Workspace {
   automationId?: string
 }
 
+export type SplitLeaf =
+  | { type: 'leaf'; id: string; contentType: 'terminal'; ptyId: string }
+  | { type: 'leaf'; id: string; contentType: 'file'; filePath: string }
+
+export type SplitNode =
+  | SplitLeaf
+  | { type: 'split'; id: string; direction: 'horizontal' | 'vertical'; children: [SplitNode, SplitNode] }
+
 export type Tab = {
   id: string
   workspaceId: string
 } & (
-  | { type: 'terminal'; title: string; ptyId: string }
-  | { type: 'file'; filePath: string; unsaved?: boolean }
-  | { type: 'diff' }
+  | { type: 'terminal'; title: string; ptyId: string; splitRoot?: SplitNode; focusedPaneId?: string }
+  | { type: 'file'; filePath: string; unsaved?: boolean; deleted?: boolean }
+  | { type: 'diff'; commitHash?: string; commitMessage?: string }
 )
 
-export type RightPanelMode = 'files' | 'changes'
+export type RightPanelMode = 'files' | 'changes' | 'graph'
 
 export type PrLinkProvider = 'github' | 'graphite' | 'devinreview'
+
+export type FavoriteEditor = 'cursor' | 'vscode' | 'zed' | 'sublime' | 'webstorm' | 'custom'
+
+export const EDITOR_PRESETS: Record<Exclude<FavoriteEditor, 'custom'>, { name: string; cli: string }> = {
+  cursor: { name: 'Cursor', cli: 'cursor' },
+  vscode: { name: 'VS Code', cli: 'code' },
+  zed: { name: 'Zed', cli: 'zed' },
+  sublime: { name: 'Sublime Text', cli: 'subl' },
+  webstorm: { name: 'WebStorm', cli: 'webstorm' },
+} as const
+
+/** Resolve the CLI command and display name for the current favorite editor setting */
+export function resolveEditor(settings: Settings): { name: string; cli: string } {
+  if (settings.favoriteEditor === 'custom') {
+    const cli = settings.favoriteEditorCustom || 'code'
+    return { name: cli, cli }
+  }
+  return EDITOR_PRESETS[settings.favoriteEditor]
+}
 
 export interface Settings {
   confirmOnClose: boolean
@@ -55,6 +82,8 @@ export interface Settings {
   diffInline: boolean
   terminalFontSize: number
   editorFontSize: number
+  favoriteEditor: FavoriteEditor
+  favoriteEditorCustom: string
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -65,6 +94,8 @@ export const DEFAULT_SETTINGS: Settings = {
   diffInline: false,
   terminalFontSize: 14,
   editorFontSize: 13,
+  favoriteEditor: 'cursor',
+  favoriteEditorCustom: '',
 }
 
 export interface Toast {
@@ -105,6 +136,7 @@ export interface AppState {
   activeClaudeWorkspaceIds: Set<string>
   prStatusMap: Map<string, PrInfo | null>
   ghAvailability: Map<string, boolean>
+  gitFileStatuses: Map<string, Map<string, string>>
 
   // Actions
   addProject: (project: Project) => void
@@ -126,11 +158,17 @@ export interface AppState {
   notifyTabSaved: (tabId: string) => void
   openFileTab: (filePath: string) => void
   openDiffTab: (workspaceId: string) => void
+  openCommitDiffTab: (workspaceId: string, hash: string, message: string) => void
   nextWorkspace: () => void
   prevWorkspace: () => void
   switchToTabByIndex: (index: number) => void
   closeAllWorkspaceTabs: () => void
   focusOrCreateTerminal: () => Promise<void>
+  splitTerminalPane: (direction: 'horizontal' | 'vertical') => Promise<void>
+  openFileInSplit: (filePath: string, direction?: 'horizontal' | 'vertical') => Promise<void>
+  cycleFocusedPane: () => void
+  setFocusedPane: (tabId: string, paneId: string) => void
+  closeSplitPane: (paneId: string) => void
   openWorkspaceDialog: (projectId: string | null) => void
   renameWorkspace: (id: string, name: string) => void
   updateWorkspaceBranch: (id: string, branch: string) => void
@@ -153,6 +191,10 @@ export interface AppState {
 
   // Agent activity actions (Claude + Codex)
   setActiveClaudeWorkspaces: (workspaceIds: string[]) => void
+
+  // Git file status actions
+  setGitFileStatuses: (worktreePath: string, statuses: Map<string, string>) => void
+  setTabDeleted: (tabId: string, deleted: boolean) => void
 
   // PR status actions
   setPrStatuses: (projectId: string, statuses: Record<string, PrInfo | null>) => void

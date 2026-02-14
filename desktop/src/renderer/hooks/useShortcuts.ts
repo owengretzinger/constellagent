@@ -1,5 +1,7 @@
 import { useEffect } from 'react'
 import { useAppStore } from '../store/app-store'
+import { resolveEditor } from '../store/types'
+import { getFocusedPtyId, isFocusedPaneTerminal } from '../store/split-helpers'
 
 export function useShortcuts() {
   useEffect(() => {
@@ -7,14 +9,16 @@ export function useShortcuts() {
       // Shift+Enter handling when terminal is focused
       if (e.key === 'Enter' && e.shiftKey && !e.metaKey && !e.ctrlKey && !e.altKey
         && (e.target as HTMLElement)?.closest?.('[class*="terminalInner"]')) {
-        // Write kitty keyboard protocol so CLIs (e.g. Claude Code) can distinguish
-        // Shift+Enter (new line) from Enter (submit).
-        e.preventDefault()
-        e.stopPropagation()
         const s = useAppStore.getState()
         const tab = s.tabs.find((t) => t.id === s.activeTabId)
-        if (tab?.type === 'terminal') {
-          window.api.pty.write(tab.ptyId, '\x1b[13;2u')
+        // Skip when focused pane is a file editor — let Monaco handle Shift+Enter natively
+        if (tab?.type === 'terminal' && isFocusedPaneTerminal(tab.splitRoot, tab.focusedPaneId)) {
+          // Write kitty keyboard protocol so CLIs (e.g. Claude Code) can distinguish
+          // Shift+Enter (new line) from Enter (submit).
+          e.preventDefault()
+          e.stopPropagation()
+          const pty = getFocusedPtyId(tab.splitRoot, tab.focusedPaneId, tab.ptyId)
+          if (pty) window.api.pty.write(pty, '\x1b[13;2u')
         }
         return
       }
@@ -25,26 +29,35 @@ export function useShortcuts() {
         && (e.target as HTMLElement)?.closest?.('[class*="terminalInner"]')) {
         const s = useAppStore.getState()
         const tab = s.tabs.find((t) => t.id === s.activeTabId)
-        if (tab?.type === 'terminal') {
-          if (e.key === 'ArrowLeft') {
+        if (tab?.type === 'terminal' && isFocusedPaneTerminal(tab.splitRoot, tab.focusedPaneId)) {
+          const pty = getFocusedPtyId(tab.splitRoot, tab.focusedPaneId, tab.ptyId)
+          if (pty && e.key === 'ArrowLeft') {
             e.preventDefault()
             e.stopPropagation()
-            window.api.pty.write(tab.ptyId, '\x01') // Ctrl+A — beginning of line
+            window.api.pty.write(pty, '\x01') // Ctrl+A — beginning of line
             return
           }
-          if (e.key === 'ArrowRight') {
+          if (pty && e.key === 'ArrowRight') {
             e.preventDefault()
             e.stopPropagation()
-            window.api.pty.write(tab.ptyId, '\x05') // Ctrl+E — end of line
+            window.api.pty.write(pty, '\x05') // Ctrl+E — end of line
             return
           }
-          if (e.key === 'Backspace') {
+          if (pty && e.key === 'Backspace') {
             e.preventDefault()
             e.stopPropagation()
-            window.api.pty.write(tab.ptyId, '\x15') // Ctrl+U — kill to beginning of line
+            window.api.pty.write(pty, '\x15') // Ctrl+U — kill to beginning of line
             return
           }
         }
+      }
+
+      // Ctrl+Tab — cycle focus between split panes
+      if (e.ctrlKey && !e.metaKey && !e.altKey && e.code === 'Tab') {
+        e.preventDefault()
+        e.stopPropagation()
+        useAppStore.getState().cycleFocusedPane()
+        return
       }
 
       const meta = e.metaKey || e.ctrlKey
@@ -97,9 +110,36 @@ export function useShortcuts() {
         store.createTerminalForActiveWorkspace()
         return
       }
+      // Cmd+D — split terminal pane right
+      if (!shift && !alt && e.code === 'KeyD') {
+        consume()
+        store.splitTerminalPane('horizontal')
+        return
+      }
+      // Cmd+Shift+D — split terminal pane down
+      if (shift && !alt && e.code === 'KeyD') {
+        consume()
+        store.splitTerminalPane('vertical')
+        return
+      }
+      // Cmd+\ — open current file in split pane alongside terminal
+      if (!shift && !alt && e.key === '\\') {
+        consume()
+        const activeTab = store.tabs.find((t) => t.id === store.activeTabId)
+        if (activeTab?.type === 'file') {
+          store.openFileInSplit(activeTab.filePath)
+        }
+        return
+      }
       if (!shift && !alt && e.key === 'w') {
         consume()
-        store.closeActiveTab()
+        // If the active terminal tab has splits, close just the focused pane
+        const wTab = store.tabs.find((t) => t.id === store.activeTabId)
+        if (wTab?.type === 'terminal' && wTab.splitRoot && wTab.focusedPaneId) {
+          store.closeSplitPane(wTab.focusedPaneId)
+        } else {
+          store.closeActiveTab()
+        }
         return
       }
       if (shift && !alt && e.code === 'KeyW') {
@@ -145,6 +185,22 @@ export function useShortcuts() {
         if (!store.rightPanelOpen) store.toggleRightPanel()
         return
       }
+      // Cmd+Option+G — git panel + open latest commit diff
+      if (!shift && alt && e.code === 'KeyG') {
+        consume()
+        store.setRightPanelMode('graph')
+        if (!store.rightPanelOpen) store.toggleRightPanel()
+        // Fetch and open latest commit diff
+        const ws = store.workspaces.find((w) => w.id === store.activeWorkspaceId)
+        if (ws) {
+          window.api.git.getLog(ws.worktreePath).then((log) => {
+            if (log.length > 0) {
+              store.openCommitDiffTab(ws.id, log[0].hash, log[0].message)
+            }
+          })
+        }
+        return
+      }
 
       // ── Focus ──
       // Cmd+J — focus terminal (or create one)
@@ -178,6 +234,54 @@ export function useShortcuts() {
         return
       }
 
+      // ── Open in editor: Cmd+Shift+O ──
+      if (shift && !alt && e.code === 'KeyO') {
+        consume()
+        const ws = store.workspaces.find((w) => w.id === store.activeWorkspaceId)
+        if (ws) {
+          const { cli, name } = resolveEditor(store.settings)
+          window.api.app.openInEditor(ws.worktreePath, cli).then((result) => {
+            if (!result.success) {
+              store.addToast({
+                id: `editor-err-${Date.now()}`,
+                message: result.error || `Failed to open ${name}`,
+                type: 'error',
+              })
+            }
+          })
+        }
+        return
+      }
+
+      // ── Delete file: Cmd+Backspace ──
+      // Only when a file tab is active (not terminal/diff) and target is not a text input
+      if (!shift && !alt && e.key === 'Backspace') {
+        const target = e.target as HTMLElement
+        // Don't intercept when focused inside Monaco editor or terminal
+        if (target?.closest?.('[class*="monaco-editor"]') || target?.closest?.('[class*="terminalInner"]')) {
+          return
+        }
+        const tab = store.tabs.find((t) => t.id === store.activeTabId)
+        if (tab?.type === 'file') {
+          consume()
+          const fileName = tab.filePath.split('/').pop() || tab.filePath
+          store.showConfirmDialog({
+            title: 'Delete File',
+            message: `Permanently delete "${fileName}"? This cannot be undone.`,
+            confirmLabel: 'Delete',
+            destructive: true,
+            onConfirm: () => {
+              store.dismissConfirmDialog()
+              window.api.fs.deleteFile(tab.filePath).catch((err: unknown) => {
+                const msg = err instanceof Error ? err.message : 'Failed to delete'
+                store.addToast({ id: crypto.randomUUID(), message: msg, type: 'error' })
+              })
+            },
+          })
+        }
+        return
+      }
+
       // ── Workspace creation ──
       // Cmd+N — new workspace dialog
       if (!shift && !alt && e.key === 'n') {
@@ -185,7 +289,7 @@ export function useShortcuts() {
         const project = store.activeProject()
         if (project) {
           store.openWorkspaceDialog(project.id)
-        } else if (store.projects.length === 1) {
+        } else if (store.projects.length > 0) {
           store.openWorkspaceDialog(store.projects[0].id)
         }
         return
@@ -217,8 +321,9 @@ export function useShortcuts() {
 
       const s = useAppStore.getState()
       const tab = s.tabs.find((t) => t.id === s.activeTabId)
-      if (tab?.type === 'terminal') {
-        window.api.pty.write(tab.ptyId, `\x1b[200~${filePath}\x1b[201~`)
+      if (tab?.type === 'terminal' && isFocusedPaneTerminal(tab.splitRoot, tab.focusedPaneId)) {
+        const pty = getFocusedPtyId(tab.splitRoot, tab.focusedPaneId, tab.ptyId)
+        if (pty) window.api.pty.write(pty, `\x1b[200~${filePath}\x1b[201~`)
       }
     }
 

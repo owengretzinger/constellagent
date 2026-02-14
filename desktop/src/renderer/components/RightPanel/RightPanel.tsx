@@ -1,6 +1,7 @@
 import { useAppStore } from '../../store/app-store'
 import { FileTree } from './FileTree'
 import { ChangedFiles } from './ChangedFiles'
+import { GitGraph } from './GitGraph'
 import { Tooltip } from '../Tooltip/Tooltip'
 import styles from './RightPanel.module.css'
 
@@ -32,6 +33,14 @@ export function RightPanel() {
               Changes
             </button>
           </Tooltip>
+          <Tooltip label="Git" shortcut="⇧⌘H">
+            <button
+              className={`${styles.modeButton} ${rightPanelMode === 'graph' ? styles.active : ''}`}
+              onClick={() => setRightPanelMode('graph')}
+            >
+              Git
+            </button>
+          </Tooltip>
         </div>
       </div>
 
@@ -53,6 +62,13 @@ export function RightPanel() {
                 worktreePath={workspace.worktreePath}
                 workspaceId={workspace.id}
                 isActive={rightPanelMode === 'changes'}
+              />
+            </div>
+            <div style={{ display: rightPanelMode === 'graph' ? 'contents' : 'none' }}>
+              <GitGraph
+                worktreePath={workspace.worktreePath}
+                workspaceId={workspace.id}
+                isActive={rightPanelMode === 'graph'}
               />
             </div>
           </>

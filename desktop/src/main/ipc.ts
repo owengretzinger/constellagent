@@ -4,6 +4,8 @@ import { mkdir, writeFile } from 'fs/promises'
 import { existsSync, mkdirSync, writeFileSync } from 'fs'
 import { tmpdir } from 'os'
 import { watch, type FSWatcher } from 'fs'
+import { execFile, type ExecFileException } from 'child_process'
+import { promisify } from 'util'
 import { IPC } from '../shared/ipc-channels'
 import type { CreateWorktreeProgressEvent } from '../shared/workspace-creation'
 import { PtyManager } from './pty-manager'
@@ -225,6 +227,18 @@ export function registerIpcHandlers(): void {
     return GitService.getDefaultBranch(repoPath)
   })
 
+  ipcMain.handle(IPC.GIT_SHOW_FILE_AT_HEAD, async (_e, worktreePath: string, filePath: string) => {
+    return GitService.showFileAtHead(worktreePath, filePath)
+  })
+
+  ipcMain.handle(IPC.GIT_GET_LOG, async (_e, worktreePath: string, maxCount?: number) => {
+    return GitService.getLog(worktreePath, maxCount)
+  })
+
+  ipcMain.handle(IPC.GIT_GET_COMMIT_DIFF, async (_e, worktreePath: string, hash: string) => {
+    return GitService.getCommitDiff(worktreePath, hash)
+  })
+
   // ── GitHub handlers ──
   ipcMain.handle(IPC.GITHUB_GET_PR_STATUSES, async (_e, repoPath: string, branches: string[]) => {
     return GithubService.getPrStatuses(repoPath, branches)
@@ -232,6 +246,10 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle(IPC.GITHUB_LIST_OPEN_PRS, async (_e, repoPath: string) => {
     return GithubService.listOpenPrs(repoPath)
+  })
+
+  ipcMain.handle(IPC.GITHUB_RESOLVE_PR, async (_e, repoPath: string, prNumber: number) => {
+    return GithubService.resolvePr(repoPath, prNumber)
   })
 
   // ── PTY handlers ──
@@ -326,11 +344,23 @@ export function registerIpcHandlers(): void {
   })
 
   ipcMain.handle(IPC.FS_READ_FILE, async (_e, filePath: string) => {
-    return FileService.readFile(filePath)
+    try {
+      return await FileService.readFile(filePath)
+    } catch (err: unknown) {
+      const code = (err as NodeJS.ErrnoException).code
+      if (code === 'ENOENT') {
+        return null
+      }
+      throw err
+    }
   })
 
   ipcMain.handle(IPC.FS_WRITE_FILE, async (_e, filePath: string, content: string) => {
     return FileService.writeFile(filePath, content)
+  })
+
+  ipcMain.handle(IPC.FS_DELETE_FILE, async (_e, filePath: string) => {
+    return FileService.deleteFile(filePath)
   })
 
   // ── Filesystem watcher handlers ──
@@ -435,6 +465,19 @@ export function registerIpcHandlers(): void {
       return dirPath
     } catch {
       return null
+    }
+  })
+
+  // ── Open in external editor ──
+  const execFileAsync = promisify(execFile)
+
+  ipcMain.handle(IPC.APP_OPEN_IN_EDITOR, async (_e, dirPath: string, cliCommand: string) => {
+    try {
+      await execFileAsync(cliCommand, [dirPath])
+      return { success: true }
+    } catch (err) {
+      const msg = (err as ExecFileException).message || `Failed to open ${cliCommand}`
+      return { success: false, error: msg }
     }
   })
 
@@ -696,4 +739,10 @@ export function registerIpcHandlers(): void {
     }
     return sanitized.data
   })
+}
+
+/** Kill all PTY processes and stop all automation jobs. Call on app quit. */
+export function cleanupAll(): void {
+  ptyManager.destroyAll()
+  automationScheduler.destroyAll()
 }

@@ -40,6 +40,12 @@ const api = {
       ipcRenderer.invoke(IPC.GIT_GET_CURRENT_BRANCH, worktreePath) as Promise<string>,
     getDefaultBranch: (repoPath: string) =>
       ipcRenderer.invoke(IPC.GIT_GET_DEFAULT_BRANCH, repoPath) as Promise<string>,
+    showFileAtHead: (worktreePath: string, filePath: string) =>
+      ipcRenderer.invoke(IPC.GIT_SHOW_FILE_AT_HEAD, worktreePath, filePath) as Promise<string | null>,
+    getLog: (worktreePath: string, maxCount?: number) =>
+      ipcRenderer.invoke(IPC.GIT_GET_LOG, worktreePath, maxCount) as Promise<import('../shared/git-types').GitLogEntry[]>,
+    getCommitDiff: (worktreePath: string, hash: string) =>
+      ipcRenderer.invoke(IPC.GIT_GET_COMMIT_DIFF, worktreePath, hash) as Promise<string>,
   },
 
   pty: {
@@ -74,6 +80,8 @@ const api = {
       ipcRenderer.invoke(IPC.FS_READ_FILE, filePath),
     writeFile: (filePath: string, content: string) =>
       ipcRenderer.invoke(IPC.FS_WRITE_FILE, filePath, content),
+    deleteFile: (filePath: string) =>
+      ipcRenderer.invoke(IPC.FS_DELETE_FILE, filePath),
     watchDir: (dirPath: string) =>
       ipcRenderer.invoke(IPC.FS_WATCH_START, dirPath),
     unwatchDir: (dirPath: string) =>
@@ -92,6 +100,8 @@ const api = {
       ipcRenderer.invoke(IPC.APP_SELECT_DIRECTORY),
     addProjectPath: (dirPath: string) =>
       ipcRenderer.invoke(IPC.APP_ADD_PROJECT_PATH, dirPath),
+    openInEditor: (dirPath: string, cliCommand: string) =>
+      ipcRenderer.invoke(IPC.APP_OPEN_IN_EDITOR, dirPath, cliCommand) as Promise<{ success: boolean; error?: string }>,
   },
 
   claude: {
@@ -153,6 +163,8 @@ const api = {
       ipcRenderer.invoke(IPC.GITHUB_GET_PR_STATUSES, repoPath, branches),
     listOpenPrs: (repoPath: string) =>
       ipcRenderer.invoke(IPC.GITHUB_LIST_OPEN_PRS, repoPath),
+    resolvePr: (repoPath: string, prNumber: number) =>
+      ipcRenderer.invoke(IPC.GITHUB_RESOLVE_PR, repoPath, prNumber) as Promise<{ branch: string; title: string; number: number }>,
   },
 
   clipboard: {

@@ -234,3 +234,20 @@
 .pickerOptionActive {
   color: var(--accent-blue);
 }
+
+.prSpinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--border-default);
+  border-top-color: var(--accent-blue);
+  border-radius: var(--radius-full);
+  animation: dialogSpinner 0.8s linear infinite;
+  flex-shrink: 0;
+  align-self: center;
+}
+
+.prError {
+  font-size: var(--text-xs);
+  color: var(--accent-red, #f44);
+  font-family: var(--font-ui);
+}

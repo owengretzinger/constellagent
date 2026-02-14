@@ -12,9 +12,18 @@ const PR_POLL_HINT_COMMAND_RE =
 interface Props {
   ptyId: string
   active: boolean
+  /** When rendered inside a split container, uses relative positioning */
+  inSplit?: boolean
+  /** Pane ID for focus tracking inside splits */
+  paneId?: string
+  /** Called when this pane receives focus (for split focus tracking) */
+  onFocus?: (paneId: string) => void
+  /** Whether this pane is the focused pane within a split */
+  isFocusedPane?: boolean
 }
 
-export function TerminalPanel({ ptyId, active }: Props) {
+export function TerminalPanel({ ptyId, active, inSplit, paneId, onFocus, isFocusedPane }: Props) {
+  const containerRef = useRef<HTMLDivElement>(null)
   const termDivRef = useRef<HTMLDivElement>(null)
   const termRef = useRef<Terminal | null>(null)
   const fitFnRef = useRef<(() => void) | null>(null)
@@ -218,8 +227,29 @@ export function TerminalPanel({ ptyId, active }: Props) {
     termRef.current.focus()
   }, [active])
 
+  // Focus terminal when this pane becomes the focused pane in a split (e.g. Ctrl+Tab)
+  useEffect(() => {
+    if (inSplit && isFocusedPane && termRef.current) {
+      termRef.current.focus()
+    }
+  }, [inSplit, isFocusedPane])
+
+  const handleMouseDown = () => {
+    if (paneId && onFocus) onFocus(paneId)
+  }
+
+  // In split mode: relative positioning, no visibility toggling (parent handles that)
+  // In standalone mode: absolute-fill with visibility toggling
+  const containerClass = inSplit
+    ? `${styles.splitPane} ${isFocusedPane ? styles.focusedPane : ''}`
+    : `${styles.terminalContainer} ${active ? styles.active : styles.hidden}`
+
   return (
-    <div className={`${styles.terminalContainer} ${active ? styles.active : styles.hidden}`}>
+    <div
+      className={containerClass}
+      ref={containerRef}
+      onMouseDown={handleMouseDown}
+    >
       {/* Separate div for xterm — not managed by React. */}
       <div ref={termDivRef} className={styles.terminalInner} />
     </div>

@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import type { Project } from '../../store/types'
+import { parsePrUrl, parsePrNumber } from '../../../shared/pr-url'
 import styles from './WorkspaceDialog.module.css'
 
 /** Live-sanitize a string into a valid git branch name as the user types */
@@ -20,6 +21,18 @@ interface Props {
   showSlowCreateMessage?: boolean
 }
 
+/** Check if a string looks like a PR reference (URL or #number) */
+function isPrRef(value: string): boolean {
+  return parsePrUrl(value) !== null || parsePrNumber(value) !== null
+}
+
+/** Extract PR number from a PR reference string */
+function extractPrNumber(value: string): number | null {
+  const parsed = parsePrUrl(value)
+  if (parsed) return parsed.number
+  return parsePrNumber(value)
+}
+
 export function WorkspaceDialog({
   project,
   onConfirm,
@@ -35,6 +48,8 @@ export function WorkspaceDialog({
   const [newBranchName, setNewBranchName] = useState('')
   const [baseBranch, setBaseBranch] = useState('')
   const [loading, setLoading] = useState(true)
+  const [prResolving, setPrResolving] = useState(false)
+  const [prError, setPrError] = useState('')
   const [pickerOpen, setPickerOpen] = useState(false)
   const [basePickerOpen, setBasePickerOpen] = useState(false)
   const pickerRef = useRef<HTMLDivElement>(null)
@@ -65,11 +80,37 @@ export function WorkspaceDialog({
     loadBranches()
   }, [project.repoPath])
 
+  /** Resolve a PR reference to its branch name via gh CLI */
+  const resolvePr = useCallback(async (value: string, target: 'branch' | 'baseBranch') => {
+    const prNumber = extractPrNumber(value)
+    if (prNumber === null) return false
+
+    setPrResolving(true)
+    setPrError('')
+    try {
+      const result = await window.api.github.resolvePr(project.repoPath, prNumber)
+      if (target === 'branch') {
+        setSelectedBranch(result.branch)
+        setName(`pr-${result.number}`)
+      } else {
+        setBaseBranch(result.branch)
+      }
+      setPrError('')
+      return true
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to resolve PR'
+      setPrError(msg)
+      return false
+    } finally {
+      setPrResolving(false)
+    }
+  }, [project.repoPath])
+
   const handleSubmit = useCallback(() => {
-    if (isCreating) return
+    if (isCreating || prResolving) return
     const branch = isNewBranch ? (newBranchName || name) : selectedBranch
     onConfirm(name, branch, isNewBranch, isNewBranch ? baseBranch : undefined)
-  }, [name, isNewBranch, newBranchName, selectedBranch, baseBranch, onConfirm, isCreating])
+  }, [name, isNewBranch, newBranchName, selectedBranch, baseBranch, onConfirm, isCreating, prResolving])
 
   // Close pickers on click outside
   useEffect(() => {
@@ -88,9 +129,30 @@ export function WorkspaceDialog({
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (isCreating) return
-    if (e.key === 'Enter') handleSubmit()
-    if (e.key === 'Escape') onCancel()
-  }, [handleSubmit, onCancel, isCreating])
+    if (e.key === 'Escape') { onCancel(); return }
+
+    if (e.key === 'Enter') {
+      // If the focused input has a PR reference, resolve it instead of submitting
+      const target = e.target as HTMLInputElement
+      if (target.tagName === 'INPUT') {
+        const value = target.value.trim()
+        if (isPrRef(value)) {
+          e.preventDefault()
+          e.stopPropagation()
+          // Determine which field is focused
+          if (isNewBranch) {
+            // In new-branch mode, only the base branch input can have a PR ref
+            resolvePr(value, 'baseBranch')
+          } else {
+            // In existing-branch mode, the branch input can have a PR ref
+            resolvePr(value, 'branch')
+          }
+          return
+        }
+      }
+      handleSubmit()
+    }
+  }, [handleSubmit, onCancel, isCreating, isNewBranch, resolvePr])
 
   return (
     <div className={styles.overlay} onClick={() => { if (!isCreating) onCancel() }}>
@@ -139,14 +201,15 @@ export function WorkspaceDialog({
               <input
                 className={styles.input}
                 value={baseBranch}
-                onChange={(e) => setBaseBranch(e.target.value)}
-                disabled={loading || isCreating}
-                placeholder="Base branch"
+                onChange={(e) => { setBaseBranch(e.target.value); setPrError('') }}
+                disabled={loading || isCreating || prResolving}
+                placeholder="Branch name, PR URL, or #123 (press Enter to resolve)"
               />
+              {prResolving && <span className={styles.prSpinner} />}
               <button
                 className={styles.pickerBtn}
                 onClick={() => setBasePickerOpen((v) => !v)}
-                disabled={loading || isCreating}
+                disabled={loading || isCreating || prResolving}
                 type="button"
               >
                 &#9662;
@@ -165,38 +228,43 @@ export function WorkspaceDialog({
                 </div>
               )}
             </div>
+            {prError && <div className={styles.prError}>{prError}</div>}
           </>
         ) : (
-          <div className={styles.branchInputRow} ref={pickerRef}>
-            <input
-              className={styles.input}
-              value={selectedBranch}
-              onChange={(e) => setSelectedBranch(e.target.value)}
-              disabled={loading || isCreating}
-              placeholder="Branch name"
-            />
-            <button
-              className={styles.pickerBtn}
-              onClick={() => setPickerOpen((v) => !v)}
-              disabled={loading || isCreating}
-              type="button"
-            >
-              &#9662;
-            </button>
-            {pickerOpen && (
-              <div className={styles.pickerDropdown}>
-                {branches.map((b) => (
-                  <div
-                    key={b}
-                    className={`${styles.pickerOption} ${b === selectedBranch ? styles.pickerOptionActive : ''}`}
-                    onClick={() => { setSelectedBranch(b); setPickerOpen(false) }}
-                  >
-                    {b}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+          <>
+            <div className={styles.branchInputRow} ref={pickerRef}>
+              <input
+                className={styles.input}
+                value={selectedBranch}
+                onChange={(e) => { setSelectedBranch(e.target.value); setPrError('') }}
+                disabled={loading || isCreating || prResolving}
+                placeholder="Branch name, PR URL, or #123 (press Enter to resolve)"
+              />
+              {prResolving && <span className={styles.prSpinner} />}
+              <button
+                className={styles.pickerBtn}
+                onClick={() => setPickerOpen((v) => !v)}
+                disabled={loading || isCreating || prResolving}
+                type="button"
+              >
+                &#9662;
+              </button>
+              {pickerOpen && (
+                <div className={styles.pickerDropdown}>
+                  {branches.map((b) => (
+                    <div
+                      key={b}
+                      className={`${styles.pickerOption} ${b === selectedBranch ? styles.pickerOptionActive : ''}`}
+                      onClick={() => { setSelectedBranch(b); setPickerOpen(false); setPrError('') }}
+                    >
+                      {b}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            {prError && <div className={styles.prError}>{prError}</div>}
+          </>
         )}
 
         {isCreating && (
@@ -213,7 +281,7 @@ export function WorkspaceDialog({
 
         <div className={styles.actions}>
           <button className={styles.cancelBtn} onClick={onCancel} disabled={isCreating}>Cancel</button>
-          <button className={styles.createBtn} onClick={handleSubmit} disabled={!name.trim() || isCreating}>
+          <button className={styles.createBtn} onClick={handleSubmit} disabled={!name.trim() || isCreating || prResolving}>
             {isCreating ? 'Creating...' : 'Create'}
           </button>
         </div>

@@ -1,8 +1,13 @@
 import { app, BrowserWindow, Menu, shell } from 'electron'
 import type { MenuItemConstructorOptions } from 'electron'
 import { join } from 'path'
-import { registerIpcHandlers } from './ipc'
+import { symlink, unlink, stat, readlink } from 'fs/promises'
+import { execFile } from 'child_process'
+import { promisify } from 'util'
+import { registerIpcHandlers, cleanupAll } from './ipc'
 import { NotificationWatcher } from './notification-watcher'
+
+const execFileAsync = promisify(execFile)
 
 let mainWindow: BrowserWindow | null = null
 let notificationWatcher: NotificationWatcher | null = null
@@ -46,6 +51,45 @@ function createWindow(): void {
   }
 }
 
+/**
+ * Auto-install the `constell` CLI command by symlinking bin/constell to /usr/local/bin.
+ * Runs fire-and-forget on app launch — does not block startup.
+ */
+async function autoInstallCli(): Promise<void> {
+  const target = '/usr/local/bin/constell'
+  let scriptSource: string
+
+  if (app.isPackaged) {
+    scriptSource = join(process.resourcesPath, 'bin', 'constell')
+  } else {
+    scriptSource = join(__dirname, '..', '..', 'bin', 'constell')
+  }
+
+  // Check if symlink already exists and points to the correct source
+  try {
+    const existing = await readlink(target)
+    if (existing === scriptSource) return // already installed correctly
+  } catch {
+    // target doesn't exist or isn't a symlink — proceed with install
+  }
+
+  try {
+    // Try direct symlink first (works if /usr/local/bin is writable)
+    try {
+      await stat(target).then(() => unlink(target)).catch(() => {})
+      await symlink(scriptSource, target)
+    } catch {
+      // Need elevated permissions — use osascript to prompt for admin
+      await execFileAsync('osascript', [
+        '-e',
+        `do shell script "ln -sf '${scriptSource}' '${target}'" with administrator privileges`,
+      ])
+    }
+  } catch {
+    // Silently ignore — user can still install manually from Settings if needed
+  }
+}
+
 app.setName('Constellagent')
 
 // Isolate test data so e2e tests never touch real app state
@@ -56,6 +100,20 @@ if (process.env.CI_TEST) {
   app.setPath('userData', testData)
   process.env.CONSTELLAGENT_NOTIFY_DIR ||= join(testData, 'notify')
   process.env.CONSTELLAGENT_ACTIVITY_DIR ||= join(testData, 'activity')
+}
+
+// Single instance lock: if a second instance is launched (e.g. `constell .`),
+// focus the existing window.
+const gotTheLock = app.requestSingleInstanceLock()
+if (!gotTheLock) {
+  app.quit()
+} else {
+  app.on('second-instance', () => {
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore()
+      mainWindow.focus()
+    }
+  })
 }
 
 app.whenReady().then(() => {
@@ -69,8 +127,8 @@ app.whenReady().then(() => {
       submenu: [
         { role: 'about' },
         { type: 'separator' },
-        { role: 'hide' },
-        { role: 'hideOthers' },
+        { role: 'hide', accelerator: 'CommandOrControl+H' },
+        { role: 'hideOthers', accelerator: 'CommandOrControl+Alt+H' },
         { role: 'unhide' },
         { type: 'separator' },
         { role: 'quit' },
@@ -92,16 +150,16 @@ app.whenReady().then(() => {
       ? [{
           label: 'View',
           submenu: [
-            { role: 'reload' },
-            { role: 'forceReload' },
-            { type: 'separator' },
-            { role: 'toggleDevTools' },
+            { role: 'reload' as const },
+            { role: 'forceReload' as const },
+            { type: 'separator' as const },
+            { role: 'toggleDevTools' as const },
           ],
         }]
       : []),
     {
       label: 'Window',
-      submenu: [{ role: 'minimize' }, { role: 'zoom' }],
+      submenu: [{ role: 'minimize' as const }, { role: 'zoom' as const }],
     },
   ]
   const menu = Menu.buildFromTemplate(menuTemplate)
@@ -111,6 +169,9 @@ app.whenReady().then(() => {
   notificationWatcher = new NotificationWatcher()
   notificationWatcher.start()
   createWindow()
+
+  // Auto-install CLI (fire-and-forget, don't block startup)
+  autoInstallCli()
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -126,5 +187,6 @@ app.on('window-all-closed', () => {
 })
 
 app.on('before-quit', () => {
+  cleanupAll()
   notificationWatcher?.stop()
 })

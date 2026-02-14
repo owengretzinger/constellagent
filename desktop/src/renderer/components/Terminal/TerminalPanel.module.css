@@ -22,6 +22,29 @@
   z-index: 0;
 }
 
+/* Split pane: relative positioning inside Allotment, no visibility toggling */
+.splitPane {
+  width: 100%;
+  height: 100%;
+  background: var(--term-bg);
+  overflow: hidden;
+  padding: 4px 0 0 8px;
+  box-sizing: border-box;
+  position: relative;
+  border-left: 1px solid transparent;
+  border-top: 1px solid transparent;
+}
+
+/* First child in a split doesn't need the separator border */
+.splitPane:first-child {
+  border-left: none;
+  border-top: none;
+}
+
+.splitPane.focusedPane {
+  border-color: var(--accent, #7aa2f7);
+}
+
 /* Inner div where xterm renders (outside React's control). */
 .terminalInner {
   width: 100%;

@@ -4,6 +4,7 @@ import { copyFile, mkdir, readdir, rm } from 'fs/promises'
 import { promisify } from 'util'
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'path'
 import type { CreateWorktreeProgress } from '../shared/workspace-creation'
+import type { GitLogEntry } from '../shared/git-types'
 
 const execFileAsync = promisify(execFile)
 
@@ -576,5 +577,45 @@ export class GitService {
 
   static async commit(worktreePath: string, message: string): Promise<void> {
     await git(['commit', '-m', message], worktreePath)
+  }
+
+  static async showFileAtHead(worktreePath: string, filePath: string): Promise<string | null> {
+    try {
+      return await git(['show', 'HEAD:' + filePath], worktreePath)
+    } catch {
+      return null // File is new/untracked
+    }
+  }
+
+  static async getLog(worktreePath: string, maxCount = 80): Promise<GitLogEntry[]> {
+    // Use git's %x00 escape so no literal null bytes appear in the argument string
+    // (Node.js execFile rejects strings containing \x00)
+    const format = '%H%x00%P%x00%s%x00%D%x00%an%x00%ar'
+    const output = await git(
+      ['log', '--all', '--topo-order', `--format=${format}`, '-n', String(maxCount)],
+      worktreePath,
+    )
+    if (!output) return []
+
+    const SEP = '\x00' // git outputs actual null bytes
+    const entries: GitLogEntry[] = []
+    for (const line of output.split('\n')) {
+      if (!line) continue
+      const parts = line.split(SEP)
+      if (parts.length < 6) continue
+      entries.push({
+        hash: parts[0],
+        parents: parts[1] ? parts[1].split(' ') : [],
+        message: parts[2],
+        refs: parts[3] ? parts[3].split(', ').map((r) => r.trim()).filter(Boolean) : [],
+        author: parts[4],
+        relativeDate: parts[5],
+      })
+    }
+    return entries
+  }
+
+  static async getCommitDiff(worktreePath: string, hash: string): Promise<string> {
+    return git(['show', '--format=', '--patch', hash], worktreePath)
   }
 }
