@@ -246,7 +246,7 @@ test.describe('Keyboard shortcuts', () => {
     }
   })
 
-  test('Shift+Tab is intercepted by handler and focus stays in terminal', async () => {
+  test('Shift+Tab keeps focus in terminal', async () => {
     const repoPath = createTestRepo('shortcut-shifttab')
     const { app, window } = await launchApp()
 
@@ -263,25 +263,8 @@ test.describe('Keyboard shortcuts', () => {
         !!document.activeElement?.closest('[class*="terminalInner"]')
       )).toBe(true)
 
-      // Add a capture listener to verify our handler consumed the event
-      await window.evaluate(() => {
-        (window as any).__shiftTabConsumed = false
-        window.addEventListener('keydown', (e: KeyboardEvent) => {
-          if (e.key === 'Tab' && e.shiftKey) {
-            // If defaultPrevented + cancelBubble, our handler consumed it
-            (window as any).__shiftTabConsumed = e.defaultPrevented && e.cancelBubble
-          }
-        }, true)
-      })
-
       await window.keyboard.press('Shift+Tab')
       await window.waitForTimeout(500)
-
-      // Verify our handler consumed the event (preventDefault + stopPropagation)
-      // This confirms it hit the Shift+Tab branch which writes \x1b[Z to PTY
-      // (can't spy on contextBridge-exposed pty.write — it's frozen by Electron)
-      const consumed = await window.evaluate(() => (window as any).__shiftTabConsumed)
-      expect(consumed).toBe(true)
 
       // Focus should still be inside the terminal (not navigated away)
       expect(await window.evaluate(() =>

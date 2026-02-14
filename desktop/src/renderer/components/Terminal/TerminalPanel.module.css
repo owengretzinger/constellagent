@@ -1,9 +1,9 @@
-/* Terminal — fills container, zero chrome */
+/* Terminal fills container with zero chrome. */
 
 .terminalContainer {
   /* Absolute-fill so all terminals stack and share the same dimensions.
      We use visibility (not display:none) so hidden terminals keep real
-     width/height — ghostty-web can wrap text correctly while off-screen. */
+     width/height and preserve TUI state while backgrounded. */
   position: absolute;
   inset: 0;
   background: var(--term-bg);
@@ -22,30 +22,14 @@
   z-index: 0;
 }
 
-/* Inner div where ghostty-web renders (outside React's control) */
+/* Inner div where xterm renders (outside React's control). */
 .terminalInner {
   width: 100%;
   height: 100%;
   position: relative;
 }
 
-/* Loading state — overlays the terminal area */
-.loading {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--text-tertiary);
-  font-family: var(--font-mono);
-  font-size: var(--text-sm);
-}
-
-.loadingDot {
-  animation: pulse 1.4s ease-in-out infinite;
-}
-
-@keyframes pulse {
-  0%, 100% { opacity: 0.2; }
-  50% { opacity: 1; }
+/* Ensure xterm consumes full pane height for fit calculations. */
+.terminalInner :global(.xterm) {
+  height: 100%;
 }

@@ -87,17 +87,23 @@ interface OpenPrListCache {
   data: OpenPrInfo[]
 }
 
+interface UnresolvedThreadCacheEntry {
+  count: number
+  fetchedAt: number
+}
+
 class GithubAuthError extends Error {}
 
 export class GithubService {
   private static AUTH_TOKEN_REFRESH_MS = 60_000
   private static OPEN_PR_LIST_LIMIT = 50
   private static OPEN_PR_LIST_CACHE_MS = 25_000
+  private static UNRESOLVED_THREAD_CACHE_TTL_MS = 30_000
   private static ghAvailable: boolean | null = null
   private static repoInfoCache = new Map<string, GithubRepoInfo | null>()
   private static responseCache = new Map<string, RepoResponseCache>()
   private static openPrListCache = new Map<string, OpenPrListCache>()
-  private static unresolvedThreadCache = new Map<string, number>()
+  private static unresolvedThreadCache = new Map<string, UnresolvedThreadCacheEntry>()
   private static authToken: string | null = null
   private static authTokenChecked = false
   private static authTokenFetchedAt = 0
@@ -516,6 +522,7 @@ export class GithubService {
         mergeStateStatus ? mergeStateStatus === 'BLOCKED' : true
       ),
       isApproved: isOpen && reviewDecision === 'APPROVED',
+      isChangesRequested: isOpen && reviewDecision === 'CHANGES_REQUESTED',
       updatedAt: pr.updatedAt,
     }
   }
@@ -540,7 +547,10 @@ export class GithubService {
     }
     this.unresolvedThreadCache.set(
       this.reviewThreadCacheKey(repoInfo, number, updatedAt),
-      unresolvedCount
+      {
+        count: unresolvedCount,
+        fetchedAt: Date.now(),
+      }
     )
   }
 
@@ -552,9 +562,12 @@ export class GithubService {
   ): Promise<void> {
     const key = this.reviewThreadCacheKey(repoInfo, prNode.number, prNode.updatedAt)
     const cached = this.unresolvedThreadCache.get(key)
-    if (cached !== undefined) {
-      info.pendingCommentCount = cached
-      info.hasPendingComments = cached > 0
+    if (
+      cached &&
+      Date.now() - cached.fetchedAt < this.UNRESOLVED_THREAD_CACHE_TTL_MS
+    ) {
+      info.pendingCommentCount = cached.count
+      info.hasPendingComments = cached.count > 0
       return
     }
 
