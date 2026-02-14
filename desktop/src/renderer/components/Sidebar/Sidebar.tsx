@@ -4,6 +4,7 @@ import type { Project, PrLinkProvider } from "../../store/types";
 import type { CreateWorktreeProgressEvent } from "../../../shared/workspace-creation";
 import type { OpenPrInfo, GithubLookupError } from "../../../shared/github-types";
 import { WorkspaceDialog } from "./WorkspaceDialog";
+import type { WorkspaceCreationMode } from "./WorkspaceDialog";
 import { ProjectSettingsDialog } from "./ProjectSettingsDialog";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { Tooltip } from "../Tooltip/Tooltip";
@@ -462,6 +463,7 @@ export function Sidebar() {
       name: string,
       branch: string,
       newBranch: boolean,
+      creationMode: WorkspaceCreationMode,
       force = false,
       baseBranch?: string,
     ) => {
@@ -473,15 +475,25 @@ export function Sidebar() {
       });
 
       try {
-        const worktreePath = await window.api.git.createWorktree(
-          project.repoPath,
-          name,
-          branch,
-          newBranch,
-          baseBranch,
-          force,
-          requestId,
-        );
+        const worktreePath = creationMode === "clone"
+          ? await window.api.git.createCloneWorkspace(
+            project.repoPath,
+            name,
+            branch,
+            newBranch,
+            baseBranch,
+            force,
+            requestId,
+          )
+          : await window.api.git.createWorktree(
+            project.repoPath,
+            name,
+            branch,
+            newBranch,
+            baseBranch,
+            force,
+            requestId,
+          );
         setWorkspaceCreation((prev) => {
           if (!prev || prev.requestId !== requestId) return prev;
           return { ...prev, message: START_TERMINAL_MESSAGE };
@@ -494,7 +506,7 @@ export function Sidebar() {
         const confirmMessages = [
           {
             key: "WORKTREE_PATH_EXISTS",
-            title: "Worktree already exists",
+            title: "Workspace path exists",
             message: `A leftover directory for workspace "${name}" already exists on disk. Replace it?`,
           },
           {
@@ -511,7 +523,7 @@ export function Sidebar() {
             destructive: true,
             onConfirm: () => {
               dismissConfirmDialog();
-              handleCreateWorkspace(project, name, branch, newBranch, true, baseBranch);
+              handleCreateWorkspace(project, name, branch, newBranch, creationMode, true, baseBranch);
             },
           });
           return;
@@ -1139,12 +1151,13 @@ export function Sidebar() {
       {dialogProject && (
         <WorkspaceDialog
           project={dialogProject}
-          onConfirm={(name, branch, newBranch, baseBranch) => {
+          onConfirm={(name, branch, newBranch, creationMode, baseBranch) => {
             handleCreateWorkspace(
               dialogProject,
               name,
               branch,
               newBranch,
+              creationMode,
               false,
               baseBranch,
             );

@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import type { Project } from '../../store/types'
 import styles from './WorkspaceDialog.module.css'
 
+export type WorkspaceCreationMode = 'worktree' | 'clone'
+
 /** Live-sanitize a string into a valid git branch name as the user types */
 function toBranchName(input: string): string {
   return input
@@ -13,7 +15,13 @@ function toBranchName(input: string): string {
 
 interface Props {
   project: Project
-  onConfirm: (name: string, branch: string, newBranch: boolean, baseBranch?: string) => void
+  onConfirm: (
+    name: string,
+    branch: string,
+    newBranch: boolean,
+    creationMode: WorkspaceCreationMode,
+    baseBranch?: string,
+  ) => void
   onCancel: () => void
   isCreating?: boolean
   createProgressMessage?: string
@@ -32,6 +40,7 @@ export function WorkspaceDialog({
   const [branches, setBranches] = useState<string[]>([])
   const [selectedBranch, setSelectedBranch] = useState('')
   const [isNewBranch, setIsNewBranch] = useState(true)
+  const [creationMode, setCreationMode] = useState<WorkspaceCreationMode>('worktree')
   const [newBranchName, setNewBranchName] = useState('')
   const [baseBranch, setBaseBranch] = useState('')
   const [loading, setLoading] = useState(true)
@@ -68,8 +77,8 @@ export function WorkspaceDialog({
   const handleSubmit = useCallback(() => {
     if (isCreating) return
     const branch = isNewBranch ? (newBranchName || name) : selectedBranch
-    onConfirm(name, branch, isNewBranch, isNewBranch ? baseBranch : undefined)
-  }, [name, isNewBranch, newBranchName, selectedBranch, baseBranch, onConfirm, isCreating])
+    onConfirm(name, branch, isNewBranch, creationMode, isNewBranch ? baseBranch : undefined)
+  }, [name, isNewBranch, newBranchName, selectedBranch, creationMode, baseBranch, onConfirm, isCreating])
 
   // Close pickers on click outside
   useEffect(() => {
@@ -106,6 +115,26 @@ export function WorkspaceDialog({
           disabled={isCreating}
           placeholder="workspace-name"
         />
+
+        <label className={styles.label}>Mode</label>
+        <div className={styles.branchToggle}>
+          <button
+            className={`${styles.toggleBtn} ${creationMode === 'worktree' ? styles.active : ''}`}
+            onClick={() => setCreationMode('worktree')}
+            disabled={isCreating}
+            type="button"
+          >
+            Worktree
+          </button>
+          <button
+            className={`${styles.toggleBtn} ${creationMode === 'clone' ? styles.active : ''}`}
+            onClick={() => setCreationMode('clone')}
+            disabled={isCreating}
+            type="button"
+          >
+            Multiple clone
+          </button>
+        </div>
 
         <label className={styles.label}>Branch</label>
         <div className={styles.branchToggle}>
