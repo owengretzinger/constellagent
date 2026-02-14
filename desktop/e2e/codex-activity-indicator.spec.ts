@@ -1,11 +1,26 @@
 import { test, expect, _electron as electron, ElectronApplication, Page } from '@playwright/test'
 import { resolve, join } from 'path'
-import { mkdirSync, rmSync, writeFileSync } from 'fs'
+import { chmodSync, mkdirSync, rmSync, writeFileSync } from 'fs'
 import { execSync } from 'child_process'
 
 const appPath = resolve(__dirname, '../out/main/index.js')
 const FAKE_CODEX_BIN = '/tmp/codex'
 const TMP_DIR = '/tmp'
+
+function writeFakeCodexQuestionScript() {
+  writeFileSync(
+    FAKE_CODEX_BIN,
+    `#!/bin/bash
+sleep 2
+printf 'Question 1/1 (1 unanswered)\\n'
+printf 'How should project-level provider interact with the existing global setting?\\n'
+printf 'tab to add notes | enter to submit answer | esc to interrupt\\n'
+sleep 20
+`,
+    { mode: 0o755 }
+  )
+  chmodSync(FAKE_CODEX_BIN, 0o755)
+}
 
 async function launchApp(
   label: string
@@ -295,6 +310,58 @@ test.describe('Codex activity indicator', () => {
       await window.evaluate(({ ptyId: id, wsId, activityPath }) => {
         ;(window as any).api.pty.write(id, `rm -f "${activityPath}/${wsId}.claude"\n`)
       }, { ptyId: primaryPtyId, wsId: workspaceId, activityPath: activityDir })
+    } finally {
+      rmSync(FAKE_CODEX_BIN, { force: true })
+      await app.close()
+      rmSync(notifyDir, { recursive: true, force: true })
+      rmSync(activityDir, { recursive: true, force: true })
+    }
+  })
+
+  test('shows unread when Codex asks a question before process exit', async () => {
+    const repoPath = createTestRepo('codex-question-unread')
+    const { app, window, notifyDir, activityDir } = await launchApp('codex-question-unread')
+
+    try {
+      writeFakeCodexQuestionScript()
+
+      const { workspaceId1, workspaceId2, ptyId1 } = await setupTwoWorkspaces(window, repoPath)
+      await window.waitForTimeout(800)
+
+      // Seed active codex state using the PTY shell PID marker convention.
+      await window.evaluate(({ ptyId: id, wsId, activityPath }) => {
+        ;(window as any).api.pty.write(
+          id,
+          `mkdir -p "${activityPath}" && touch "${activityPath}/${wsId}.codex.$$"\n`
+        )
+      }, { ptyId: ptyId1, wsId: workspaceId1, activityPath: activityDir })
+
+      await window.waitForFunction(
+        (wsId: string) => (window as any).__store.getState().activeClaudeWorkspaceIds.has(wsId),
+        workspaceId1,
+        { timeout: 8000 }
+      )
+
+      await window.evaluate(({ ptyId: id, fakeCodexPath }) => {
+        ;(window as any).api.pty.write(id, `${fakeCodexPath}\n`)
+      }, { ptyId: ptyId1, fakeCodexPath: FAKE_CODEX_BIN })
+
+      // Keep ws-b selected while ws-a asks a question in the background.
+      await window.evaluate((wsId: string) => {
+        ;(window as any).__store.getState().setActiveWorkspace(wsId)
+      }, workspaceId2)
+
+      // The question prompt should stop activity and mark unread before process exit.
+      await window.waitForFunction(
+        (wsId: string) => !(window as any).__store.getState().activeClaudeWorkspaceIds.has(wsId),
+        workspaceId1,
+        { timeout: 7000 }
+      )
+      await window.waitForFunction(
+        (wsId: string) => (window as any).__store.getState().unreadWorkspaceIds.has(wsId),
+        workspaceId1,
+        { timeout: 7000 }
+      )
     } finally {
       rmSync(FAKE_CODEX_BIN, { force: true })
       await app.close()
