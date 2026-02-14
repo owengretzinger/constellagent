@@ -56,6 +56,20 @@ export function registerIpcHandlers(): void {
     )
   })
 
+  ipcMain.handle(IPC.GIT_CREATE_WORKTREE_FROM_PR, async (_e, repoPath: string, name: string, prNumber: number, localBranch: string, force?: boolean, requestId?: string) => {
+    return GitService.createWorktreeFromPr(
+      repoPath,
+      name,
+      prNumber,
+      localBranch,
+      force,
+      (progress) => {
+        const payload: CreateWorktreeProgressEvent = { requestId, ...progress }
+        _e.sender.send(IPC.GIT_CREATE_WORKTREE_PROGRESS, payload)
+      }
+    )
+  })
+
   ipcMain.handle(IPC.GIT_REMOVE_WORKTREE, async (_e, repoPath: string, worktreePath: string) => {
     return GitService.removeWorktree(repoPath, worktreePath)
   })
@@ -103,6 +117,10 @@ export function registerIpcHandlers(): void {
   // ── GitHub handlers ──
   ipcMain.handle(IPC.GITHUB_GET_PR_STATUSES, async (_e, repoPath: string, branches: string[]) => {
     return GithubService.getPrStatuses(repoPath, branches)
+  })
+
+  ipcMain.handle(IPC.GITHUB_LIST_OPEN_PRS, async (_e, repoPath: string) => {
+    return GithubService.listOpenPrs(repoPath)
   })
 
   // ── PTY handlers ──
