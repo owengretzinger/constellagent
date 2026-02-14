@@ -77,6 +77,23 @@
   flex: 0.6 !important;
 }
 
+.selectInput {
+  width: 100%;
+  padding: var(--space-3) var(--space-4);
+  background: var(--surface-0);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  font-family: var(--font-ui);
+  outline: none;
+  transition: border-color var(--transition-fast);
+}
+
+.selectInput:focus {
+  border-color: var(--accent-blue);
+}
+
 .removeBtn {
   width: 24px;
   height: 24px;
