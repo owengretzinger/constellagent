@@ -110,7 +110,10 @@ export function TerminalPanel({ ptyId, active }: Props) {
         })
 
         const fitAddon = new FitAddon()
-        const webLinksAddon = new WebLinksAddon()
+        const webLinksAddon = new WebLinksAddon((event, uri) => {
+          event.preventDefault()
+          window.open(uri, '_blank')
+        })
         term.loadAddon(fitAddon)
         term.loadAddon(webLinksAddon)
         term.open(termDiv)
