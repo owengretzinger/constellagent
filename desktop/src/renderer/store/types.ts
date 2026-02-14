@@ -22,6 +22,7 @@ export interface Project {
   name: string
   repoPath: string
   startupCommands?: StartupCommand[]
+  prLinkProvider?: PrLinkProvider
 }
 
 export interface Workspace {
@@ -54,7 +55,6 @@ export interface Settings {
   diffInline: boolean
   terminalFontSize: number
   editorFontSize: number
-  prLinkProvider: PrLinkProvider
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -65,7 +65,6 @@ export const DEFAULT_SETTINGS: Settings = {
   diffInline: false,
   terminalFontSize: 14,
   editorFontSize: 13,
-  prLinkProvider: 'github',
 }
 
 export interface Toast {
