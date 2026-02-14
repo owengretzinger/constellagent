@@ -27,6 +27,11 @@ export interface FileDiff {
   hunks: string // raw unified diff text
 }
 
+export interface PrWorktreeResult {
+  worktreePath: string
+  branch: string
+}
+
 async function git(args: string[], cwd: string): Promise<string> {
   const { stdout } = await execFileAsync('git', args, {
     cwd,
@@ -332,6 +337,97 @@ export class GitService {
     await copyEnvFiles(repoPath, worktreePath, repoPath)
 
     return worktreePath
+  }
+
+  static async createWorktreeFromPr(
+    repoPath: string,
+    name: string,
+    prNumber: number,
+    localBranch: string,
+    force = false,
+    onProgress?: CreateWorktreeProgressReporter
+  ): Promise<PrWorktreeResult> {
+    const parsedPrNumber = Number(prNumber)
+    if (!Number.isInteger(parsedPrNumber) || parsedPrNumber <= 0) {
+      throw new Error('Invalid pull request number')
+    }
+
+    const requestedBranch = localBranch.trim()
+    const branch = GitService.sanitizeBranchName(requestedBranch)
+    if (!branch) throw new Error('Branch name is empty after sanitization')
+
+    const parentDir = dirname(repoPath)
+    const repoName = basename(repoPath)
+    const safeWorktreeName = sanitizeWorktreeName(name)
+    const worktreePath = resolve(parentDir, `${repoName}-ws-${safeWorktreeName}`)
+    ensureWithinParent(parentDir, worktreePath)
+
+    reportCreateWorktreeProgress(onProgress, {
+      stage: 'prune-worktrees',
+      message: 'Cleaning stale worktree references...',
+    })
+    await git(['worktree', 'prune'], repoPath).catch(() => {})
+
+    const hasOrigin = await GitService.hasRemote(repoPath, 'origin')
+    if (!hasOrigin) {
+      throw new Error('No origin remote found')
+    }
+
+    reportCreateWorktreeProgress(onProgress, {
+      stage: 'fetch-origin',
+      message: `Fetching PR #${parsedPrNumber}...`,
+    })
+    try {
+      await git(['fetch', '--prune', 'origin'], repoPath).catch(() => {})
+      await git(['fetch', 'origin', `+pull/${parsedPrNumber}/head:${branch}`], repoPath)
+    } catch (err) {
+      const msg = friendlyGitError(err, `Failed to fetch PR #${parsedPrNumber}`)
+      if (msg.includes('couldn\'t find remote ref') || msg.includes('no such remote ref')) {
+        throw new Error(`Pull request #${parsedPrNumber} not found`)
+      }
+      throw new Error(msg)
+    }
+
+    reportCreateWorktreeProgress(onProgress, {
+      stage: 'prepare-worktree-dir',
+      message: 'Preparing worktree directory...',
+    })
+    if (existsSync(worktreePath)) {
+      if (!force) {
+        throw new Error('WORKTREE_PATH_EXISTS')
+      }
+      await rm(worktreePath, { recursive: true, force: true })
+    }
+
+    reportCreateWorktreeProgress(onProgress, {
+      stage: 'create-worktree',
+      message: 'Creating worktree...',
+    })
+    const args = ['worktree', 'add']
+    if (force) args.push('--force')
+    args.push(worktreePath, branch)
+
+    try {
+      await git(args, repoPath)
+    } catch (err) {
+      const msg = friendlyGitError(err, 'Failed to create worktree')
+      if (msg === 'BRANCH_CHECKED_OUT' && !force) throw new Error(msg)
+      throw new Error(msg)
+    }
+
+    reportCreateWorktreeProgress(onProgress, {
+      stage: 'sync-branch',
+      message: 'Fast-forwarding branch...',
+    })
+    await git(['pull', '--ff-only'], worktreePath).catch(() => {})
+
+    reportCreateWorktreeProgress(onProgress, {
+      stage: 'copy-env-files',
+      message: 'Copying env files...',
+    })
+    await copyEnvFiles(repoPath, worktreePath, repoPath)
+
+    return { worktreePath, branch }
   }
 
   static async removeWorktree(repoPath: string, worktreePath: string): Promise<void> {

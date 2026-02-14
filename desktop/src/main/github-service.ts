@@ -1,6 +1,13 @@
 import { execFile } from 'child_process'
 import { promisify } from 'util'
-import type { PrInfo, PrLookupResult, CheckStatus, PrState } from '../shared/github-types'
+import type {
+  PrInfo,
+  PrLookupResult,
+  CheckStatus,
+  PrState,
+  OpenPrInfo,
+  ListOpenPrsResult,
+} from '../shared/github-types'
 
 const execFileAsync = promisify(execFile)
 
@@ -15,6 +22,10 @@ interface GraphqlPullRequestNode {
   title: string
   url: string
   updatedAt: string
+  headRefName?: string | null
+  author?: {
+    login?: string | null
+  } | null
   reviewDecision?: string | null
   mergeStateStatus?: string | null
   commits?: {
@@ -35,6 +46,17 @@ interface GraphqlConnection {
 interface GraphqlResponse {
   data?: {
     repository?: Record<string, GraphqlConnection>
+  }
+  errors?: Array<{ message?: string }>
+}
+
+interface GraphqlOpenPrListResponse {
+  data?: {
+    repository?: {
+      pullRequests?: {
+        nodes?: GraphqlPullRequestNode[]
+      }
+    }
   }
   errors?: Array<{ message?: string }>
 }
@@ -60,6 +82,11 @@ interface RepoResponseCache {
   data: Record<string, PrInfo | null>
 }
 
+interface OpenPrListCache {
+  fetchedAt: number
+  data: OpenPrInfo[]
+}
+
 interface UnresolvedThreadCacheEntry {
   count: number
   fetchedAt: number
@@ -69,10 +96,13 @@ class GithubAuthError extends Error {}
 
 export class GithubService {
   private static AUTH_TOKEN_REFRESH_MS = 60_000
+  private static OPEN_PR_LIST_LIMIT = 50
+  private static OPEN_PR_LIST_CACHE_MS = 25_000
   private static UNRESOLVED_THREAD_CACHE_TTL_MS = 30_000
   private static ghAvailable: boolean | null = null
   private static repoInfoCache = new Map<string, GithubRepoInfo | null>()
   private static responseCache = new Map<string, RepoResponseCache>()
+  private static openPrListCache = new Map<string, OpenPrListCache>()
   private static unresolvedThreadCache = new Map<string, UnresolvedThreadCacheEntry>()
   private static authToken: string | null = null
   private static authTokenChecked = false
@@ -147,15 +177,50 @@ export class GithubService {
       return { available: true, data: this.cloneData(result.data) }
     } catch (err) {
       if (err instanceof GithubAuthError) {
-        this.authToken = null
-        this.authTokenChecked = false
-        this.authTokenFetchedAt = 0
+        this.clearAuthTokenCache()
         return { available: false, error: 'not_authenticated', data: {} }
       }
       if (cached) {
         return { available: true, data: this.cloneData(cached.data) }
       }
       return { available: true, data: this.emptyResult(normalizedBranches) }
+    }
+  }
+
+  static async listOpenPrs(repoPath: string): Promise<ListOpenPrsResult> {
+    if (!(await this.isGhAvailable())) {
+      return { available: false, error: 'gh_not_installed', data: [] }
+    }
+    const repoInfo = await this.getGithubRepoInfo(repoPath)
+    if (!repoInfo) {
+      return { available: false, error: 'not_github_repo', data: [] }
+    }
+    const token = await this.getAuthToken()
+    if (!token) {
+      return { available: false, error: 'not_authenticated', data: [] }
+    }
+
+    const cached = this.openPrListCache.get(repoPath)
+    if (cached && Date.now() - cached.fetchedAt < this.OPEN_PR_LIST_CACHE_MS) {
+      return { available: true, data: this.cloneOpenPrs(cached.data) }
+    }
+
+    try {
+      const data = await this.fetchOpenPrList(repoInfo, token)
+      this.openPrListCache.set(repoPath, {
+        fetchedAt: Date.now(),
+        data: this.cloneOpenPrs(data),
+      })
+      return { available: true, data: this.cloneOpenPrs(data) }
+    } catch (err) {
+      if (err instanceof GithubAuthError) {
+        this.clearAuthTokenCache()
+        return { available: false, error: 'not_authenticated', data: [] }
+      }
+      if (cached) {
+        return { available: true, data: this.cloneOpenPrs(cached.data) }
+      }
+      return { available: true, data: [] }
     }
   }
 
@@ -216,6 +281,12 @@ export class GithubService {
     return `${repoPath}::${branches.join('\u0000')}`
   }
 
+  private static clearAuthTokenCache(): void {
+    this.authToken = null
+    this.authTokenChecked = false
+    this.authTokenFetchedAt = 0
+  }
+
   private static setCachedResponse(
     cacheKey: string,
     data: Record<string, PrInfo | null>
@@ -231,6 +302,10 @@ export class GithubService {
       cloned[branch] = pr ? { ...pr } : null
     }
     return cloned
+  }
+
+  private static cloneOpenPrs(data: OpenPrInfo[]): OpenPrInfo[] {
+    return data.map((pr) => ({ ...pr }))
   }
 
   private static emptyResult(branches: string[]): Record<string, PrInfo | null> {
@@ -274,6 +349,38 @@ export class GithubService {
     }
 
     return { data }
+  }
+
+  private static async fetchOpenPrList(
+    repoInfo: GithubRepoInfo,
+    token: string
+  ): Promise<OpenPrInfo[]> {
+    const { query, variables } = this.buildOpenPrListQuery(repoInfo, this.OPEN_PR_LIST_LIMIT)
+    const payload = await this.fetchGraphqlJson<GraphqlOpenPrListResponse>(query, variables, token)
+    const nodes = payload.data?.repository?.pullRequests?.nodes ?? []
+    const data = nodes.map((node) => ({
+      ...this.mapPullRequest(node),
+      state: 'open' as const,
+      headRefName: node.headRefName?.trim() || `pr-${node.number}`,
+      authorLogin: node.author?.login || undefined,
+    }))
+
+    const unresolvedLookups: Promise<void>[] = []
+    for (let i = 0; i < nodes.length; i++) {
+      const node = nodes[i]
+      const mapped = data[i]
+      if (node && mapped && mapped.state === 'open') {
+        unresolvedLookups.push(
+          this.attachUnresolvedReviewThreads(repoInfo, token, node, mapped)
+        )
+      }
+    }
+
+    if (unresolvedLookups.length > 0) {
+      await Promise.allSettled(unresolvedLookups)
+    }
+
+    return data
   }
 
   private static buildGraphqlQuery(
@@ -331,6 +438,51 @@ export class GithubService {
     `
 
     return { query, variables }
+  }
+
+  private static buildOpenPrListQuery(
+    repoInfo: GithubRepoInfo,
+    first: number
+  ): { query: string; variables: Record<string, string | number> } {
+    const query = `
+      query OpenPullRequests($owner: String!, $name: String!, $first: Int!) {
+        repository(owner: $owner, name: $name) {
+          pullRequests(states: OPEN, first: $first, orderBy: { field: UPDATED_AT, direction: DESC }) {
+            nodes {
+              number
+              state
+              title
+              url
+              updatedAt
+              headRefName
+              reviewDecision
+              mergeStateStatus
+              author {
+                login
+              }
+              commits(last: 1) {
+                nodes {
+                  commit {
+                    statusCheckRollup {
+                      state
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    `
+
+    return {
+      query,
+      variables: {
+        owner: repoInfo.owner,
+        name: repoInfo.name,
+        first,
+      },
+    }
   }
 
   private static hasAuthError(errors: Array<{ message?: string }>): boolean {
