@@ -339,6 +339,105 @@ export class GitService {
     return worktreePath
   }
 
+  static async createCloneWorkspace(
+    repoPath: string,
+    name: string,
+    branch: string,
+    newBranch: boolean,
+    baseBranch?: string,
+    force = false,
+    onProgress?: CreateWorktreeProgressReporter
+  ): Promise<string> {
+    const requestedBranch = branch.trim()
+    branch = GitService.sanitizeBranchName(requestedBranch)
+    if (!branch) throw new Error('Branch name is empty after sanitization')
+
+    const parentDir = dirname(repoPath)
+    const repoName = basename(repoPath)
+    const safeCloneName = sanitizeWorktreeName(name)
+    const clonePath = resolve(parentDir, `${repoName}-clone-${safeCloneName}`)
+    ensureWithinParent(parentDir, clonePath)
+
+    reportCreateWorktreeProgress(onProgress, {
+      stage: 'resolve-clone-source',
+      message: 'Resolving clone source...',
+    })
+    const cloneSource = await git(['remote', 'get-url', 'origin'], repoPath).catch(() => repoPath)
+
+    reportCreateWorktreeProgress(onProgress, {
+      stage: 'prepare-worktree-dir',
+      message: 'Preparing clone directory...',
+    })
+    if (existsSync(clonePath)) {
+      if (!force) {
+        throw new Error('WORKTREE_PATH_EXISTS')
+      }
+      await rm(clonePath, { recursive: true, force: true })
+    }
+
+    reportCreateWorktreeProgress(onProgress, {
+      stage: 'clone-repository',
+      message: 'Cloning repository...',
+    })
+    try {
+      await git(['clone', cloneSource, clonePath], parentDir)
+    } catch (err) {
+      const msg = friendlyGitError(err, 'Failed to clone repository')
+      throw new Error(msg)
+    }
+
+    reportCreateWorktreeProgress(onProgress, {
+      stage: 'fetch-origin',
+      message: 'Syncing remote...',
+    })
+    await git(['fetch', '--prune', 'origin'], clonePath).catch(() => {})
+
+    if (newBranch) {
+      if (!baseBranch) {
+        reportCreateWorktreeProgress(onProgress, {
+          stage: 'resolve-default-branch',
+          message: 'Resolving default base branch...',
+        })
+        baseBranch = await GitService.getDefaultBranch(clonePath)
+      }
+
+      reportCreateWorktreeProgress(onProgress, {
+        stage: 'checkout-branch',
+        message: 'Creating branch...',
+      })
+      try {
+        await git(['checkout', baseBranch], clonePath).catch(async () => {
+          await git(['checkout', '-t', `origin/${baseBranch}`], clonePath)
+        })
+        await git(['checkout', '-b', branch], clonePath)
+      } catch (err) {
+        const msg = friendlyGitError(err, 'Failed to create branch')
+        throw new Error(msg)
+      }
+    } else {
+      reportCreateWorktreeProgress(onProgress, {
+        stage: 'checkout-branch',
+        message: 'Checking out branch...',
+      })
+      try {
+        await git(['checkout', branch], clonePath).catch(async () => {
+          await git(['checkout', '-t', `origin/${branch}`], clonePath)
+        })
+      } catch (err) {
+        const msg = friendlyGitError(err, 'Failed to checkout branch')
+        throw new Error(msg)
+      }
+    }
+
+    reportCreateWorktreeProgress(onProgress, {
+      stage: 'copy-env-files',
+      message: 'Copying env files...',
+    })
+    await copyEnvFiles(repoPath, clonePath, repoPath)
+
+    return clonePath
+  }
+
   static async createWorktreeFromPr(
     repoPath: string,
     name: string,
@@ -436,6 +535,34 @@ export class GitService {
     } catch (err) {
       throw new Error(friendlyGitError(err, 'Failed to remove worktree'))
     }
+  }
+
+  static async removeWorkspacePath(repoPath: string, workspacePath: string): Promise<void> {
+    const targetPath = resolve(workspacePath)
+    const repoRoot = resolve(repoPath)
+    if (targetPath === repoRoot) return
+    if (!existsSync(targetPath)) return
+
+    const repoParent = dirname(repoRoot)
+    ensureWithinParent(repoParent, targetPath)
+
+    const repoName = basename(repoRoot)
+    const leafName = basename(targetPath)
+    const isManagedWorkspace =
+      leafName.startsWith(`${repoName}-ws-`) ||
+      leafName.startsWith(`${repoName}-clone-`)
+    if (!isManagedWorkspace) {
+      throw new Error('Refusing to remove unmanaged workspace path')
+    }
+
+    const worktrees = await GitService.listWorktrees(repoRoot).catch(() => [])
+    const isWorktree = worktrees.some((worktree) => resolve(worktree.path) === targetPath)
+    if (isWorktree) {
+      await GitService.removeWorktree(repoRoot, targetPath)
+      return
+    }
+
+    await rm(targetPath, { recursive: true, force: true })
   }
 
   static async getTopLevel(cwd: string): Promise<string> {

@@ -167,6 +167,21 @@ export function registerIpcHandlers(): void {
     )
   })
 
+  ipcMain.handle(IPC.GIT_CREATE_CLONE_WORKSPACE, async (_e, repoPath: string, name: string, branch: string, newBranch: boolean, baseBranch?: string, force?: boolean, requestId?: string) => {
+    return GitService.createCloneWorkspace(
+      repoPath,
+      name,
+      branch,
+      newBranch,
+      baseBranch,
+      force,
+      (progress) => {
+        const payload: CreateWorktreeProgressEvent = { requestId, ...progress }
+        _e.sender.send(IPC.GIT_CREATE_WORKTREE_PROGRESS, payload)
+      }
+    )
+  })
+
   ipcMain.handle(IPC.GIT_CREATE_WORKTREE_FROM_PR, async (_e, repoPath: string, name: string, prNumber: number, localBranch: string, force?: boolean, requestId?: string) => {
     return GitService.createWorktreeFromPr(
       repoPath,
@@ -182,7 +197,7 @@ export function registerIpcHandlers(): void {
   })
 
   ipcMain.handle(IPC.GIT_REMOVE_WORKTREE, async (_e, repoPath: string, worktreePath: string) => {
-    return GitService.removeWorktree(repoPath, worktreePath)
+    return GitService.removeWorkspacePath(repoPath, worktreePath)
   })
 
   ipcMain.handle(IPC.GIT_GET_STATUS, async (_e, worktreePath: string) => {

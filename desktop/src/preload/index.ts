@@ -9,6 +9,8 @@ const api = {
       ipcRenderer.invoke(IPC.GIT_LIST_WORKTREES, repoPath),
     createWorktree: (repoPath: string, name: string, branch: string, newBranch: boolean, baseBranch?: string, force?: boolean, requestId?: string) =>
       ipcRenderer.invoke(IPC.GIT_CREATE_WORKTREE, repoPath, name, branch, newBranch, baseBranch, force, requestId),
+    createCloneWorkspace: (repoPath: string, name: string, branch: string, newBranch: boolean, baseBranch?: string, force?: boolean, requestId?: string) =>
+      ipcRenderer.invoke(IPC.GIT_CREATE_CLONE_WORKSPACE, repoPath, name, branch, newBranch, baseBranch, force, requestId),
     createWorktreeFromPr: (repoPath: string, name: string, prNumber: number, localBranch: string, force?: boolean, requestId?: string) =>
       ipcRenderer.invoke(IPC.GIT_CREATE_WORKTREE_FROM_PR, repoPath, name, prNumber, localBranch, force, requestId) as Promise<{ worktreePath: string; branch: string }>,
     onCreateWorktreeProgress: (callback: (progress: CreateWorktreeProgressEvent) => void) => {
