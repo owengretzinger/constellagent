@@ -625,6 +625,12 @@
   to { transform: rotate(360deg); }
 }
 
+/* Root workspace — subtle distinction */
+.rootWorkspace .workspaceIcon {
+  font-weight: var(--weight-semibold);
+  opacity: 0.7;
+}
+
 .workspaceIcon {
   font-size: var(--text-sm);
   opacity: 0.5;
