@@ -547,6 +547,13 @@ window.addEventListener('beforeunload', () => {
 
 // Load persisted state on startup
 export async function hydrateFromDisk(): Promise<void> {
+  let livePtyIds: Set<string> | null = null
+  try {
+    livePtyIds = new Set(await window.api.pty.list())
+  } catch (err) {
+    console.error('Failed to list live PTYs before hydrate:', err)
+  }
+
   try {
     const data = await window.api.state.load()
     if (data) {
@@ -558,20 +565,11 @@ export async function hydrateFromDisk(): Promise<void> {
 
   // Reconcile persisted terminal tabs against live PTY processes
   try {
-    const livePtyIds = new Set(await window.api.pty.list())
+    if (!livePtyIds) {
+      livePtyIds = new Set(await window.api.pty.list())
+    }
     const store = useAppStore.getState()
     const tabs = store.tabs
-
-    if (tabs.length > 0 && livePtyIds.size > 0) {
-      // Reattach surviving terminal tabs to the new webContents
-      const reattachPromises: Promise<boolean>[] = []
-      for (const tab of tabs) {
-        if (tab.type === 'terminal' && livePtyIds.has(tab.ptyId)) {
-          reattachPromises.push(window.api.pty.reattach(tab.ptyId))
-        }
-      }
-      await Promise.all(reattachPromises)
-    }
 
     // Respawn PTYs for terminal tabs whose process is no longer alive
     const deadTabs = tabs.filter(
@@ -603,6 +601,7 @@ export async function hydrateFromDisk(): Promise<void> {
         : (finalTabs.find((t) => t.workspaceId === store.activeWorkspaceId)?.id ?? null)
       useAppStore.setState({ tabs: finalTabs, activeTabId })
     }
+
   } catch (err) {
     console.error('Failed to reconcile PTY tabs:', err)
   }

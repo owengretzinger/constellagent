@@ -10,6 +10,9 @@ interface PtyInstance {
   onExitCallbacks: Array<(exitCode: number) => void>
   cols: number
   rows: number
+  outputSeq: number
+  replayChunks: string[]
+  replayChars: number
   workspaceId?: string
   codexPromptBuffer: string
   codexAwaitingAnswer: boolean
@@ -62,6 +65,7 @@ function isLikelyCodexCommand(command: string): boolean {
 const DEFAULT_ACTIVITY_DIR = '/tmp/constellagent-activity'
 const CODEX_MARKER_SEGMENT = '.codex.'
 const CODEX_PROMPT_BUFFER_MAX = 4096
+const PTY_REPLAY_BUFFER_MAX_CHARS = 8_000_000
 const CODEX_QUESTION_HEADER_RE = /Question\s+\d+\s*\/\s*\d+\s*\(\s*\d+\s+unanswered\s*\)/i
 const CODEX_QUESTION_HINT_RE = /enter to submit answer/i
 
@@ -74,6 +78,26 @@ function stripAnsiSequences(data: string): string {
 
 function getActivityDir(): string {
   return process.env.CONSTELLAGENT_ACTIVITY_DIR || DEFAULT_ACTIVITY_DIR
+}
+
+function appendReplayChunk(instance: PtyInstance, chunk: string): void {
+  if (!chunk) return
+
+  if (chunk.length >= PTY_REPLAY_BUFFER_MAX_CHARS) {
+    const tail = chunk.slice(chunk.length - PTY_REPLAY_BUFFER_MAX_CHARS)
+    instance.replayChunks = [tail]
+    instance.replayChars = tail.length
+    return
+  }
+
+  instance.replayChunks.push(chunk)
+  instance.replayChars += chunk.length
+
+  while (instance.replayChars > PTY_REPLAY_BUFFER_MAX_CHARS && instance.replayChunks.length > 0) {
+    const removed = instance.replayChunks.shift()
+    if (!removed) break
+    instance.replayChars -= removed.length
+  }
 }
 
 export class PtyManager {
@@ -106,10 +130,27 @@ export class PtyManager {
       } as Record<string, string>,
     })
 
+    const instance: PtyInstance = {
+      process: proc,
+      webContents,
+      onExitCallbacks: [],
+      cols: 80,
+      rows: 24,
+      outputSeq: 0,
+      replayChunks: [],
+      replayChars: 0,
+      workspaceId: extraEnv?.AGENT_ORCH_WS_ID,
+      codexPromptBuffer: '',
+      codexAwaitingAnswer: false,
+    }
+
     let pendingWrite = initialWrite
     proc.onData((data) => {
+      const startSeq = instance.outputSeq
+      instance.outputSeq += data.length
+      appendReplayChunk(instance, data)
       if (!instance.webContents.isDestroyed()) {
-        instance.webContents.send(`${IPC.PTY_DATA}:${id}`, data)
+        instance.webContents.send(`${IPC.PTY_DATA}:${id}`, startSeq, data)
       }
       this.handleCodexQuestionPrompt(instance, data)
       // Write initial command on first output (shell is ready)
@@ -119,17 +160,6 @@ export class PtyManager {
         proc.write(toWrite)
       }
     })
-
-    const instance: PtyInstance = {
-      process: proc,
-      webContents,
-      onExitCallbacks: [],
-      cols: 80,
-      rows: 24,
-      workspaceId: extraEnv?.AGENT_ORCH_WS_ID,
-      codexPromptBuffer: '',
-      codexAwaitingAnswer: false,
-    }
 
     proc.onExit(({ exitCode }) => {
       this.clearCodexWorkspaceActivity(instance.workspaceId, instance.process.pid)
@@ -164,6 +194,7 @@ export class PtyManager {
   resize(ptyId: string, cols: number, rows: number): void {
     const instance = this.ptys.get(ptyId)
     if (instance) {
+      if (instance.cols === cols && instance.rows === rows) return
       instance.cols = cols
       instance.rows = rows
       instance.process.resize(cols, rows)
@@ -276,14 +307,28 @@ export class PtyManager {
   }
 
   /** Update the webContents reference for an existing PTY (e.g. after renderer reload) */
-  reattach(ptyId: string, webContents: WebContents): boolean {
+  reattach(
+    ptyId: string,
+    webContents: WebContents,
+    sinceSeq?: number
+  ): { ok: boolean; replay?: string; baseSeq: number; endSeq: number; truncated: boolean; cols: number; rows: number } {
     const instance = this.ptys.get(ptyId)
-    if (!instance) return false
+    if (!instance) return { ok: false, baseSeq: 0, endSeq: 0, truncated: false, cols: 0, rows: 0 }
     instance.webContents = webContents
-    // Send SIGWINCH directly so TUI apps (Claude Code) redraw their screen.
-    // Can't use resize() with same dimensions — kernel skips the signal on no-op.
-    try { process.kill(instance.process.pid, 'SIGWINCH') } catch {}
-    return true
+
+    const endSeq = instance.outputSeq
+    const baseSeq = Math.max(0, endSeq - instance.replayChars)
+    const requestedSince = typeof sinceSeq === 'number' && Number.isFinite(sinceSeq) ? Math.max(0, Math.floor(sinceSeq)) : baseSeq
+    const truncated = requestedSince < baseSeq
+
+    let replayData: string | undefined
+    if (instance.replayChunks.length > 0 && requestedSince < endSeq) {
+      const joined = instance.replayChunks.join('')
+      const offset = Math.max(0, requestedSince - baseSeq)
+      replayData = joined.slice(offset)
+    }
+
+    return { ok: true, replay: replayData, baseSeq, endSeq, truncated, cols: instance.cols, rows: instance.rows }
   }
 
   destroyAll(): void {

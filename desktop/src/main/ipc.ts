@@ -257,10 +257,10 @@ export function registerIpcHandlers(): void {
     return ptyManager.list()
   })
 
-  ipcMain.handle(IPC.PTY_REATTACH, async (_e, ptyId: string) => {
+  ipcMain.handle(IPC.PTY_REATTACH, async (_e, ptyId: string, sinceSeq?: number) => {
     const win = BrowserWindow.fromWebContents(_e.sender)
     if (!win) throw new Error('No window found')
-    return ptyManager.reattach(ptyId, win.webContents)
+    return ptyManager.reattach(ptyId, win.webContents, sinceSeq)
   })
 
   // ── File handlers ──
