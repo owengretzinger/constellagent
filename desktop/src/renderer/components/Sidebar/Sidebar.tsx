@@ -481,7 +481,7 @@ export function Sidebar() {
           const isExpanded = isProjectExpanded(project.id);
           const projectWorkspaces = workspaces
             .filter((w) => w.projectId === project.id)
-            .sort((a, b) => (a.isRoot ? -1 : b.isRoot ? 1 : 0));
+            .sort((a, b) => (Number(Boolean(b.isRoot)) - Number(Boolean(a.isRoot))));
 
           return (
             <div key={project.id} className={styles.projectSection}>

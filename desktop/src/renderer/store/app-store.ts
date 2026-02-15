@@ -30,57 +30,91 @@ export const useAppStore = create<AppState>((set, get) => ({
     set((s) => ({ projects: [...s.projects, project] })),
 
   addProjectWithRootWorkspace: async (project) => {
-    get().addProject(project)
-
-    let branch = ''
     try {
-      branch = await window.api.git.getCurrentBranch(project.repoPath)
-    } catch { /* fallback to empty */ }
+      get().addProject(project)
 
-    const wsId = crypto.randomUUID()
-    get().addWorkspace({
-      id: wsId,
-      name: project.name,
-      branch,
-      worktreePath: project.repoPath,
-      projectId: project.id,
-      isRoot: true,
-    })
+      let branch = ''
+      try {
+        branch = await window.api.git.getCurrentBranch(project.repoPath)
+      } catch { /* fallback to empty */ }
 
-    const commands = project.startupCommands ?? []
-    const shell = get().settings.defaultShell || undefined
+      const wsId = crypto.randomUUID()
+      // Insert workspace first, then activate it via setActiveWorkspace so activeTabId stays coherent
+      // even if terminal creation fails.
+      set((s) => ({
+        workspaces: [
+          ...s.workspaces,
+          {
+            id: wsId,
+            name: project.name,
+            branch,
+            worktreePath: project.repoPath,
+            projectId: project.id,
+            isRoot: true,
+          },
+        ],
+      }))
+      get().setActiveWorkspace(wsId)
 
-    if (commands.length === 0) {
-      const ptyId = await window.api.pty.create(project.repoPath, shell, { AGENT_ORCH_WS_ID: wsId })
-      get().addTab({
-        id: crypto.randomUUID(),
-        workspaceId: wsId,
-        type: 'terminal',
-        title: 'Terminal',
-        ptyId,
-      })
-    } else {
-      // Pre-trust worktree in Claude Code if any command uses claude
-      if (commands.some((c) => c.command.trim().startsWith('claude'))) {
-        await window.api.claude.trustPath(project.repoPath).catch(() => {})
+      const commands = project.startupCommands ?? []
+      const shell = get().settings.defaultShell || undefined
+
+      if (commands.length === 0) {
+        try {
+          const ptyId = await window.api.pty.create(project.repoPath, shell, { AGENT_ORCH_WS_ID: wsId })
+          get().addTab({
+            id: crypto.randomUUID(),
+            workspaceId: wsId,
+            type: 'terminal',
+            title: 'Terminal',
+            ptyId,
+          })
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : 'Failed to start terminal'
+          console.error('Failed to create PTY for new project:', err)
+          get().addToast({ id: crypto.randomUUID(), message: msg, type: 'error' })
+        }
+      } else {
+        // Pre-trust worktree in Claude Code if any command uses claude
+        if (commands.some((c) => c.command.trim().startsWith('claude'))) {
+          await window.api.claude.trustPath(project.repoPath).catch(() => {})
+        }
+        let firstTabId: string | null = null
+        let failures = 0
+        let lastFailureMsg = ''
+        for (const cmd of commands) {
+          try {
+            const ptyId = await window.api.pty.create(project.repoPath, shell, { AGENT_ORCH_WS_ID: wsId })
+            const tabId = crypto.randomUUID()
+            if (!firstTabId) firstTabId = tabId
+            get().addTab({
+              id: tabId,
+              workspaceId: wsId,
+              type: 'terminal',
+              title: cmd.name || cmd.command,
+              ptyId,
+            })
+            setTimeout(() => {
+              window.api.pty.write(ptyId, cmd.command + '\n')
+            }, 500)
+          } catch (err) {
+            failures++
+            lastFailureMsg = err instanceof Error ? err.message : 'Failed to start terminal'
+            console.error('Failed to create PTY for startup command:', cmd, err)
+          }
+        }
+        if (firstTabId) get().setActiveTab(firstTabId)
+        if (failures > 0) {
+          const msg = failures === commands.length
+            ? `Failed to start terminals: ${lastFailureMsg}`
+            : `Started some terminals, but ${failures} failed: ${lastFailureMsg}`
+          get().addToast({ id: crypto.randomUUID(), message: msg, type: 'error' })
+        }
       }
-      let firstTabId: string | null = null
-      for (const cmd of commands) {
-        const ptyId = await window.api.pty.create(project.repoPath, shell, { AGENT_ORCH_WS_ID: wsId })
-        const tabId = crypto.randomUUID()
-        if (!firstTabId) firstTabId = tabId
-        get().addTab({
-          id: tabId,
-          workspaceId: wsId,
-          type: 'terminal',
-          title: cmd.name || cmd.command,
-          ptyId,
-        })
-        setTimeout(() => {
-          window.api.pty.write(ptyId, cmd.command + '\n')
-        }, 500)
-      }
-      if (firstTabId) get().setActiveTab(firstTabId)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to add project'
+      console.error('Failed to add project with root workspace:', err)
+      get().addToast({ id: crypto.randomUUID(), message: msg, type: 'error' })
     }
   },
 
@@ -315,7 +349,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     const ordered = s.projects.flatMap((p) =>
       s.workspaces
         .filter((w) => w.projectId === p.id)
-        .sort((a, b) => (a.isRoot ? -1 : b.isRoot ? 1 : 0)),
+        .sort((a, b) => (Number(!!b.isRoot) - Number(!!a.isRoot))),
     )
     if (ordered.length <= 1) return
     const idx = ordered.findIndex((w) => w.id === s.activeWorkspaceId)
@@ -329,7 +363,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     const ordered = s.projects.flatMap((p) =>
       s.workspaces
         .filter((w) => w.projectId === p.id)
-        .sort((a, b) => (a.isRoot ? -1 : b.isRoot ? 1 : 0)),
+        .sort((a, b) => (Number(!!b.isRoot) - Number(!!a.isRoot))),
     )
     if (ordered.length <= 1) return
     const idx = ordered.findIndex((w) => w.id === s.activeWorkspaceId)
@@ -657,9 +691,8 @@ export async function hydrateFromDisk(): Promise<void> {
   try {
     const storeAfterPty = useAppStore.getState()
     for (const project of storeAfterPty.projects) {
-      const hasRoot = storeAfterPty.workspaces.some(
-        (w) => w.projectId === project.id && w.isRoot
-      )
+      // Use direct setState here to avoid mutating active selection during hydration.
+      const hasRoot = useAppStore.getState().workspaces.some((w) => w.projectId === project.id && w.isRoot)
       if (!hasRoot) {
         let branch = ''
         try {
@@ -667,25 +700,35 @@ export async function hydrateFromDisk(): Promise<void> {
         } catch { /* fallback to empty */ }
 
         const wsId = crypto.randomUUID()
-        useAppStore.getState().addWorkspace({
-          id: wsId,
-          name: project.name,
-          branch,
-          worktreePath: project.repoPath,
-          projectId: project.id,
-          isRoot: true,
-        })
+        useAppStore.setState((s) => ({
+          workspaces: [
+            ...s.workspaces,
+            {
+              id: wsId,
+              name: project.name,
+              branch,
+              worktreePath: project.repoPath,
+              projectId: project.id,
+              isRoot: true,
+            },
+          ],
+        }))
 
-        const shell = storeAfterPty.settings.defaultShell || undefined
+        const shell = useAppStore.getState().settings.defaultShell || undefined
         try {
           const ptyId = await window.api.pty.create(project.repoPath, shell, { AGENT_ORCH_WS_ID: wsId })
-          useAppStore.getState().addTab({
-            id: crypto.randomUUID(),
-            workspaceId: wsId,
-            type: 'terminal',
-            title: 'Terminal',
-            ptyId,
-          })
+          useAppStore.setState((s) => ({
+            tabs: [
+              ...s.tabs,
+              {
+                id: crypto.randomUUID(),
+                workspaceId: wsId,
+                type: 'terminal',
+                title: 'Terminal',
+                ptyId,
+              },
+            ],
+          }))
         } catch {
           // If PTY creation fails, workspace still exists without a terminal
         }
