@@ -1,17 +1,34 @@
 import * as cron from 'node-cron'
+import { randomUUID } from 'crypto'
 import { BrowserWindow } from 'electron'
 import { IPC } from '../shared/ipc-channels'
 import type { AutomationConfig, AutomationRunStartedEvent } from '../shared/automation-types'
-import { PtyManager } from './pty-manager'
 import { GitService } from './git-service'
 import { trustPathForClaude } from './claude-config'
 
+interface TerminalService {
+  createOrAttach(request: {
+    sessionId: string
+    workspaceId: string
+    cwd: string
+    cols: number
+    rows: number
+    shell?: string
+    env?: Record<string, string>
+    useLoginShell?: boolean
+  }): Promise<unknown>
+  write(request: {
+    sessionId: string
+    data: string
+  }): Promise<unknown>
+}
+
 export class AutomationScheduler {
   private jobs = new Map<string, cron.ScheduledTask>()
-  private ptyManager: PtyManager
+  private terminalService: TerminalService
 
-  constructor(ptyManager: PtyManager) {
-    this.ptyManager = ptyManager
+  constructor(terminalService: TerminalService) {
+    this.terminalService = terminalService
   }
 
   schedule(config: AutomationConfig): void {
@@ -77,17 +94,24 @@ export class AutomationScheduler {
       // non-fatal
     }
 
-    // Spawn a shell with initialWrite — writes the claude command as soon as
-    // the shell emits its first output (ready), no manual timeout needed.
+    const ptyId = `pty-${randomUUID()}`
+
+    // Spawn a shell session in daemon-backed terminal host.
     const shell = process.env.SHELL || '/bin/zsh'
     const escapedPrompt = config.prompt.replace(/'/g, "'\\''")
-    const ptyId = this.ptyManager.create(
-      worktreePath,
-      win.webContents,
+    await this.terminalService.createOrAttach({
+      sessionId: ptyId,
+      workspaceId: config.projectId,
+      cwd: worktreePath,
+      cols: 80,
+      rows: 24,
       shell,
-      undefined,
-      `claude '${escapedPrompt}'\r`
-    )
+      useLoginShell: true,
+    })
+    await this.terminalService.write({
+      sessionId: ptyId,
+      data: `claude '${escapedPrompt}'\r`,
+    })
 
     // Notify renderer to create workspace + terminal tab
     if (!win.isDestroyed()) {

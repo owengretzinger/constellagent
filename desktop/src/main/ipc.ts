@@ -4,9 +4,9 @@ import { mkdir, writeFile } from 'fs/promises'
 import { existsSync, mkdirSync, writeFileSync } from 'fs'
 import { tmpdir } from 'os'
 import { watch, type FSWatcher } from 'fs'
+import { randomUUID } from 'crypto'
 import { IPC } from '../shared/ipc-channels'
 import type { CreateWorktreeProgressEvent } from '../shared/workspace-creation'
-import { PtyManager } from './pty-manager'
 import { GitService } from './git-service'
 import { GithubService } from './github-service'
 import { GraphiteService } from './graphite-service'
@@ -15,9 +15,39 @@ import { AutomationScheduler } from './automation-scheduler'
 import type { AutomationConfig } from '../shared/automation-types'
 import { trustPathForClaude, loadClaudeSettings, saveClaudeSettings, loadJsonFile, saveJsonFile } from './claude-config'
 import { loadCodexConfigText, saveCodexConfigText } from './codex-config'
+import { getTerminalHostClient } from './lib/terminal-host/client'
 
-const ptyManager = new PtyManager()
-const automationScheduler = new AutomationScheduler(ptyManager)
+const terminalHostClient = getTerminalHostClient()
+const automationScheduler = new AutomationScheduler(terminalHostClient)
+
+terminalHostClient.on('data', (sessionId: string, data: string) => {
+  const channel = `${IPC.PTY_DATA}:${sessionId}`
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (!win.isDestroyed()) {
+      win.webContents.send(channel, data)
+    }
+  }
+})
+
+terminalHostClient.on('terminal-error', (sessionId: string, message: string) => {
+  const channel = `${IPC.PTY_DATA}:${sessionId}`
+  const line = `\r\n[terminal host error] ${message}\r\n`
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (!win.isDestroyed()) {
+      win.webContents.send(channel, line)
+    }
+  }
+})
+
+terminalHostClient.on('exit', (sessionId: string, exitCode: number) => {
+  const channel = `${IPC.PTY_DATA}:${sessionId}`
+  const line = `\r\n[Process exited with code ${exitCode}]\r\n`
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (!win.isDestroyed()) {
+      win.webContents.send(channel, line)
+    }
+  }
+})
 
 interface FsWatchSubscriber {
   webContents: WebContents
@@ -256,32 +286,46 @@ export function registerIpcHandlers(): void {
   })
 
   // ── PTY handlers ──
-  ipcMain.handle(IPC.PTY_CREATE, async (_e, workingDir: string, shell?: string, extraEnv?: Record<string, string>, useLoginShell?: boolean) => {
-    const win = BrowserWindow.fromWebContents(_e.sender)
-    if (!win) throw new Error('No window found')
-    return ptyManager.create(workingDir, win.webContents, shell, undefined, undefined, extraEnv, useLoginShell ?? true)
+  ipcMain.handle(IPC.PTY_CREATE, async (_e, workingDir: string, shell?: string, extraEnv?: Record<string, string>, useLoginShell?: boolean, sessionId?: string) => {
+    const id = (sessionId && sessionId.trim()) || `pty-${randomUUID()}`
+    const workspaceId = extraEnv?.AGENT_ORCH_WS_ID || 'unknown-workspace'
+    await terminalHostClient.createOrAttach({
+      sessionId: id,
+      workspaceId,
+      cwd: workingDir,
+      cols: 80,
+      rows: 24,
+      shell,
+      env: extraEnv,
+      useLoginShell: useLoginShell ?? true,
+    })
+    return id
   })
 
   ipcMain.on(IPC.PTY_WRITE, (_e, ptyId: string, data: string) => {
-    ptyManager.write(ptyId, data)
+    terminalHostClient.write({ sessionId: ptyId, data }).catch(() => {})
   })
 
   ipcMain.on(IPC.PTY_RESIZE, (_e, ptyId: string, cols: number, rows: number) => {
-    ptyManager.resize(ptyId, cols, rows)
+    terminalHostClient.resize({ sessionId: ptyId, cols, rows }).catch(() => {})
+  })
+
+  ipcMain.on(IPC.PTY_DETACH, (_e, ptyId: string) => {
+    terminalHostClient.detach({ sessionId: ptyId }).catch(() => {})
   })
 
   ipcMain.on(IPC.PTY_DESTROY, (_e, ptyId: string) => {
-    ptyManager.destroy(ptyId)
+    terminalHostClient.kill({ sessionId: ptyId }).catch(() => {})
   })
 
   ipcMain.handle(IPC.PTY_LIST, async () => {
-    return ptyManager.list()
+    const sessions = await terminalHostClient.listSessions()
+    return sessions.sessions.map((s) => s.sessionId)
   })
 
   ipcMain.handle(IPC.PTY_REATTACH, async (_e, ptyId: string) => {
-    const win = BrowserWindow.fromWebContents(_e.sender)
-    if (!win) throw new Error('No window found')
-    return ptyManager.reattach(ptyId, win.webContents)
+    const sessions = await terminalHostClient.listSessions()
+    return sessions.sessions.some((s) => s.sessionId === ptyId)
   })
 
   // ── File handlers ──

@@ -46,12 +46,14 @@ const api = {
   },
 
   pty: {
-    create: (workingDir: string, shell?: string, extraEnv?: Record<string, string>, useLoginShell?: boolean) =>
-      ipcRenderer.invoke(IPC.PTY_CREATE, workingDir, shell, extraEnv, useLoginShell),
+    create: (workingDir: string, shell?: string, extraEnv?: Record<string, string>, useLoginShell?: boolean, sessionId?: string) =>
+      ipcRenderer.invoke(IPC.PTY_CREATE, workingDir, shell, extraEnv, useLoginShell, sessionId),
     write: (ptyId: string, data: string) =>
       ipcRenderer.send(IPC.PTY_WRITE, ptyId, data),
     resize: (ptyId: string, cols: number, rows: number) =>
       ipcRenderer.send(IPC.PTY_RESIZE, ptyId, cols, rows),
+    detach: (ptyId: string) =>
+      ipcRenderer.send(IPC.PTY_DETACH, ptyId),
     destroy: (ptyId: string) =>
       ipcRenderer.send(IPC.PTY_DESTROY, ptyId),
     list: () =>

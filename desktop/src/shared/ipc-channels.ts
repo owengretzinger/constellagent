@@ -23,6 +23,7 @@ export const IPC = {
   PTY_CREATE: 'pty:create',
   PTY_WRITE: 'pty:write',
   PTY_RESIZE: 'pty:resize',
+  PTY_DETACH: 'pty:detach',
   PTY_DESTROY: 'pty:destroy',
   PTY_LIST: 'pty:list',
   PTY_REATTACH: 'pty:reattach',

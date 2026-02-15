@@ -547,6 +547,16 @@ useAppStore.subscribe((state, prevState) => {
 // Uses sendSync + writeFileSync so the write completes before the renderer is destroyed.
 window.addEventListener('beforeunload', () => {
   if (saveTimer) clearTimeout(saveTimer)
+  const state = useAppStore.getState()
+  for (const tab of state.tabs) {
+    if (tab.type === 'terminal') {
+      try {
+        window.api.pty.detach(tab.ptyId)
+      } catch {
+        // Best-effort detach on app close.
+      }
+    }
+  }
   window.api.state.saveSync(getPersistedSlice(useAppStore.getState()))
 })
 
@@ -567,58 +577,43 @@ export async function hydrateFromDisk(): Promise<void> {
     console.error('Failed to apply persisted UI zoom factor:', err)
   }
 
-  // Reconcile persisted terminal tabs against live PTY processes
+  // Reconcile persisted terminal tabs by create-or-attach sessionId.
   try {
-    const livePtyIds = new Set(await window.api.pty.list())
     const store = useAppStore.getState()
     const tabs = store.tabs
+    const shell = store.settings.defaultShell || undefined
+    const updatedTabs = [...tabs]
 
-    if (tabs.length > 0 && livePtyIds.size > 0) {
-      // Reattach surviving terminal tabs to the new webContents
-      const reattachPromises: Promise<boolean>[] = []
-      for (const tab of tabs) {
-        if (tab.type === 'terminal' && livePtyIds.has(tab.ptyId)) {
-          reattachPromises.push(window.api.pty.reattach(tab.ptyId))
-        }
+    for (const tab of tabs) {
+      if (tab.type !== 'terminal') continue
+      const ws = store.workspaces.find((w) => w.id === tab.workspaceId)
+      if (!ws) {
+        const idx = updatedTabs.findIndex((t) => t.id === tab.id)
+        if (idx !== -1) updatedTabs.splice(idx, 1)
+        continue
       }
-      await Promise.all(reattachPromises)
+
+      try {
+        const attachedId = await window.api.pty.create(
+          ws.worktreePath,
+          shell,
+          { AGENT_ORCH_WS_ID: ws.id },
+          store.settings.useLoginShell,
+          tab.ptyId,
+        )
+        const idx = updatedTabs.findIndex((t) => t.id === tab.id)
+        if (idx !== -1) updatedTabs[idx] = { ...tab, ptyId: attachedId }
+      } catch {
+        const idx = updatedTabs.findIndex((t) => t.id === tab.id)
+        if (idx !== -1) updatedTabs.splice(idx, 1)
+      }
     }
 
-    // Respawn PTYs for terminal tabs whose process is no longer alive
-    const deadTabs = tabs.filter(
-      (t): t is Extract<Tab, { type: 'terminal' }> =>
-        t.type === 'terminal' && !livePtyIds.has(t.ptyId)
-    )
-    if (deadTabs.length > 0) {
-      const shell = store.settings.defaultShell || undefined
-      const updatedTabs = [...tabs]
-      for (const dead of deadTabs) {
-        const ws = store.workspaces.find((w) => w.id === dead.workspaceId)
-        if (!ws) continue
-        try {
-          const newPtyId = await window.api.pty.create(
-            ws.worktreePath,
-            shell,
-            { AGENT_ORCH_WS_ID: ws.id },
-            store.settings.useLoginShell,
-          )
-          const idx = updatedTabs.findIndex((t) => t.id === dead.id)
-          if (idx !== -1) updatedTabs[idx] = { ...dead, ptyId: newPtyId }
-        } catch {
-          // If respawn fails, drop the tab
-          const idx = updatedTabs.findIndex((t) => t.id === dead.id)
-          if (idx !== -1) updatedTabs.splice(idx, 1)
-        }
-      }
-      // Drop any terminal tabs whose workspace no longer exists
-      const finalTabs = updatedTabs.filter(
-        (t) => t.type !== 'terminal' || store.workspaces.some((w) => w.id === t.workspaceId)
-      )
-      const activeTabId = finalTabs.find((t) => t.id === store.activeTabId)
-        ? store.activeTabId
-        : (finalTabs.find((t) => t.workspaceId === store.activeWorkspaceId)?.id ?? null)
-      useAppStore.setState({ tabs: finalTabs, activeTabId })
-    }
+    const activeTabId = updatedTabs.find((t) => t.id === store.activeTabId)
+      ? store.activeTabId
+      : (updatedTabs.find((t) => t.workspaceId === store.activeWorkspaceId)?.id ?? null)
+
+    useAppStore.setState({ tabs: updatedTabs, activeTabId })
   } catch (err) {
     console.error('Failed to reconcile PTY tabs:', err)
   }
