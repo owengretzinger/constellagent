@@ -23,6 +23,7 @@ import type { McpServer, AgentMcpAssignments } from '../renderer/store/types'
 import { SkillsService } from './skills-service'
 
 import { ContextDb } from './context-db'
+import { getAgentFS, closeAllAgentFS, checkpoint, checkpointAll } from './agentfs-service'
 
 const ptyManager = new PtyManager()
 const automationScheduler = new AutomationScheduler(ptyManager)
@@ -43,6 +44,37 @@ function getContextDb(projectDir: string): ContextDb {
 
 const SLIDING_WINDOW_LIMIT = 20
 const SLIDING_WINDOW_HEADER = '# Recent Agent Activity (last 20 actions)\n\n| Time | Agent | Tool | File/Summary |\n|------|-------|------|-------------|\n'
+
+// Debounced agent context file writers keyed by projectDir:wsId
+const contextWriteTimers = new Map<string, ReturnType<typeof setTimeout>>()
+
+/**
+ * Schedule a debounced write of the rich agent context file.
+ * This writes the full AgentFS context summary to a file that hook scripts
+ * can read and inject into agents on SessionStart and UserPromptSubmit.
+ */
+function scheduleContextFileWrite(projectDir: string, wsId: string): void {
+  const key = `${projectDir}:${wsId}`
+  const existing = contextWriteTimers.get(key)
+  if (existing) clearTimeout(existing)
+
+  contextWriteTimers.set(key, setTimeout(async () => {
+    contextWriteTimers.delete(key)
+    try {
+      const db = getContextDb(projectDir)
+      const contextDir = join(projectDir, '.constellagent', 'context')
+      await mkdir(contextDir, { recursive: true })
+
+      // Write per-workspace rich context
+      const wsContext = await db.buildAgentContext(wsId)
+      await writeFile(join(contextDir, `agent-context-${wsId}.md`), wsContext)
+
+      // Write global context (all workspaces)
+      const globalContext = await db.buildGlobalContext()
+      await writeFile(join(contextDir, 'agent-context.md'), globalContext)
+    } catch (err) { console.error('agentfs: context file generation failed', err) }
+  }, 500)) // 500ms debounce
+}
 
 function formatSlidingWindowLine(entry: { timestamp?: string; agentType?: string; toolName?: string; filePath?: string | null; toolInput?: string | null }): string {
   const time = entry.timestamp?.replace('T', ' ').replace('Z', '') || '?'
@@ -81,6 +113,70 @@ async function appendAndTrimSlidingWindow(filePath: string, newLine: string): Pr
   await writeFile(filePath, SLIDING_WINDOW_HEADER + dataLines.join('\n') + '\n')
 }
 
+/**
+ * Attempt to repair truncated JSON (e.g. from shell `head -c` cutting mid-value).
+ * Closes any unclosed strings, fills dangling keys with null, and closes unclosed braces/brackets.
+ */
+function repairTruncatedJson(raw: string): string {
+  let inString = false
+  let escaped = false
+  const stack: string[] = []
+
+  for (let i = 0; i < raw.length; i++) {
+    const ch = raw[i]
+
+    if (escaped) {
+      escaped = false
+      continue
+    }
+
+    if (ch === '\\' && inString) {
+      escaped = true
+      continue
+    }
+
+    if (ch === '"') {
+      inString = !inString
+      continue
+    }
+
+    if (inString) continue
+
+    if (ch === '{' || ch === '[') {
+      stack.push(ch === '{' ? '}' : ']')
+    } else if (ch === '}' || ch === ']') {
+      if (stack.length) stack.pop()
+    }
+  }
+
+  // Nothing to repair
+  if (!inString && stack.length === 0) return raw
+
+  let repaired = raw
+
+  // Close unclosed string
+  if (inString) {
+    // If we were mid-escape, remove the dangling backslash
+    if (escaped) repaired = repaired.slice(0, -1)
+    repaired += '"'
+  }
+
+  // Handle trailing structural issues before closing braces
+  const trimmed = repaired.replace(/[\s]+$/, '')
+  if (trimmed.endsWith(':')) {
+    repaired = trimmed + 'null'
+  } else if (trimmed.endsWith(',')) {
+    repaired = trimmed.slice(0, -1)
+  }
+
+  // Close any unclosed braces/brackets in reverse order
+  while (stack.length > 0) {
+    repaired += stack.pop()
+  }
+
+  return repaired
+}
+
 async function processPendingFile(projectDir: string, pendingDir: string, fileName: string): Promise<void> {
   if (!fileName.endsWith('.json')) return
   const filePath = join(pendingDir, fileName)
@@ -88,15 +184,43 @@ async function processPendingFile(projectDir: string, pendingDir: string, fileNa
 
   try {
     let raw = await readFile(filePath, 'utf-8')
-    // Repair common shell-hook issue: empty `input` field produces `"input":,`
+    // Repair common shell-hook issues
     raw = raw.replace(/"input":,/g, '"input":null,')
     raw = raw.replace(/"tool_response":,/g, '"tool_response":null,')
-    const data = JSON.parse(raw)
+
+    let data: any // eslint-disable-line @typescript-eslint/no-explicit-any
+    try {
+      data = JSON.parse(raw)
+    } catch {
+      // Sanitize bad control characters & escape sequences inside JSON string values,
+      // then retry. Shell hooks often embed raw newlines/tabs/backslashes in values.
+      const sanitized = raw.replace(
+        /("(?:[^"\\]|\\.)*")/g,
+        (_match, strLiteral: string) => {
+          // Re-escape unescaped control chars (0x00-0x1F) inside the string
+          const inner = strLiteral.slice(1, -1)
+          const fixed = inner
+            .replace(/\\(?!["\\/bfnrtu])/g, '\\\\') // fix bad escape sequences like \x, \a
+            .replace(/[\x00-\x1f]/g, (ch) => {       // escape raw control chars
+              const hex = ch.charCodeAt(0).toString(16).padStart(4, '0')
+              return `\\u${hex}`
+            })
+          return `"${fixed}"`
+        }
+      )
+      try {
+        data = JSON.parse(sanitized)
+      } catch {
+        // Last resort: try to repair truncated JSON (e.g. from head -c cutting mid-value)
+        const repaired = repairTruncatedJson(sanitized)
+        data = JSON.parse(repaired) // will throw SyntaxError if still broken
+      }
+    }
 
     const toolInput = typeof data.input === 'string' ? data.input : data.input != null ? JSON.stringify(data.input) : undefined
     const toolResponse = typeof data.tool_response === 'string' ? data.tool_response : data.tool_response != null ? JSON.stringify(data.tool_response) : undefined
 
-    db.insert({
+    await db.insert({
       workspaceId: data.ws,
       agentType: data.agent || 'claude-code',
       sessionId: data.sid || undefined,
@@ -126,8 +250,18 @@ async function processPendingFile(projectDir: string, pendingDir: string, fileNa
     if (data.ws) {
       const wsPath = join(contextDir, `sliding-window-${data.ws}.md`)
       await appendAndTrimSlidingWindow(wsPath, line)
+
+      // Schedule rich agent context file generation (debounced)
+      scheduleContextFileWrite(projectDir, data.ws)
     }
-  } catch { /* skip malformed */ }
+  } catch (err) {
+    console.error(`agentfs: failed to process pending file ${fileName}`, err)
+    // If the file is corrupt (parse error), delete it so it doesn't retry endlessly
+    if (err instanceof SyntaxError) {
+      try { await unlink(filePath) } catch { /* already gone */ }
+      console.warn(`agentfs: deleted corrupt pending file ${fileName}`)
+    }
+  }
 }
 
 function startPendingIndexer(projectDir: string) {
@@ -157,7 +291,7 @@ function startPendingIndexer(projectDir: string) {
         for (const file of files) {
           await processPendingFile(projectDir, pendingDir, file)
         }
-      } catch { /* best-effort */ }
+      } catch (err) { console.error('agentfs: pending indexer batch processing failed', err) }
     }, 50)
   })
 
@@ -727,9 +861,9 @@ export function registerIpcHandlers(): void {
     // Context hooks gated on setting
     if (contextEnabled) {
       setHooks('Stop', [{ scriptPath: notifyPath }, { scriptPath: sessionSavePath }, { scriptPath: contextCapturePath }])
-      setHooks('UserPromptSubmit', [{ scriptPath: activityPath }, { scriptPath: contextCapturePath }])
+      setHooks('UserPromptSubmit', [{ scriptPath: activityPath }, { scriptPath: contextCapturePath }, { scriptPath: contextInjectPath }])
       setHooks('PostToolUse', [{ scriptPath: contextCapturePath, matcher: '' }])
-      setHooks('SessionStart', [{ scriptPath: contextInjectPath }])
+      setHooks('SessionStart', [{ scriptPath: contextInjectPath }, { scriptPath: contextCapturePath }])
       setHooks('SessionEnd', [{ scriptPath: contextCapturePath }])
       setHooks('PreToolUse', [{ scriptPath: contextCapturePath }])
       setHooks('PostToolUseFailure', [{ scriptPath: contextCapturePath }])
@@ -809,8 +943,21 @@ export function registerIpcHandlers(): void {
       }
     }
 
+    // Initialize context database for this project (lazy AgentFS init via ContextDb)
     getContextDb(projectDir)
     startPendingIndexer(projectDir)
+
+    // Auto-configure cachebro MCP server for all agents via `npx cachebro init`
+    // This auto-detects and writes config for Claude Code, Cursor, OpenCode, etc.
+    try {
+      await execFileAsyncCtx('npx', ['cachebro', 'init'], {
+        cwd: projectDir,
+        env: { ...process.env, CACHEBRO_DIR: repoDir },
+        timeout: 15_000,
+      })
+    } catch (err) {
+      console.error('agentfs: cachebro init failed', err)
+    }
 
     // Auto-configure agent hooks for context capture
     const geminiCaptureScript = getAgentHookPath('gemini-capture.sh')
@@ -837,7 +984,7 @@ export function registerIpcHandlers(): void {
         }
         await writeFile(geminiSettingsPath, JSON.stringify(geminiSettings, null, 2))
       }
-    } catch { /* best-effort */ }
+    } catch (err) { console.error('agentfs: Gemini hooks setup failed', err) }
 
     // Cursor hooks: write .cursor/hooks.json in project dir (all 14 hooks)
     const cursorDir = join(projectDir, '.cursor')
@@ -871,7 +1018,7 @@ export function registerIpcHandlers(): void {
         }
         await writeFile(cursorHooksPath, JSON.stringify(cursorHooks, null, 2))
       }
-    } catch { /* best-effort */ }
+    } catch (err) { console.error('agentfs: Cursor hooks setup failed', err) }
 
     // Codex auto-configuration: add notify+capture to ~/.codex/config.toml
     try {
@@ -884,26 +1031,86 @@ export function registerIpcHandlers(): void {
         updatedConfig = insertTopLevelNotify(updatedConfig, codexNotifyLine)
         await saveCodexConfigText(updatedConfig)
       }
-    } catch { /* best-effort */ }
+    } catch (err) { console.error('agentfs: Codex notify setup failed', err) }
 
     // Discovery files: let Codex and Cursor find the sliding window
     try {
       // .codex/AGENTS.md — project-scoped instruction for Codex
       const codexProjectDir = join(projectDir, '.codex')
       const codexAgentsPath = join(codexProjectDir, 'AGENTS.md')
-      if (!existsSync(codexAgentsPath)) {
-        await mkdir(codexProjectDir, { recursive: true })
-        await writeFile(codexAgentsPath, `# Constellagent Cross-Agent Context\n\nRead \`.constellagent/context/sliding-window.md\` for recent activity from all coding agents working on this project.\nThis file is automatically updated every 2 seconds with the last 20 actions across all agents.\n`)
-      }
+      await mkdir(codexProjectDir, { recursive: true })
+      await writeFile(codexAgentsPath, `# Constellagent Cross-Agent Context
+
+## Session & Activity Context
+Read these files to see what other agents (and you) have been doing recently:
+- \`.constellagent/context/sliding-window.md\` — Compact table of last 20 agent actions across all agents
+- \`.constellagent/context/agent-context.md\` — Rich context summary (files touched, tool details, activity timeline)
+- \`.constellagent/sessions/\` — Session-end summaries with timestamps
+
+## Cachebro (MCP — auto-configured)
+Cachebro is pre-configured via \`npx cachebro init\`. Use the cachebro MCP tools (\`read_file\`, \`read_files\`, \`cache_status\`, \`cache_clear\`) instead of raw file reads to save tokens.
+
+## Context Database
+Agent tool calls and activity are recorded in \`.constellagent/constellagent.db\` (libSQL/SQLite via AgentFS).
+The \`entries\` table stores: workspace_id, agent_type, session_id, tool_name, tool_input, file_path, tool_response, timestamp.
+`)
+
+      // .gemini/AGENTS.md — project-scoped instruction for Gemini
+      const geminiAgentsPath = join(projectDir, '.gemini', 'AGENTS.md')
+      await mkdir(join(projectDir, '.gemini'), { recursive: true })
+      await writeFile(geminiAgentsPath, `# Constellagent Cross-Agent Context
+
+## Session & Activity Context
+Read these files to see what other agents (and you) have been doing recently:
+- \`.constellagent/context/sliding-window.md\` — Compact table of last 20 agent actions across all agents
+- \`.constellagent/context/agent-context.md\` — Rich context summary (files touched, tool details, activity timeline)
+- \`.constellagent/sessions/\` — Session-end summaries with timestamps
+
+## Cachebro (MCP — auto-configured)
+Cachebro is pre-configured via \`npx cachebro init\`. Use the cachebro MCP tools (\`read_file\`, \`read_files\`, \`cache_status\`, \`cache_clear\`) instead of raw file reads to save tokens.
+
+## Context Database
+Agent tool calls and activity are recorded in \`.constellagent/constellagent.db\` (libSQL/SQLite via AgentFS).
+The \`entries\` table stores: workspace_id, agent_type, session_id, tool_name, tool_input, file_path, tool_response, timestamp.
+`)
+
+      // CLAUDE.md — project-scoped instruction for Claude Code
+      const claudeMdPath = join(projectDir, 'CLAUDE.md')
+      await writeFile(claudeMdPath, `# Constellagent Cross-Agent Context
+
+## Session & Activity Context
+Read these files to see what other agents (and you) have been doing recently:
+- \`.constellagent/context/sliding-window.md\` — Compact table of last 20 agent actions across all agents
+- \`.constellagent/context/agent-context.md\` — Rich context summary (files touched, tool details, activity timeline)
+- \`.constellagent/sessions/\` — Session-end summaries with timestamps
+
+## Cachebro (MCP — auto-configured)
+Cachebro is pre-configured via \`npx cachebro init\`. Use the cachebro MCP tools (\`read_file\`, \`read_files\`, \`cache_status\`, \`cache_clear\`) instead of raw file reads to save tokens.
+
+## Context Database
+Agent tool calls and activity are recorded in \`.constellagent/constellagent.db\` (libSQL/SQLite via AgentFS).
+The \`entries\` table stores: workspace_id, agent_type, session_id, tool_name, tool_input, file_path, tool_response, timestamp.
+`)
 
       // .cursor/rules/constellagent.mdc — project-scoped instruction for Cursor
       const cursorRulesDir = join(projectDir, '.cursor', 'rules')
       const cursorRulePath = join(cursorRulesDir, 'constellagent.mdc')
-      if (!existsSync(cursorRulePath)) {
-        await mkdir(cursorRulesDir, { recursive: true })
-        await writeFile(cursorRulePath, `---\ndescription: Cross-agent context from Constellagent\nalwaysApply: true\n---\n\nRead \`.constellagent/context/sliding-window.md\` for recent activity from all coding agents working on this project.\n`)
-      }
-    } catch { /* best-effort */ }
+      await mkdir(cursorRulesDir, { recursive: true })
+      await writeFile(cursorRulePath, `---
+description: Cross-agent context and tools from Constellagent
+alwaysApply: true
+---
+
+## Session & Activity Context
+Read these files to see what other agents (and you) have been doing recently:
+- \`.constellagent/context/sliding-window.md\` — Compact table of last 20 agent actions across all agents
+- \`.constellagent/context/agent-context.md\` — Rich context summary (files touched, tool details, activity timeline)
+- \`.constellagent/sessions/\` — Session-end summaries with timestamps
+
+## Cachebro (MCP — auto-configured)
+Cachebro is pre-configured via \`npx cachebro init\`. Use the cachebro MCP tools (\`read_file\`, \`read_files\`, \`cache_status\`, \`cache_clear\`) instead of raw file reads to save tokens.
+`)
+    } catch (err) { console.error('agentfs: discovery files setup failed', err) }
 
     return { success: true }
   })
@@ -912,23 +1119,65 @@ export function registerIpcHandlers(): void {
     workspaceId: string; sessionId?: string; toolName: string;
     toolInput?: string; filePath?: string; timestamp: string
   }) => {
-    getContextDb(projectDir).insert(entry)
+    await getContextDb(projectDir).insert(entry)
     return { success: true }
   })
 
   ipcMain.handle(IPC.CONTEXT_SEARCH, async (_e, projectDir: string, query: string, limit?: number) => {
     startPendingIndexer(projectDir)
-    return getContextDb(projectDir).search(query, limit)
+    return await getContextDb(projectDir).search(query, limit)
   })
 
   ipcMain.handle(IPC.CONTEXT_GET_RECENT, async (_e, projectDir: string, workspaceId: string, limit?: number) => {
     startPendingIndexer(projectDir)
-    return getContextDb(projectDir).getRecent(workspaceId, limit)
+    return await getContextDb(projectDir).getRecent(workspaceId, limit)
   })
 
   ipcMain.handle(IPC.CONTEXT_RESTORE_CHECKPOINT, async (_e, projectDir: string, commitHash: string) => {
     await execFileAsyncCtx('git', ['checkout', commitHash, '--', '.'], { cwd: projectDir })
     return { success: true }
+  })
+
+  ipcMain.handle(IPC.CONTEXT_BUILD_SUMMARY, async (_e, projectDir: string, workspaceId: string) => {
+    const db = getContextDb(projectDir)
+    const contextDir = join(projectDir, '.constellagent', 'context')
+    await mkdir(contextDir, { recursive: true })
+
+    // Build and write per-workspace rich context
+    const wsContext = await db.buildAgentContext(workspaceId)
+    await writeFile(join(contextDir, `agent-context-${workspaceId}.md`), wsContext)
+
+    // Build and write global context
+    const globalContext = await db.buildGlobalContext()
+    await writeFile(join(contextDir, 'agent-context.md'), globalContext)
+
+    return { success: true, wsContext, globalContext }
+  })
+
+  // ── WAL checkpoint ──
+  ipcMain.handle(IPC.CONTEXT_WAL_CHECKPOINT, async (_e, projectDir?: string) => {
+    if (projectDir) {
+      await checkpoint(projectDir)
+    } else {
+      await checkpointAll()
+    }
+    return { success: true }
+  })
+
+  // ── Session context ──
+  ipcMain.handle(IPC.CONTEXT_SESSION_CONTEXT, async (_e, projectDir: string, sessionId: string, limit?: number) => {
+    return await getContextDb(projectDir).getSessionContext(sessionId, limit)
+  })
+
+  ipcMain.handle(IPC.CONTEXT_SESSION_META_SAVE, async (_e, projectDir: string, wsId: string, meta: {
+    sessionId: string; agentType: string; startedAt: string; summary?: string
+  }) => {
+    await getContextDb(projectDir).saveSessionMeta(wsId, meta)
+    return { success: true }
+  })
+
+  ipcMain.handle(IPC.CONTEXT_SESSION_META_GET, async (_e, projectDir: string, wsId: string, agentType?: string) => {
+    return await getContextDb(projectDir).getSessionMeta(wsId, agentType)
   })
 
   // ── Session resume ──
@@ -1175,6 +1424,31 @@ export function registerIpcHandlers(): void {
     await SkillsService.removeSubagentFromAgents(subagentName, projectPath)
   })
 
+  // ── Skills & Subagents KV persistence ──
+  ipcMain.handle(IPC.SKILLS_KV_SAVE, async (_e, projectPath: string, skill: { name: string; description: string; sourcePath: string; enabled: boolean }) => {
+    await SkillsService.saveSkillToKV(projectPath, skill)
+  })
+
+  ipcMain.handle(IPC.SKILLS_KV_REMOVE, async (_e, projectPath: string, skillName: string) => {
+    await SkillsService.removeSkillFromKV(projectPath, skillName)
+  })
+
+  ipcMain.handle(IPC.SKILLS_KV_LIST, async (_e, projectPath: string) => {
+    return SkillsService.listSkillsFromKV(projectPath)
+  })
+
+  ipcMain.handle(IPC.SUBAGENTS_KV_SAVE, async (_e, projectPath: string, subagent: { name: string; description: string; sourcePath: string; tools?: string; enabled: boolean }) => {
+    await SkillsService.saveSubagentToKV(projectPath, subagent)
+  })
+
+  ipcMain.handle(IPC.SUBAGENTS_KV_REMOVE, async (_e, projectPath: string, subagentName: string) => {
+    await SkillsService.removeSubagentFromKV(projectPath, subagentName)
+  })
+
+  ipcMain.handle(IPC.SUBAGENTS_KV_LIST, async (_e, projectPath: string) => {
+    return SkillsService.listSubagentsFromKV(projectPath)
+  })
+
   // ── Clipboard handlers ──
   ipcMain.handle(IPC.CLIPBOARD_SAVE_IMAGE, async () => {
     const img = clipboard.readImage()
@@ -1226,6 +1500,8 @@ export function cleanupAll(): void {
   lspService.shutdown()
   for (const watcher of pendingIndexerWatchers.values()) watcher.close()
   pendingIndexerWatchers.clear()
-  for (const db of contextDbs.values()) db.close()
+  // Close AgentFS-backed context databases (async, best-effort on quit)
+  for (const db of contextDbs.values()) db.close().catch(() => {})
   contextDbs.clear()
+  closeAllAgentFS().catch(() => {})
 }

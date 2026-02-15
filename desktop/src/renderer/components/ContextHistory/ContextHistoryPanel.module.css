@@ -85,7 +85,7 @@
 }
 
 .modeToggle button.active {
-  background: var(--accent-blue-dim, rgba(122, 162, 247, 0.15));
+  background: var(--accent-blue-dim);
   color: var(--accent-blue);
 }
 
@@ -150,9 +150,9 @@
 }
 
 .dotBlue { background: var(--accent-blue); }
-.dotGreen { background: var(--accent-green, #73daca); }
-.dotOrange { background: var(--accent-orange, #ff9e64); }
-.dotPurple { background: var(--accent-purple, #bb9af7); }
+.dotGreen { background: var(--accent-green); }
+.dotOrange { background: var(--accent-orange); }
+.dotPurple { background: var(--accent-purple); }
 .dotGray { background: var(--text-tertiary); }
 
 .entryInfo {
@@ -184,23 +184,23 @@
 }
 
 .agentBadge.dotBlue {
-  background: rgba(122, 162, 247, 0.15);
+  background: var(--accent-blue-dim);
   color: var(--accent-blue);
 }
 
 .agentBadge.dotGreen {
-  background: rgba(115, 218, 202, 0.15);
-  color: var(--accent-green, #73daca);
+  background: var(--accent-green-dim);
+  color: var(--accent-green);
 }
 
 .agentBadge.dotOrange {
-  background: rgba(255, 158, 100, 0.15);
-  color: var(--accent-orange, #ff9e64);
+  background: var(--accent-orange-dim);
+  color: var(--accent-orange);
 }
 
 .agentBadge.dotPurple {
-  background: rgba(187, 154, 247, 0.15);
-  color: var(--accent-purple, #bb9af7);
+  background: rgba(180, 142, 173, 0.15);
+  color: var(--accent-purple);
 }
 
 .agentBadge.dotGray {
@@ -250,7 +250,7 @@
 
 .restoreBtn {
   padding: var(--space-1) var(--space-3);
-  background: var(--accent-blue-dim, rgba(122, 162, 247, 0.15));
+  background: var(--accent-blue-dim);
   border: 1px solid var(--accent-blue);
   border-radius: var(--radius-sm);
   color: var(--accent-blue);
@@ -263,7 +263,7 @@
 }
 
 .restoreBtn:hover {
-  background: rgba(122, 162, 247, 0.25);
+  background: rgba(123, 147, 189, 0.22);
 }
 
 /* Empty state */

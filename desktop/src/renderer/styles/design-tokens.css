@@ -1,70 +1,98 @@
 /*
- * Constellagent — "Midnight Instrument Panel" Design System
+ * Constellagent — Cursor-Aligned Dark Design System
  *
- * Layered surfaces with subtle depth. Tokyo Night palette refined
- * for a precision-tooling aesthetic. Surgical accent usage.
+ * Layered neutral dark surfaces with proper contrast hierarchy,
+ * muted steel-blue accent, visible borders, clear depth.
+ * Reference: Cursor Dark theme (#141414 / #1a1a1a / #2A2A2A).
  */
 
 :root {
   /* ═══════════════════════════════════════════════════════
-     SURFACE LAYERS — depth through subtle value shifts
-     Each layer is slightly lighter, creating visual hierarchy
+     SURFACE LAYERS — proper contrast hierarchy
+     Step size ~8-9 hex levels for clear visual separation.
      ═══════════════════════════════════════════════════════ */
-  --surface-0: #13141b;          /* Deepest — app background, sidebar bg */
-  --surface-1: #16171f;          /* Primary panels — center area */
-  --surface-2: #1a1b26;          /* Elevated — tab bar, right panel header */
-  --surface-3: #1e1f2b;          /* Higher — active tab, hover states */
-  --surface-4: #24253a;          /* Highest — dropdowns, dialogs, tooltips */
+  --surface-0: #111111;          /* App bg, terminal pit — deepest */
+  --surface-1: #191919;          /* Sidebar, panels — slightly raised */
+  --surface-2: #212121;          /* Elevated — tab bar, headers */
+  --surface-3: #2a2a2a;          /* Hover states, active tabs */
+  --surface-4: #333333;          /* Dropdowns, dialogs, tooltips */
 
   /* ═══════════════════════════════════════════════════════
-     BORDERS — barely there, just enough to define edges
+     BORDERS — additive white-overlay for visibility on any surface
      ═══════════════════════════════════════════════════════ */
-  --border-subtle: #1e1f2e;      /* Panel dividers — almost invisible */
-  --border-default: #282a3a;     /* More visible borders — tab separators */
-  --border-strong: #363852;      /* Focused elements, active outlines */
-  --border-accent: #7aa2f7;      /* Focus rings, accent outlines */
+  --border-subtle: rgba(255, 255, 255, 0.06);
+  --border-default: #2e2e2e;
+  --border-strong: #404040;
+  --border-accent: #7B93BD;
 
   /* ═══════════════════════════════════════════════════════
-     TEXT — four levels of emphasis
+     TEXT — neutral gray spectrum, improved contrast
      ═══════════════════════════════════════════════════════ */
-  --text-primary: #c0caf5;       /* Primary content — file names, code */
-  --text-secondary: #8e95b4;     /* Secondary — descriptions, metadata */
-  --text-tertiary: #565b7e;      /* Tertiary — disabled, placeholder */
-  --text-ghost: #3b3f5c;         /* Barely visible — decorative text */
-  --text-inverse: #13141b;       /* On accent backgrounds */
+  --text-primary: #eeeeee;
+  --text-secondary: #999999;
+  --text-tertiary: #666666;
+  --text-ghost: #444444;
+  --text-inverse: #111111;
 
   /* ═══════════════════════════════════════════════════════
-     ACCENTS — Tokyo Night spectrum, used sparingly
+     ACCENTS — Cursor/Nord-aligned palette, crisp on dark bg
      ═══════════════════════════════════════════════════════ */
-  --accent-blue: #7aa2f7;        /* Primary accent — active states, focus */
-  --accent-blue-dim: #3d5a9e;    /* Muted blue — selected bg tint */
-  --accent-blue-glow: rgba(122, 162, 247, 0.08); /* Subtle glow/bg */
-  --accent-cyan: #7dcfff;        /* Info, links */
-  --accent-purple: #bb9af7;      /* Keywords, special items */
-  --accent-green: #9ece6a;       /* Success, additions, new items */
-  --accent-green-muted: #73a94c; /* Untracked/new files (dimmer green) */
-  --accent-green-dim: rgba(158, 206, 106, 0.12);
-  --accent-red: #f7768e;         /* Errors, deletions, destructive */
-  --accent-red-dim: rgba(247, 118, 142, 0.12);
-  --accent-orange: #ff9e64;      /* Warnings, modified */
-  --accent-orange-dim: rgba(255, 158, 100, 0.12);
-  --accent-yellow: #e0af68;      /* Caution, highlighted */
+  --accent-blue: #7B93BD;
+  --accent-blue-dim: rgba(123, 147, 189, 0.14);
+  --accent-blue-glow: rgba(123, 147, 189, 0.06);
+  --accent-cyan: #88C0D0;
+  --accent-purple: #B48EAD;
+  --accent-green: #A3BE8C;
+  --accent-green-muted: #7A9A6C;
+  --accent-green-dim: rgba(163, 190, 140, 0.14);
+  --accent-red: #BF616A;
+  --accent-red-dim: rgba(191, 97, 106, 0.14);
+  --accent-orange: #D08770;
+  --accent-orange-dim: rgba(208, 135, 112, 0.14);
+  --accent-yellow: #EBCB8B;
 
   /* ═══════════════════════════════════════════════════════
-     TERMINAL PALETTE — matches Tokyo Night terminal colors
+     STATUS COLORS — two-tier system (bright / muted / dim)
      ═══════════════════════════════════════════════════════ */
-  --term-bg: #13141b;
-  --term-fg: #c0caf5;
-  --term-cursor: #c0caf5;
-  --term-selection: rgba(122, 162, 247, 0.2);
-  --term-black: #15161e;
-  --term-red: #f7768e;
-  --term-green: #9ece6a;
-  --term-yellow: #e0af68;
-  --term-blue: #7aa2f7;
-  --term-magenta: #bb9af7;
-  --term-cyan: #7dcfff;
-  --term-white: #a9b1d6;
+  --status-neutral-1: #a0a0a0;
+  --status-neutral-0: #707070;
+  --status-neutral-dim: rgba(160, 160, 160, 0.10);
+
+  --status-pending-1: #EBCB8B;
+  --status-pending-0: #B09A5A;
+  --status-pending-dim: rgba(235, 203, 139, 0.10);
+
+  --status-info-1: #7B93BD;
+  --status-info-0: #6279A0;
+  --status-info-dim: rgba(123, 147, 189, 0.10);
+
+  --status-danger-1: #BF616A;
+  --status-danger-0: #9A4E56;
+  --status-danger-dim: rgba(191, 97, 106, 0.10);
+
+  --status-warning-1: #D08770;
+  --status-warning-0: #A56A58;
+  --status-warning-dim: rgba(208, 135, 112, 0.10);
+
+  --status-success-1: #A3BE8C;
+  --status-success-0: #7A9A6C;
+  --status-success-dim: rgba(163, 190, 140, 0.10);
+
+  /* ═══════════════════════════════════════════════════════
+     TERMINAL PALETTE — matches Cursor terminal style
+     ═══════════════════════════════════════════════════════ */
+  --term-bg: #111111;
+  --term-fg: #eeeeee;
+  --term-cursor: #eeeeee;
+  --term-selection: rgba(255, 255, 255, 0.15);
+  --term-black: #2a2a2a;
+  --term-red: #BF616A;
+  --term-green: #A3BE8C;
+  --term-yellow: #EBCB8B;
+  --term-blue: #81A1C1;
+  --term-magenta: #B48EAD;
+  --term-cyan: #88C0D0;
+  --term-white: #eeeeee;
 
   /* ═══════════════════════════════════════════════════════
      TYPOGRAPHY
@@ -114,10 +142,10 @@
   /* ═══════════════════════════════════════════════════════
      SHADOWS — subtle depth indicators
      ═══════════════════════════════════════════════════════ */
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
-  --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.4);
-  --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.5);
-  --shadow-inset: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.5);
+  --shadow-md: 0 2px 10px rgba(0, 0, 0, 0.55);
+  --shadow-lg: 0 4px 20px rgba(0, 0, 0, 0.65);
+  --shadow-inset: inset 0 1px 0 rgba(255, 255, 255, 0.04);
 
   /* ═══════════════════════════════════════════════════════
      TRANSITIONS
@@ -132,6 +160,6 @@
   --sidebar-width: 220px;
   --right-panel-width: 280px;
   --tab-height: 35px;
-  --titlebar-height: 38px;     /* macOS traffic lights area */
+  --titlebar-height: 38px;
   --status-bar-height: 22px;
 }

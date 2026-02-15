@@ -17,5 +17,5 @@
 }
 
 .fileEditorPane.focusedPane {
-  border-color: var(--accent, #7aa2f7);
+  border-color: var(--border-accent);
 }

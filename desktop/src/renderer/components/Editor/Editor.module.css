@@ -20,7 +20,7 @@
 .editorContainer :global(.git-gutter-added) {
   margin-left: 3px;
   width: 3px !important;
-  background: #2ea04370;
+  background: rgba(163, 190, 140, 0.50);
 }
 
 .editorContainer :global(.git-gutter-modified) {
@@ -28,8 +28,8 @@
   width: 4px !important;
   background-image: repeating-linear-gradient(
     -45deg,
-    #c8a928,
-    #c8a928 2px,
+    var(--accent-yellow),
+    var(--accent-yellow) 2px,
     transparent 2px,
     transparent 4px
   );
@@ -43,7 +43,7 @@
   overflow: visible;
   border-left: 5px solid transparent;
   border-right: 5px solid transparent;
-  border-top: 5px solid #c74e39;
+  border-top: 5px solid var(--accent-red);
 }
 
 /* Diff editor controls */

@@ -20,11 +20,11 @@
 
 .graphCanvas { position: absolute; top: 0; left: 8px; pointer-events: none; z-index: 1; }
 .graphCanvas circle { pointer-events: all; cursor: pointer; }
-.shadow { fill: none; stroke: var(--surface-base, #1e1e2e); stroke-width: 6; stroke-opacity: 0.7; }
+.shadow { fill: none; stroke: var(--surface-1); stroke-width: 6; stroke-opacity: 0.7; }
 .branchLine { fill: none; stroke-width: 2.5; }
-.dotCurrent { fill: var(--surface-base, #1e1e2e); stroke-width: 2.5; }
-.dotNormal { stroke: var(--surface-base, #1e1e2e); stroke-width: 1.5; stroke-opacity: 0.75; }
-.dotMerge { fill: var(--surface-base, #1e1e2e); stroke-width: 2.5; }
+.dotCurrent { fill: var(--surface-1); stroke-width: 2.5; }
+.dotNormal { stroke: var(--surface-1); stroke-width: 1.5; stroke-opacity: 0.75; }
+.dotMerge { fill: var(--surface-1); stroke-width: 2.5; }
 .dotMergeInner { pointer-events: none; }
 
 /* ── Commit Row ── */
@@ -118,7 +118,7 @@
 }
 
 .refHead {
-  background: rgba(99, 140, 255, 0.18);
+  background: rgba(123, 147, 189, 0.15);
   color: var(--accent-blue);
 }
 
