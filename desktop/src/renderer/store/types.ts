@@ -158,6 +158,7 @@ export interface AppState {
   activeClaudeWorkspaceIds: Set<string>
   prStatusMap: Map<string, PrInfo | null>
   ghAvailability: Map<string, boolean>
+  collapsedProjectIds: Set<string>
 
   // Actions
   addProject: (project: Project) => void
@@ -200,6 +201,7 @@ export interface AppState {
   dismissToast: (id: string) => void
   toggleQuickOpen: () => void
   closeQuickOpen: () => void
+  toggleProjectCollapsed: (projectId: string) => void
 
   // Unread indicator actions
   markWorkspaceUnread: (workspaceId: string) => void

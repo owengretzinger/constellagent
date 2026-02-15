@@ -283,12 +283,11 @@ export function Sidebar() {
   const setActiveTab = useAppStore((s) => s.setActiveTab);
   const setPrStatuses = useAppStore((s) => s.setPrStatuses);
   const setGhAvailability = useAppStore((s) => s.setGhAvailability);
+  const collapsedProjectIds = useAppStore((s) => s.collapsedProjectIds);
+  const toggleProjectCollapsed = useAppStore((s) => s.toggleProjectCollapsed);
   const useLoginShell = useAppStore((s) => s.settings.useLoginShell);
   const workspaceCreationMode = useAppStore((s) => s.settings.workspaceCreationMode);
 
-  const [manualCollapsed, setManualCollapsed] = useState<Set<string>>(
-    new Set(),
-  );
   const [editingProject, setEditingProject] = useState<Project | null>(null);
   const [editingWorkspaceId, setEditingWorkspaceId] = useState<string | null>(
     null,
@@ -371,20 +370,15 @@ export function Sidebar() {
 
   const isProjectExpanded = useCallback(
     (id: string) => {
-      return !manualCollapsed.has(id);
+      return !collapsedProjectIds.has(id);
     },
-    [manualCollapsed],
+    [collapsedProjectIds],
   );
 
   const toggleProject = useCallback((id: string) => {
-    setManualCollapsed((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
+    toggleProjectCollapsed(id);
     if (openProjectPrPopoverId === id) closeProjectPrModal();
-  }, [openProjectPrPopoverId, closeProjectPrModal]);
+  }, [toggleProjectCollapsed, openProjectPrPopoverId, closeProjectPrModal]);
 
   const handleAddProject = useCallback(async () => {
     const dirPath = await window.api.app.selectDirectory();

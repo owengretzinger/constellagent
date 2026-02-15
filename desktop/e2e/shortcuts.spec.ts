@@ -81,6 +81,39 @@ async function setupTwoWorkspacesWithTerminals(window: Page, repoPath: string) {
   }, repoPath)
 }
 
+async function setupTwoProjectsWithOneWorkspaceEach(window: Page, repoA: string, repoB: string) {
+  return await window.evaluate(async ({ repoA, repoB }: { repoA: string; repoB: string }) => {
+    const store = (window as any).__store.getState()
+    store.hydrateState({ projects: [], workspaces: [] })
+
+    const projectAId = crypto.randomUUID()
+    store.addProject({ id: projectAId, name: 'project-alpha', repoPath: repoA })
+    const worktreeA = await (window as any).api.git.createWorktree(repoA, 'ws-alpha', 'branch-alpha', true)
+    const wsAId = crypto.randomUUID()
+    store.addWorkspace({
+      id: wsAId, name: 'ws-alpha', branch: 'branch-alpha', worktreePath: worktreeA, projectId: projectAId,
+    })
+    const ptyA = await (window as any).api.pty.create(worktreeA)
+    store.addTab({
+      id: crypto.randomUUID(), workspaceId: wsAId, type: 'terminal', title: 'Terminal 1', ptyId: ptyA,
+    })
+
+    const projectBId = crypto.randomUUID()
+    store.addProject({ id: projectBId, name: 'project-beta', repoPath: repoB })
+    const worktreeB = await (window as any).api.git.createWorktree(repoB, 'ws-beta', 'branch-beta', true)
+    const wsBId = crypto.randomUUID()
+    store.addWorkspace({
+      id: wsBId, name: 'ws-beta', branch: 'branch-beta', worktreePath: worktreeB, projectId: projectBId,
+    })
+    const ptyB = await (window as any).api.pty.create(worktreeB)
+    store.addTab({
+      id: crypto.randomUUID(), workspaceId: wsBId, type: 'terminal', title: 'Terminal 1', ptyId: ptyB,
+    })
+
+    return { wsAId, wsBId }
+  }, { repoA, repoB })
+}
+
 test.describe('Keyboard shortcuts', () => {
   test('Cmd+T creates new terminal tab', async () => {
     const repoPath = createTestRepo('shortcut-t')
@@ -191,8 +224,8 @@ test.describe('Keyboard shortcuts', () => {
         const workspaceByIndex = [...shortcuts.workspaceByIndex]
         workspaceByIndex[0] = {
           code: 'Digit7',
-          meta: true,
-          ctrl: false,
+          meta: false,
+          ctrl: true,
           shift: false,
           alt: false,
         }
@@ -206,9 +239,36 @@ test.describe('Keyboard shortcuts', () => {
 
       expect(await window.evaluate(() => (window as any).__store.getState().activeWorkspaceId)).toBe(ws2Id)
 
-      await window.keyboard.press('Meta+7')
+      await window.keyboard.press('Control+7')
       await window.waitForTimeout(500)
       expect(await window.evaluate(() => (window as any).__store.getState().activeWorkspaceId)).toBe(ws1Id)
+    } finally {
+      await app.close()
+    }
+  })
+
+  test('collapsed project is excluded from workspace index shortcuts', async () => {
+    const repoA = createTestRepo('shortcut-index-collapsed-a')
+    const repoB = createTestRepo('shortcut-index-collapsed-b')
+    const { app, window } = await launchApp()
+
+    try {
+      const { wsBId } = await setupTwoProjectsWithOneWorkspaceEach(window, repoA, repoB)
+      await window.waitForTimeout(2000)
+
+      const projectAlphaHeader = window.locator('[class*="projectHeader"]', { hasText: 'project-alpha' }).first()
+      await projectAlphaHeader.click()
+      await window.waitForTimeout(300)
+
+      // Only project-beta workspace is visible; Ctrl+1 should target it.
+      await window.keyboard.press('Control+1')
+      await window.waitForTimeout(500)
+      expect(await window.evaluate(() => (window as any).__store.getState().activeWorkspaceId)).toBe(wsBId)
+
+      // With one visible workspace, Ctrl+2 should be a no-op.
+      await window.keyboard.press('Control+2')
+      await window.waitForTimeout(500)
+      expect(await window.evaluate(() => (window as any).__store.getState().activeWorkspaceId)).toBe(wsBId)
     } finally {
       await app.close()
     }

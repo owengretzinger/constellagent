@@ -10,6 +10,13 @@ function getOrderedWorkspaces(state: Pick<AppState, 'projects' | 'workspaces'>) 
   )
 }
 
+function getVisibleOrderedWorkspaces(state: Pick<AppState, 'projects' | 'workspaces' | 'collapsedProjectIds'>) {
+  return state.projects.flatMap((project) => {
+    if (state.collapsedProjectIds.has(project.id)) return []
+    return state.workspaces.filter((workspace) => workspace.projectId === project.id)
+  })
+}
+
 export const useAppStore = create<AppState>((set, get) => ({
   projects: [],
   workspaces: [],
@@ -33,6 +40,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   activeClaudeWorkspaceIds: new Set<string>(),
   prStatusMap: new Map(),
   ghAvailability: new Map(),
+  collapsedProjectIds: new Set(),
 
   addProject: (project) =>
     set((s) => ({
@@ -64,6 +72,8 @@ export const useAppStore = create<AppState>((set, get) => ({
       )
       const newGhAvailability = new Map(s.ghAvailability)
       newGhAvailability.delete(id)
+      const newCollapsedProjects = new Set(s.collapsedProjectIds)
+      newCollapsedProjects.delete(id)
 
       const tabMap = { ...s.lastActiveTabByWorkspace }
       for (const wsId of removedWsIds) delete tabMap[wsId]
@@ -85,6 +95,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         activeClaudeWorkspaceIds: newActiveClaude,
         prStatusMap: newPrStatusMap,
         ghAvailability: newGhAvailability,
+        collapsedProjectIds: newCollapsedProjects,
         activeWorkspaceId,
         activeTabId,
         lastActiveTabByWorkspace: tabMap,
@@ -297,7 +308,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   switchToWorkspaceByIndex: (index) => {
     const s = get()
-    const ordered = getOrderedWorkspaces(s)
+    const ordered = getVisibleOrderedWorkspaces(s)
     if (index < 0 || index >= ordered.length) return
     get().setActiveWorkspace(ordered[index].id)
   },
@@ -413,6 +424,14 @@ export const useAppStore = create<AppState>((set, get) => ({
   toggleQuickOpen: () => set((s) => ({ quickOpenVisible: !s.quickOpenVisible })),
   closeQuickOpen: () => set({ quickOpenVisible: false }),
 
+  toggleProjectCollapsed: (projectId) =>
+    set((s) => {
+      const next = new Set(s.collapsedProjectIds)
+      if (next.has(projectId)) next.delete(projectId)
+      else next.add(projectId)
+      return { collapsedProjectIds: next }
+    }),
+
   markWorkspaceUnread: (workspaceId) =>
     set((s) => {
       if (s.unreadWorkspaceIds.has(workspaceId)) return s
@@ -498,6 +517,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       activeTabId,
       lastActiveTabByWorkspace: data.lastActiveTabByWorkspace ?? {},
       settings,
+      collapsedProjectIds: new Set(),
     })
   },
 
