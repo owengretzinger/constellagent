@@ -43,9 +43,11 @@ interface GraphqlConnection {
   nodes?: GraphqlPullRequestNode[]
 }
 
+type GraphqlRepoField = GraphqlConnection | GraphqlPullRequestNode | null
+
 interface GraphqlResponse {
   data?: {
-    repository?: Record<string, GraphqlConnection>
+    repository?: Record<string, GraphqlRepoField>
   }
   errors?: Array<{ message?: string }>
 }
@@ -314,6 +316,19 @@ export class GithubService {
     return result
   }
 
+  private static extractPrNumberFromBranch(branch: string): number | null {
+    const trimmed = branch.trim()
+    if (!trimmed) return null
+
+    // Our PR worktree branches are typically "pr/<number>-<headRefName>".
+    const match = trimmed.match(/^(?:pr\/|pr-)(\d+)(?:-|$)/)
+    if (!match?.[1]) return null
+
+    const prNumber = Number(match[1])
+    if (!Number.isInteger(prNumber) || prNumber <= 0) return null
+    return prNumber
+  }
+
   private static async fetchRepoPrStatuses(
     repoInfo: GithubRepoInfo,
     branches: string[],
@@ -331,9 +346,13 @@ export class GithubService {
     const unresolvedLookups: Promise<void>[] = []
     for (let i = 0; i < branches.length; i++) {
       const branch = branches[i]
-      const openNode = repository[`b${i}Open`]?.nodes?.[0]
-      const anyNode = repository[`b${i}Any`]?.nodes?.[0]
-      const picked = openNode ?? anyNode
+      const prNumber = this.extractPrNumberFromBranch(branch)
+      const picked =
+        prNumber !== null
+          ? (repository[`b${i}`] as GraphqlPullRequestNode | null | undefined) ?? null
+          : (repository[`b${i}Open`] as GraphqlConnection | null | undefined)?.nodes?.[0] ??
+            (repository[`b${i}Any`] as GraphqlConnection | null | undefined)?.nodes?.[0] ??
+            null
       const mapped = picked ? this.mapPullRequest(picked) : null
       data[branch] = mapped
 
@@ -386,28 +405,41 @@ export class GithubService {
   private static buildGraphqlQuery(
     repoInfo: GithubRepoInfo,
     branches: string[]
-  ): { query: string; variables: Record<string, string> } {
+  ): { query: string; variables: Record<string, string | number> } {
     const variableDefs = ['$owner: String!', '$name: String!']
     const fields: string[] = []
-    const variables: Record<string, string> = {
+    const variables: Record<string, string | number> = {
       owner: repoInfo.owner,
       name: repoInfo.name,
     }
 
     for (let i = 0; i < branches.length; i++) {
-      const varName = `b${i}`
-      variableDefs.push(`$${varName}: String!`)
-      variables[varName] = branches[i]
-      fields.push(
-        `b${i}Open: pullRequests(headRefName: $${varName}, states: OPEN, first: 1, orderBy: { field: UPDATED_AT, direction: DESC }) {
-          nodes { ...PrFields }
-        }`
-      )
-      fields.push(
-        `b${i}Any: pullRequests(headRefName: $${varName}, states: [OPEN, CLOSED, MERGED], first: 1, orderBy: { field: UPDATED_AT, direction: DESC }) {
-          nodes { ...PrFields }
-        }`
-      )
+      const prNumber = this.extractPrNumberFromBranch(branches[i])
+
+      if (prNumber !== null) {
+        const varName = `n${i}`
+        variableDefs.push(`$${varName}: Int!`)
+        variables[varName] = prNumber
+        fields.push(
+          `b${i}: pullRequest(number: $${varName}) {
+            ...PrFields
+          }`
+        )
+      } else {
+        const varName = `b${i}`
+        variableDefs.push(`$${varName}: String!`)
+        variables[varName] = branches[i]
+        fields.push(
+          `b${i}Open: pullRequests(headRefName: $${varName}, states: OPEN, first: 1, orderBy: { field: UPDATED_AT, direction: DESC }) {
+            nodes { ...PrFields }
+          }`
+        )
+        fields.push(
+          `b${i}Any: pullRequests(headRefName: $${varName}, states: [OPEN, CLOSED, MERGED], first: 1, orderBy: { field: UPDATED_AT, direction: DESC }) {
+            nodes { ...PrFields }
+          }`
+        )
+      }
     }
 
     const query = `
