@@ -553,8 +553,13 @@ export function Sidebar() {
         setProjectOpenPrs((prev) => ({ ...prev, [project.id]: result.data }));
         const branchStatuses: Record<string, OpenPrInfo | null> = {};
         for (const pr of result.data) {
-          if (!pr.headRefName) continue;
-          branchStatuses[pr.headRefName] = pr;
+          if (pr.headRefName) {
+            branchStatuses[pr.headRefName] = pr;
+          }
+          const localBranch = buildPrLocalBranch(pr);
+          if (localBranch) {
+            branchStatuses[localBranch] = pr;
+          }
         }
         if (Object.keys(branchStatuses).length > 0) {
           setPrStatuses(project.id, branchStatuses);
