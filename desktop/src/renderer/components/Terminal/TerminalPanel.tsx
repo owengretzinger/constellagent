@@ -173,15 +173,19 @@ export function TerminalPanel({ ptyId, active }: Props) {
           return
         }
 
-        // During renderer reload restore, prevent resize/fit churn from racing the replay stream.
-        // TUIs that do cursor-up redraws (Codex/Ink) are particularly sensitive to this.
-        let allowFitAndResize = false
+        // During renderer reload restore, prevent resize/fit churn from racing
+        // the replay stream.  TUIs that do cursor-up redraws (Codex/Ink) are
+        // particularly sensitive to this.  We still allow one initial fit so the
+        // xterm canvas fills its container immediately (avoiding a blank pane).
+        let allowResize = false
+        let initialFitDone = false
 
         const fitTerminal = (): boolean => {
           if (disposed) return false
-          if (!allowFitAndResize) return false
+          if (!allowResize && initialFitDone) return false
           if (termDiv.clientWidth <= 0 || termDiv.clientHeight <= 0) return false
           fitAddon.fit()
+          initialFitDone = true
           return true
         }
         fitFnRef.current = () => {
@@ -193,7 +197,9 @@ export function TerminalPanel({ ptyId, active }: Props) {
         const tryFit = () => {
           if (disposed) return
           if (termDiv.clientWidth > 0 && termDiv.clientHeight > 0) {
-            fitTerminal()
+            if (fitTerminal()) return
+            // Container has dimensions but fit was blocked — retry next frame
+            if (++fitAttempts < 30) requestAnimationFrame(tryFit)
           } else if (++fitAttempts < 30) {
             requestAnimationFrame(tryFit)
           }
@@ -282,7 +288,7 @@ export function TerminalPanel({ ptyId, active }: Props) {
         })
 
         const onResizeDisposable = term.onResize(({ cols, rows }: { cols: number; rows: number }) => {
-          if (!allowFitAndResize) return
+          if (!allowResize) return
           window.api.pty.resize(ptyId, cols, rows)
         })
 
@@ -406,7 +412,7 @@ export function TerminalPanel({ ptyId, active }: Props) {
               bufferedOutput.length = 0
             }
 
-            allowFitAndResize = true
+            allowResize = true
             fitTerminal()
             schedulePersistSnapshot()
           })
