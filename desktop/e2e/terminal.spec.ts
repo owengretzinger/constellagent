@@ -335,12 +335,6 @@ test.describe('Terminal functionality', () => {
         await window.waitForSelector('#root', { timeout: 10000 })
         await window.waitForTimeout(1500)
 
-        if (i === 0) {
-          const rows = await getActiveTerminalRows(window)
-          // eslint-disable-next-line no-console
-          console.log('TERMINAL_ROWS_AFTER_RELOAD_0:\n' + rows.join('\n'))
-        }
-
         await expect.poll(() => getActiveTerminalText(window), { timeout: 10000 }).toContain('1. first')
         await expect.poll(() => getActiveTerminalText(window), { timeout: 10000 }).toContain('2. second')
         await expect.poll(() => getActiveTerminalText(window), { timeout: 10000 }).toContain('3. third')
