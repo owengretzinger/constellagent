@@ -53,11 +53,19 @@ const api = {
       ipcRenderer.send(IPC.PTY_DESTROY, ptyId),
     list: () =>
       ipcRenderer.invoke(IPC.PTY_LIST) as Promise<string[]>,
-    reattach: (ptyId: string) =>
-      ipcRenderer.invoke(IPC.PTY_REATTACH, ptyId) as Promise<boolean>,
-    onData: (ptyId: string, callback: (data: string) => void) => {
+    reattach: (ptyId: string, sinceSeq?: number) =>
+      ipcRenderer.invoke(IPC.PTY_REATTACH, ptyId, sinceSeq) as Promise<{ ok: boolean; replay?: string; baseSeq: number; endSeq: number; truncated: boolean; cols: number; rows: number }>,
+    onData: (ptyId: string, callback: (data: string, startSeq?: number) => void) => {
       const channel = `${IPC.PTY_DATA}:${ptyId}`
-      const listener = (_event: Electron.IpcRendererEvent, data: string) => callback(data)
+      const listener = (_event: Electron.IpcRendererEvent, ...args: unknown[]) => {
+        if (typeof args[0] === 'number' && typeof args[1] === 'string') {
+          callback(args[1], args[0])
+          return
+        }
+        if (typeof args[0] === 'string') {
+          callback(args[0])
+        }
+      }
       ipcRenderer.on(channel, listener)
       return () => {
         ipcRenderer.removeListener(channel, listener)
