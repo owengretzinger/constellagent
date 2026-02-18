@@ -258,4 +258,42 @@ test.describe('Changed files & diff viewer', () => {
       cleanupTestRepo(repoPath)
     }
   })
+
+  test('diff viewer does not render diffs for non-text files', async () => {
+    const repoPath = createTestRepo('diff-binary-1')
+    const { app, window } = await launchApp()
+
+    try {
+      const worktreePath = await setupWorkspace(window, repoPath, 'bin')
+      await window.waitForTimeout(1000)
+
+      // Create an untracked binary file (resolve symlinks for macOS /tmp -> /private/tmp)
+      const realWtPath = realpathSync(worktreePath)
+      mkdirSync(join(realWtPath, 'assets'), { recursive: true })
+      writeFileSync(join(realWtPath, 'assets/logo.png'), Buffer.from([0, 1, 2, 3, 4, 5, 0, 255]))
+
+      // Switch to Changes panel
+      const changesBtn = window.locator('button', { hasText: 'Changes' })
+      await changesBtn.click()
+      await window.waitForTimeout(1500)
+
+      // Click the untracked file to open diff
+      const untrackedFile = window.locator('[class*="statusBadge"]', { hasText: 'U' }).first().locator('..')
+      await expect(untrackedFile).toBeVisible({ timeout: 5000 })
+      await expect(untrackedFile).toContainText('logo.png')
+      await untrackedFile.click()
+      await window.waitForTimeout(2000)
+
+      // Binary notice should be shown instead of an attempted text diff.
+      const binaryNotice = window.locator('text=Non-text file. Diff not shown.')
+      await expect(binaryNotice).toBeVisible({ timeout: 5000 })
+
+      await window.screenshot({
+        path: resolve(__dirname, 'screenshots/diff-binary-notice.png'),
+      })
+    } finally {
+      await app.close()
+      cleanupTestRepo(repoPath)
+    }
+  })
 })
