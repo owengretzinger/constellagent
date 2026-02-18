@@ -133,6 +133,18 @@
   border-bottom: 2px solid var(--border-subtle);
 }
 
+.binaryDiffNotice {
+  padding: var(--space-4) var(--space-6);
+  background: var(--surface-1);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.binaryDiffNoticeText {
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+}
+
 .fileHeader {
   display: flex;
   align-items: center;

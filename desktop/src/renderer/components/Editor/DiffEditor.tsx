@@ -13,6 +13,7 @@ interface DiffFileData {
   filePath: string
   patch: string
   status: string
+  isBinary: boolean
 }
 
 interface Props {
@@ -26,6 +27,47 @@ const STATUS_LABELS: Record<string, string> = {
   deleted: 'D',
   renamed: 'R',
   untracked: 'U',
+}
+
+function patchIndicatesBinary(patch: string): boolean {
+  if (!patch) return false
+  return /^\s*Binary files /m.test(patch) || /^\s*GIT binary patch\b/m.test(patch)
+}
+
+const BINARY_EXTENSIONS = new Set([
+  // Images
+  'png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'ico', 'icns', 'tiff', 'tif',
+  // Documents
+  'pdf',
+  // Archives / packages
+  'zip', 'gz', 'tgz', 'bz2', 'xz', '7z', 'rar', 'tar', 'dmg', 'pkg',
+  // Audio / video
+  'mp3', 'wav', 'flac', 'm4a', 'ogg', 'mp4', 'mov', 'avi', 'mkv', 'webm',
+  // Fonts
+  'woff', 'woff2', 'ttf', 'otf', 'eot',
+  // Binaries / data
+  'exe', 'dll', 'so', 'dylib', 'wasm', 'bin', 'dat', 'db', 'sqlite',
+])
+
+function pathIndicatesBinary(filePath: string): boolean {
+  const ext = filePath.split('.').pop()?.toLowerCase()
+  if (!ext || ext === filePath.toLowerCase()) return false
+  return BINARY_EXTENSIONS.has(ext)
+}
+
+function contentIndicatesBinary(text: string): boolean {
+  // Heuristic: NUL bytes or lots of control/replacement characters usually mean "not text".
+  const sample = text.slice(0, 8000)
+  if (sample.includes('\u0000')) return true
+
+  let suspicious = 0
+  for (let i = 0; i < sample.length; i++) {
+    const code = sample.charCodeAt(i)
+    if (code === 9 || code === 10 || code === 13) continue // tab/newline/carriage return
+    if (code === 0xfffd || code < 32) suspicious++
+  }
+
+  return sample.length > 0 && suspicious / sample.length > 0.1
 }
 
 // ── Per-file diff section ──
@@ -65,19 +107,27 @@ const DiffFileSection = memo(function DiffFileSection({
           {fileName}
         </span>
       </div>
-      <PatchDiff
-        patch={data.patch}
-        options={{
-          theme: 'tokyo-night',
-          themeType: 'dark',
-          diffStyle: inline ? 'unified' : 'split',
-          diffIndicators: 'bars',
-          lineDiffType: 'word-alt',
-          overflow: 'scroll',
-          expandUnchanged: false,
-          disableFileHeader: true,
-        }}
-      />
+      {data.isBinary ? (
+        <div className={styles.binaryDiffNotice}>
+          <span className={styles.binaryDiffNoticeText}>
+            Non-text file. Diff not shown.
+          </span>
+        </div>
+      ) : (
+        <PatchDiff
+          patch={data.patch}
+          options={{
+            theme: 'tokyo-night',
+            themeType: 'dark',
+            diffStyle: inline ? 'unified' : 'split',
+            diffIndicators: 'bars',
+            lineDiffType: 'word-alt',
+            overflow: 'scroll',
+            expandUnchanged: false,
+            disableFileHeader: true,
+          }}
+        />
+      )}
     </div>
   )
 })
@@ -130,13 +180,20 @@ export function DiffViewer({ worktreePath, active }: Props) {
       const results = await Promise.all(
         statuses.map(async (file) => {
           let patch = await window.api.git.getFileDiff(worktreePath, file.path)
+          let isBinary =
+            patchIndicatesBinary(patch) ||
+            (pathIndicatesBinary(file.path) && (file.status === 'added' || file.status === 'untracked' || file.status === 'renamed'))
 
           // For added/untracked files, git diff returns empty — build synthetic patch
-          if (!patch && (file.status === 'added' || file.status === 'untracked')) {
+          if (!patch && !isBinary && (file.status === 'added' || file.status === 'untracked')) {
             const fullPath = file.path.startsWith('/')
               ? file.path
               : `${worktreePath}/${file.path}`
             const content = await window.api.fs.readFile(fullPath)
+            if (contentIndicatesBinary(content)) {
+              isBinary = true
+              return { filePath: file.path, patch: '', status: file.status, isBinary }
+            }
             const lines = content.split('\n')
             patch = [
               `--- /dev/null`,
@@ -151,7 +208,7 @@ export function DiffViewer({ worktreePath, active }: Props) {
             patch = `--- a/${file.path}\n+++ /dev/null\n@@ -1,0 +0,0 @@\n`
           }
 
-          return { filePath: file.path, patch: patch || '', status: file.status }
+          return { filePath: file.path, patch: patch || '', status: file.status, isBinary }
         }),
       )
       setFiles(results)
