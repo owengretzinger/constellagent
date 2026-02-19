@@ -18,6 +18,10 @@ import { loadCodexConfigText, saveCodexConfigText } from './codex-config'
 const ptyManager = new PtyManager()
 const automationScheduler = new AutomationScheduler(ptyManager)
 
+export async function catchUpAutomationsOnWake(now = new Date()): Promise<void> {
+  await automationScheduler.catchUpOnWake(now)
+}
+
 interface FsWatchSubscriber {
   webContents: WebContents
   refs: number
