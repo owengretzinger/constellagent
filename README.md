@@ -12,6 +12,7 @@ A macOS desktop app for running multiple AI agents in parallel. Each agent gets 
 - Git staging, committing, branching, and worktree management
 - File tree navigation
 - Cron-based automation scheduling
+- Sleep/wake recovery for automations (coalesces missed runs while app stays open)
 - Keyboard-driven - Quick Open, tab switching, shortcuts
 
 ## Getting started
@@ -35,3 +36,7 @@ bun run dist      # Package as signed macOS DMG
 ```bash
 bun run test      # Playwright e2e tests
 ```
+
+Automation scheduling notes:
+- If the laptop sleeps during a scheduled time while the app is still running, Constellagent runs one catch-up execution on wake.
+- If the app is fully quit, missed runs are not backfilled on next launch.

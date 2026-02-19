@@ -30,6 +30,16 @@ The system SHALL schedule enabled automations using cron expressions. The schedu
 - **WHEN** user sets a disabled automation's `enabled` field to true
 - **THEN** the system schedules the automation with its cron expression
 
+#### Scenario: Wake catch-up while app stays open
+- **WHEN** the machine sleeps through one or more scheduled times while the app remains open
+- **THEN** the system runs at most one catch-up execution on wake/unlock for that automation
+- **AND** resumes normal cron scheduling afterward
+
+#### Scenario: No catch-up after full app relaunch
+- **WHEN** the app is fully quit and later relaunched
+- **THEN** the system does not backfill runs missed while the app was not running
+- **AND** only schedules future runs from relaunch time onward
+
 ### Requirement: Automation execution
 When a scheduled automation fires, the system SHALL spawn `claude -p "<prompt>" --no-input` via node-pty in the automation's project repoPath. The system SHALL create a new workspace and terminal tab to display the streaming output.
 
