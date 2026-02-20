@@ -5,6 +5,10 @@ import { promisify } from 'util'
 
 const execFileAsync = promisify(execFile)
 
+function isEnvFile(name: string): boolean {
+  return /^\.env($|\.)/.test(name)
+}
+
 export interface FileNode {
   name: string
   path: string
@@ -37,7 +41,7 @@ export class FileService {
     const nodes: FileNode[] = []
 
     const sorted = entries
-      .filter((e) => !e.name.startsWith('.') || e.name === '.gitignore')
+      .filter((e) => !e.name.startsWith('.') || e.name === '.gitignore' || isEnvFile(e.name))
       .filter((e) => !SKIP_DIRS.has(e.name))
       .sort((a, b) => {
         // Directories first, then alphabetical
@@ -76,7 +80,33 @@ export class FileService {
     )
 
     const files = stdout.trim().split('\n').filter(Boolean)
-    return this.buildTreeFromPaths(dirPath, files)
+    const envFiles = await this.findEnvFiles(dirPath)
+    const merged = Array.from(new Set([...files, ...envFiles]))
+    return this.buildTreeFromPaths(dirPath, merged)
+  }
+
+  private static async findEnvFiles(basePath: string, currentPath = basePath, depth = 0): Promise<string[]> {
+    if (depth > 8) return []
+
+    const entries = await readdir(currentPath, { withFileTypes: true })
+    const files: string[] = []
+
+    for (const entry of entries) {
+      if (SKIP_DIRS.has(entry.name)) continue
+
+      const fullPath = join(currentPath, entry.name)
+      if (entry.isDirectory()) {
+        if (entry.name.startsWith('.')) continue
+        files.push(...await this.findEnvFiles(basePath, fullPath, depth + 1))
+        continue
+      }
+
+      if (!entry.isFile() || !isEnvFile(entry.name)) continue
+
+      files.push(relative(basePath, fullPath).replaceAll('\\', '/'))
+    }
+
+    return files
   }
 
   private static buildTreeFromPaths(basePath: string, paths: string[]): FileNode[] {
