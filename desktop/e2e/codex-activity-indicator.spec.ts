@@ -24,25 +24,23 @@ sleep 20
 
 async function launchApp(
   label: string
-): Promise<{ app: ElectronApplication; window: Page; notifyDir: string; activityDir: string }> {
+): Promise<{ app: ElectronApplication; window: Page; eventDir: string }> {
   const suffix = `${label}-${Date.now()}-${Math.random().toString(16).slice(2)}`
-  const notifyDir = join(TMP_DIR, `constellagent-notify-${suffix}`)
-  const activityDir = join(TMP_DIR, `constellagent-activity-${suffix}`)
+  const eventDir = join(TMP_DIR, `constellagent-agent-events-${suffix}`)
   const app = await electron.launch({
     args: [appPath],
     env: {
       ...process.env,
       CI_TEST: '1',
       ELECTRON_RENDERER_URL: '',
-      CONSTELLAGENT_NOTIFY_DIR: notifyDir,
-      CONSTELLAGENT_ACTIVITY_DIR: activityDir,
+      CONSTELLAGENT_AGENT_EVENT_DIR: eventDir,
     },
   })
   const window = await app.firstWindow()
   await window.waitForLoadState('domcontentloaded')
   await window.waitForSelector('#root', { timeout: 10000 })
   await window.waitForTimeout(1500)
-  return { app, window, notifyDir, activityDir }
+  return { app, window, eventDir }
 }
 
 function createTestRepo(name: string): string {
@@ -145,7 +143,7 @@ async function setupTwoWorkspaces(window: Page, repoPath: string) {
 test.describe('Codex activity indicator', () => {
   test('marks workspace active while codex process runs and clears when done', async () => {
     const repoPath = createTestRepo('codex-activity')
-    const { app, window, notifyDir, activityDir } = await launchApp('codex-activity')
+    const { app, window, eventDir } = await launchApp('codex-activity')
 
     try {
       const { workspaceId, ptyId } = await setupWorkspace(window, repoPath)
@@ -158,6 +156,7 @@ test.describe('Codex activity indicator', () => {
         )
       }, { ptyId, fakeCodexPath: FAKE_CODEX_BIN })
 
+      // Trigger turn_started while codex process is alive.
       await window.waitForTimeout(300)
       await window.evaluate((id: string) => {
         ;(window as any).api.pty.write(id, '\n')
@@ -169,14 +168,7 @@ test.describe('Codex activity indicator', () => {
         { timeout: 5000 }
       )
 
-      await window.waitForTimeout(2200)
-      await window.evaluate(({ ptyId: id, wsId, notifyPath, activityPath }) => {
-        ;(window as any).api.pty.write(
-          id,
-          `mkdir -p "${notifyPath}" "${activityPath}" && printf '%s\\n' "${wsId}" > "${notifyPath}/test-$(date +%s%N)-$$" && rm -f "${activityPath}/${wsId}.codex."*\n`
-        )
-      }, { ptyId, wsId: workspaceId, notifyPath: notifyDir, activityPath: activityDir })
-
+      // Process exits naturally and should transition to awaiting_user.
       await window.waitForFunction(
         (wsId: string) => !(window as any).__store.getState().activeAgentWorkspaceIds.has(wsId),
         workspaceId,
@@ -190,14 +182,13 @@ test.describe('Codex activity indicator', () => {
     } finally {
       rmSync(FAKE_CODEX_BIN, { force: true })
       await app.close()
-      rmSync(notifyDir, { recursive: true, force: true })
-      rmSync(activityDir, { recursive: true, force: true })
+      rmSync(eventDir, { recursive: true, force: true })
     }
   })
 
   test('marks background workspace unread when activity transitions to done', async () => {
     const repoPath = createTestRepo('codex-unread')
-    const { app, window, notifyDir, activityDir } = await launchApp('codex-unread')
+    const { app, window, eventDir } = await launchApp('codex-unread')
 
     try {
       const { workspaceId1, workspaceId2, ptyId1 } = await setupTwoWorkspaces(window, repoPath)
@@ -221,18 +212,10 @@ test.describe('Codex activity indicator', () => {
         { timeout: 5000 }
       )
 
-      // Ensure ws-b is still selected while ws-a finishes.
+      // Ensure ws-b stays selected while ws-a finishes.
       await window.evaluate((wsId: string) => {
         ;(window as any).__store.getState().setActiveWorkspace(wsId)
       }, workspaceId2)
-
-      await window.waitForTimeout(2200)
-      await window.evaluate(({ ptyId: id, wsId, activityPath }) => {
-        ;(window as any).api.pty.write(
-          id,
-          `rm -f "${activityPath}/${wsId}.codex."*\n`
-        )
-      }, { ptyId: ptyId1, wsId: workspaceId1, activityPath: activityDir })
 
       await window.waitForFunction(
         (wsId: string) => !(window as any).__store.getState().activeAgentWorkspaceIds.has(wsId),
@@ -253,14 +236,13 @@ test.describe('Codex activity indicator', () => {
     } finally {
       rmSync(FAKE_CODEX_BIN, { force: true })
       await app.close()
-      rmSync(notifyDir, { recursive: true, force: true })
-      rmSync(activityDir, { recursive: true, force: true })
+      rmSync(eventDir, { recursive: true, force: true })
     }
   })
 
-  test('keeps Claude activity marker when another terminal in same workspace closes', async () => {
-    const repoPath = createTestRepo('claude-activity-multi-tab')
-    const { app, window, notifyDir, activityDir } = await launchApp('claude-activity-multi-tab')
+  test('keeps workspace active when another terminal in same workspace closes', async () => {
+    const repoPath = createTestRepo('codex-multi-tab')
+    const { app, window, eventDir } = await launchApp('codex-multi-tab')
 
     try {
       const { workspaceId, ptyId: primaryPtyId } = await setupWorkspace(window, repoPath)
@@ -282,13 +264,17 @@ test.describe('Codex activity indicator', () => {
         return ptyId
       }, workspaceId)
 
-      // Simulate Claude UserPromptSubmit hook writing its activity marker.
-      await window.evaluate(({ ptyId: id, wsId, activityPath }) => {
+      await window.evaluate(({ ptyId: id, fakeCodexPath }) => {
         ;(window as any).api.pty.write(
           id,
-          `mkdir -p "${activityPath}" && touch "${activityPath}/${wsId}.claude"\n`
+          `SLEEP_BIN="$(command -v sleep)" && ln -sf "$SLEEP_BIN" "${fakeCodexPath}" && "${fakeCodexPath}" 4\n`
         )
-      }, { ptyId: primaryPtyId, wsId: workspaceId, activityPath: activityDir })
+      }, { ptyId: primaryPtyId, fakeCodexPath: FAKE_CODEX_BIN })
+
+      await window.waitForTimeout(300)
+      await window.evaluate((id: string) => {
+        ;(window as any).api.pty.write(id, '\n')
+      }, primaryPtyId)
 
       await window.waitForFunction(
         (wsId: string) => (window as any).__store.getState().activeAgentWorkspaceIds.has(wsId),
@@ -296,7 +282,7 @@ test.describe('Codex activity indicator', () => {
         { timeout: 5000 }
       )
 
-      // Closing a different terminal in the same workspace should not clear Claude activity.
+      // Closing another tab in the same workspace must not clear running state.
       await window.evaluate((ptyId: string) => {
         ;(window as any).api.pty.destroy(ptyId)
       }, secondaryPtyId)
@@ -307,21 +293,21 @@ test.describe('Codex activity indicator', () => {
       }, workspaceId)
       expect(isStillActive).toBe(true)
 
-      // Cleanup marker created by this test.
-      await window.evaluate(({ ptyId: id, wsId, activityPath }) => {
-        ;(window as any).api.pty.write(id, `rm -f "${activityPath}/${wsId}.claude"\n`)
-      }, { ptyId: primaryPtyId, wsId: workspaceId, activityPath: activityDir })
+      await window.waitForFunction(
+        (wsId: string) => !(window as any).__store.getState().activeAgentWorkspaceIds.has(wsId),
+        workspaceId,
+        { timeout: 10000 }
+      )
     } finally {
       rmSync(FAKE_CODEX_BIN, { force: true })
       await app.close()
-      rmSync(notifyDir, { recursive: true, force: true })
-      rmSync(activityDir, { recursive: true, force: true })
+      rmSync(eventDir, { recursive: true, force: true })
     }
   })
 
   test('shows unread when Codex asks a question before process exit', async () => {
     const repoPath = createTestRepo('codex-question-unread')
-    const { app, window, notifyDir, activityDir } = await launchApp('codex-question-unread')
+    const { app, window, eventDir } = await launchApp('codex-question-unread')
 
     try {
       writeFakeCodexQuestionScript()
@@ -329,23 +315,21 @@ test.describe('Codex activity indicator', () => {
       const { workspaceId1, workspaceId2, ptyId1 } = await setupTwoWorkspaces(window, repoPath)
       await window.waitForTimeout(800)
 
-      // Seed active codex state using the PTY shell PID marker convention.
-      await window.evaluate(({ ptyId: id, wsId, activityPath }) => {
-        ;(window as any).api.pty.write(
-          id,
-          `mkdir -p "${activityPath}" && touch "${activityPath}/${wsId}.codex.$$"\n`
-        )
-      }, { ptyId: ptyId1, wsId: workspaceId1, activityPath: activityDir })
+      await window.evaluate(({ ptyId: id, fakeCodexPath }) => {
+        ;(window as any).api.pty.write(id, `${fakeCodexPath}\n`)
+      }, { ptyId: ptyId1, fakeCodexPath: FAKE_CODEX_BIN })
+
+      // Trigger turn_started while codex process is alive.
+      await window.waitForTimeout(300)
+      await window.evaluate((id: string) => {
+        ;(window as any).api.pty.write(id, '\n')
+      }, ptyId1)
 
       await window.waitForFunction(
         (wsId: string) => (window as any).__store.getState().activeAgentWorkspaceIds.has(wsId),
         workspaceId1,
         { timeout: 8000 }
       )
-
-      await window.evaluate(({ ptyId: id, fakeCodexPath }) => {
-        ;(window as any).api.pty.write(id, `${fakeCodexPath}\n`)
-      }, { ptyId: ptyId1, fakeCodexPath: FAKE_CODEX_BIN })
 
       // Keep ws-b selected while ws-a asks a question in the background.
       await window.evaluate((wsId: string) => {
@@ -366,8 +350,7 @@ test.describe('Codex activity indicator', () => {
     } finally {
       rmSync(FAKE_CODEX_BIN, { force: true })
       await app.close()
-      rmSync(notifyDir, { recursive: true, force: true })
-      rmSync(activityDir, { recursive: true, force: true })
+      rmSync(eventDir, { recursive: true, force: true })
     }
   })
 })

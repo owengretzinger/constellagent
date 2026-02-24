@@ -5,18 +5,11 @@ import { IPC } from '../shared/ipc-channels'
 import type { AgentTurnEvent, AgentTurnEventType, AgentTurnOutcome } from '../shared/agent-events'
 import { AGENT_EVENT_DEFAULT_DIR } from './agent-events'
 
-const DEFAULT_NOTIFY_DIR = '/tmp/constellagent-notify'
-const DEFAULT_ACTIVITY_DIR = '/tmp/constellagent-activity'
 const POLL_INTERVAL = 500
 const FILE_SETTLE_MS = 100
-const CLAUDE_MARKER_SUFFIX = '.claude'
-const GENERIC_AGENT_MARKER_RE = /^(.+)\.[a-z0-9-]+\.\d+$/i
 
 const TURN_EVENT_TYPES: AgentTurnEventType[] = ['turn_started', 'awaiting_user']
-
 const TURN_OUTCOMES: AgentTurnOutcome[] = ['success', 'failed']
-
-const LEGACY_MARKER_AGENTS = new Set(['claude', 'codex'])
 
 function isTurnEventType(value: string): value is AgentTurnEventType {
   return TURN_EVENT_TYPES.includes(value as AgentTurnEventType)
@@ -28,19 +21,14 @@ function isTurnOutcome(value: string): value is AgentTurnOutcome {
 
 export class NotificationWatcher {
   constructor(
-    private readonly notifyDir = process.env.CONSTELLAGENT_NOTIFY_DIR || DEFAULT_NOTIFY_DIR,
-    private readonly activityDir = process.env.CONSTELLAGENT_ACTIVITY_DIR || DEFAULT_ACTIVITY_DIR,
     private readonly eventDir = process.env.CONSTELLAGENT_AGENT_EVENT_DIR || AGENT_EVENT_DEFAULT_DIR,
   ) {}
 
   private timer: ReturnType<typeof setInterval> | null = null
-  private activeLegacyWorkspaceIds = new Set<string>()
   private activeEventSessions = new Map<string, Set<string>>()
   private lastPublishedActiveIds = new Set<string>()
 
   start(): void {
-    mkdirSync(this.notifyDir, { recursive: true })
-    mkdirSync(this.activityDir, { recursive: true })
     mkdirSync(this.eventDir, { recursive: true })
     this.pollOnce()
     this.timer = setInterval(() => this.pollOnce(), POLL_INTERVAL)
@@ -54,52 +42,8 @@ export class NotificationWatcher {
   }
 
   private pollOnce(): void {
-    this.pollNotifications()
-    this.pollLegacyActivityMarkers()
     this.pollAgentEvents()
     this.publishActivity()
-  }
-
-  private pollNotifications(): void {
-    try {
-      const files = readdirSync(this.notifyDir)
-      const now = Date.now()
-      for (const f of files) {
-        // Ignore in-progress temp files written by atomic writers.
-        if (f.endsWith('.tmp')) continue
-        const filePath = join(this.notifyDir, f)
-        try {
-          const stat = statSync(filePath)
-          if (now - stat.mtimeMs < FILE_SETTLE_MS) continue
-        } catch {
-          continue
-        }
-        this.processNotifyFile(filePath)
-      }
-    } catch {
-      // Directory may not exist yet
-    }
-  }
-
-  private pollLegacyActivityMarkers(): void {
-    try {
-      const files = readdirSync(this.activityDir)
-      const workspaceIds = new Set<string>()
-      for (const name of files) {
-        if (name.endsWith('.tmp')) continue
-        const workspaceId = this.workspaceIdFromMarkerName(name)
-        if (!workspaceId) {
-          this.removeActivityMarker(name)
-          continue
-        }
-        workspaceIds.add(workspaceId)
-      }
-      this.activeLegacyWorkspaceIds = workspaceIds
-      this.reconcileLegacyBackedAgentSessions()
-    } catch {
-      this.activeLegacyWorkspaceIds = new Set()
-      this.reconcileLegacyBackedAgentSessions()
-    }
   }
 
   private pollAgentEvents(): void {
@@ -122,20 +66,6 @@ export class NotificationWatcher {
     }
   }
 
-  private processNotifyFile(filePath: string): void {
-    try {
-      const wsId = readFileSync(filePath, 'utf-8').trim()
-      if (!wsId) {
-        unlinkSync(filePath)
-        return
-      }
-      this.notifyRenderer(wsId)
-      unlinkSync(filePath)
-    } catch {
-      // File may have been already processed or deleted
-    }
-  }
-
   private processAgentEventFile(filePath: string): void {
     try {
       const raw = readFileSync(filePath, 'utf-8').trim()
@@ -152,7 +82,6 @@ export class NotificationWatcher {
       unlinkSync(filePath)
     } catch {
       try {
-        // Drop malformed files to avoid retry loops.
         unlinkSync(filePath)
       } catch {
         // Ignore unlink failures.
@@ -183,7 +112,7 @@ export class NotificationWatcher {
       schema: 1,
       workspaceId,
       type,
-      outcome,
+      outcome: type === 'awaiting_user' ? outcome : undefined,
       agent,
       sessionId,
       at: typeof parsed.at === 'number' ? parsed.at : Date.now(),
@@ -199,10 +128,7 @@ export class NotificationWatcher {
     }
 
     this.removeActiveSession(workspaceId, agent, sessionId)
-
-    if (type === 'awaiting_user') {
-      this.notifyRenderer(workspaceId)
-    }
+    this.notifyRenderer(workspaceId)
   }
 
   private addActiveSession(workspaceId: string, key: string): void {
@@ -238,26 +164,8 @@ export class NotificationWatcher {
     return `${agent}:${sessionId || '*default*'}`
   }
 
-  private reconcileLegacyBackedAgentSessions(): void {
-    for (const [workspaceId, sessions] of this.activeEventSessions.entries()) {
-      if (this.activeLegacyWorkspaceIds.has(workspaceId)) continue
-
-      let changed = false
-      for (const key of sessions) {
-        const agent = key.split(':', 1)[0]
-        if (!LEGACY_MARKER_AGENTS.has(agent)) continue
-        sessions.delete(key)
-        changed = true
-      }
-
-      if (changed && sessions.size === 0) {
-        this.activeEventSessions.delete(workspaceId)
-      }
-    }
-  }
-
   private publishActivity(): void {
-    const nextActive = new Set<string>(this.activeLegacyWorkspaceIds)
+    const nextActive = new Set<string>()
     for (const [workspaceId, sessions] of this.activeEventSessions.entries()) {
       if (sessions.size > 0) nextActive.add(workspaceId)
     }
@@ -286,32 +194,6 @@ export class NotificationWatcher {
       if (!b.has(value)) return false
     }
     return true
-  }
-
-  private workspaceIdFromMarkerName(name: string): string | null {
-    const marker = name.trim()
-    if (!marker) return null
-
-    if (marker.endsWith(CLAUDE_MARKER_SUFFIX)) {
-      return marker.slice(0, -CLAUDE_MARKER_SUFFIX.length) || null
-    }
-
-    const generic = marker.match(GENERIC_AGENT_MARKER_RE)
-    if (generic?.[1]) {
-      return generic[1]
-    }
-
-    // Legacy format is no longer written. Ignore and clean it up to avoid
-    // stale always-active spinners after upgrading marker formats.
-    return null
-  }
-
-  private removeActivityMarker(name: string): void {
-    try {
-      unlinkSync(join(this.activityDir, name))
-    } catch {
-      // Marker may already be gone
-    }
   }
 
   private notifyRenderer(workspaceId: string): void {

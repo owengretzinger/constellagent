@@ -65,8 +65,6 @@ if (process.env.CI_TEST) {
   const { join } = require('path')
   const testData = mkdtempSync(join(require('os').tmpdir(), 'constellagent-test-'))
   app.setPath('userData', testData)
-  process.env.CONSTELLAGENT_NOTIFY_DIR ||= join(testData, 'notify')
-  process.env.CONSTELLAGENT_ACTIVITY_DIR ||= join(testData, 'activity')
   process.env.CONSTELLAGENT_AGENT_EVENT_DIR ||= join(testData, 'agent-events')
 }
 

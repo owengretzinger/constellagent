@@ -62,7 +62,7 @@ sleep 1
 test.describe('Pi-mono JSON activity detection', () => {
   test('detects running and awaiting-user from pi --mode json event stream', async () => {
     const repoPath = createTestRepo('pi-mono-json')
-    const { app, window, notifyDir, activityDir, eventDir } = await launchControlledApp('pi-mono-json')
+    const { app, window, eventDir } = await launchControlledApp('pi-mono-json')
     const scriptPath = join('/tmp', `fake-pi-mono-json-${Date.now()}.sh`)
 
     try {
@@ -99,8 +99,6 @@ test.describe('Pi-mono JSON activity detection', () => {
     } finally {
       await app.close()
       rmSync(scriptPath, { force: true })
-      rmSync(notifyDir, { recursive: true, force: true })
-      rmSync(activityDir, { recursive: true, force: true })
       rmSync(eventDir, { recursive: true, force: true })
     }
   })

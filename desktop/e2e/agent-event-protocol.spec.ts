@@ -74,7 +74,7 @@ async function setupTwoWorkspaces(window: Page, repoPath: string) {
 test.describe('Agent event protocol', () => {
   test('can control app via code and verify activity -> awaiting_user transitions', async () => {
     const repoPath = createTestRepo('agent-events')
-    const { app, window, notifyDir, activityDir, eventDir } = await launchControlledApp('agent-events')
+    const { app, window, eventDir } = await launchControlledApp('agent-events')
 
     try {
       const { ws1Id } = await setupTwoWorkspaces(window, repoPath)
@@ -127,8 +127,6 @@ test.describe('Agent event protocol', () => {
       expect(isActive).toBe(false)
     } finally {
       await app.close()
-      rmSync(notifyDir, { recursive: true, force: true })
-      rmSync(activityDir, { recursive: true, force: true })
       rmSync(eventDir, { recursive: true, force: true })
     }
   })
