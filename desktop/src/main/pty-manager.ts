@@ -22,6 +22,11 @@ interface PtyInstance {
   agentEventLineBuffer: string
   piMonoJsonDetected: boolean
   piMonoTurnActive: boolean
+  crushTurnActive: boolean
+  crushSilenceTimer: ReturnType<typeof setTimeout> | null
+  crushLastTurnEndedAt: number
+  crushLastRearmCheck: number
+  crushPrevDataSize: number
 }
 
 interface ProcessEntry {
@@ -79,11 +84,39 @@ function isLikelyCodexCommand(command: string): boolean {
   return first.includes('/codex/') && first.endsWith('/codex')
 }
 
+function isLikelyCrushCommand(command: string): boolean {
+  const tokens = command.trim().split(/\s+/)
+  if (tokens.length === 0) return false
+
+  const isCrushToken = (token: string): boolean => {
+    if (!token) return false
+    const clean = token.replace(/^['"]|['"]$/g, '').toLowerCase()
+    const base = clean.split('/').pop() ?? clean
+    return base === 'crush'
+  }
+
+  if (isCrushToken(tokens[0])) return true
+
+  // Handle shell-invoked scripts: bash /path/to/crush, sh crush, etc.
+  const first = tokens[0].toLowerCase()
+  const firstBase = first.split('/').pop() ?? first
+  const isShell =
+    firstBase === 'bash' || firstBase === 'sh' || firstBase === 'zsh' ||
+    firstBase === 'dash' || firstBase === 'fish'
+  if (isShell && isCrushToken(tokens[1] ?? '')) return true
+
+  return false
+}
+
 const CODEX_PROMPT_BUFFER_MAX = 4096
 const PTY_REPLAY_BUFFER_MAX_CHARS = 8_000_000
 const CODEX_QUESTION_HEADER_RE = /Question\s+\d+\s*\/\s*\d+\s*\(\s*\d+\s+unanswered\s*\)/i
 const CODEX_QUESTION_HINT_RE = /enter to submit answer/i
 const AGENT_EVENT_LINE_BUFFER_MAX = 32_768
+const CRUSH_SILENCE_MS = 5_000
+const CRUSH_REARM_GRACE_MS = 3_000
+const CRUSH_REARM_CHECK_INTERVAL_MS = 3_000
+const CRUSH_REARM_MIN_DATA_LEN = 8
 
 function stripAnsiSequences(data: string): string {
   return data
@@ -163,6 +196,11 @@ export class PtyManager {
       agentEventLineBuffer: '',
       piMonoJsonDetected: false,
       piMonoTurnActive: false,
+      crushTurnActive: false,
+      crushSilenceTimer: null,
+      crushLastTurnEndedAt: 0,
+      crushLastRearmCheck: 0,
+      crushPrevDataSize: -1,
     }
 
     let pendingWrite = initialWrite
@@ -176,6 +214,7 @@ export class PtyManager {
       this.handlePiMonoJsonOutput(instance, data)
       this.handleCodexQuestionPrompt(instance, data)
       this.handleCodexProcessCompletion(instance)
+      this.handleCrushTurnSilence(instance, data)
       // Write initial command on first output (shell is ready)
       if (pendingWrite) {
         const toWrite = pendingWrite
@@ -190,6 +229,21 @@ export class PtyManager {
         this.emitTurnEvent(
           instance.workspaceId,
           'codex',
+          'awaiting_user',
+          instance.agentSessionId,
+          exitCode === 0 ? 'success' : 'failed',
+        )
+      }
+
+      if (instance.crushTurnActive) {
+        instance.crushTurnActive = false
+        if (instance.crushSilenceTimer) {
+          clearTimeout(instance.crushSilenceTimer)
+          instance.crushSilenceTimer = null
+        }
+        this.emitTurnEvent(
+          instance.workspaceId,
+          'crush',
           'awaiting_user',
           instance.agentSessionId,
           exitCode === 0 ? 'success' : 'failed',
@@ -215,12 +269,19 @@ export class PtyManager {
 
     // Codex doesn't expose a prompt-submit hook, so mark the workspace active
     // when Enter is sent while a Codex process is already running in this PTY.
-    if (instance.workspaceId && /[\r\n]/.test(data) && this.isCodexRunningUnder(instance.process.pid)) {
-      instance.codexPromptBuffer = ''
-      instance.codexAwaitingAnswer = false
-      if (!instance.codexTurnActive) {
-        instance.codexTurnActive = true
-        this.emitTurnEvent(instance.workspaceId, 'codex', 'turn_started', instance.agentSessionId)
+    // Crush (by Charm) is a TUI agent with no hook system — use the same
+    // process-tree detection approach.
+    if (instance.workspaceId && /[\r\n]/.test(data)) {
+      if (this.isCodexRunningUnder(instance.process.pid)) {
+        instance.codexPromptBuffer = ''
+        instance.codexAwaitingAnswer = false
+        if (!instance.codexTurnActive) {
+          instance.codexTurnActive = true
+          this.emitTurnEvent(instance.workspaceId, 'codex', 'turn_started', instance.agentSessionId)
+        }
+      } else if (!instance.crushTurnActive && this.isCrushRunningUnder(instance.process.pid)) {
+        instance.crushTurnActive = true
+        this.emitTurnEvent(instance.workspaceId, 'crush', 'turn_started', instance.agentSessionId)
       }
     }
 
@@ -241,6 +302,11 @@ export class PtyManager {
     const instance = this.ptys.get(ptyId)
     if (instance) {
       instance.codexTurnActive = false
+      instance.crushTurnActive = false
+      if (instance.crushSilenceTimer) {
+        clearTimeout(instance.crushSilenceTimer)
+        instance.crushSilenceTimer = null
+      }
       instance.process.kill()
       this.ptys.delete(ptyId)
     }
@@ -251,7 +317,10 @@ export class PtyManager {
     return Array.from(this.ptys.keys())
   }
 
-  private isCodexRunningUnder(rootPid: number): boolean {
+  private isAgentRunningUnder(
+    rootPid: number,
+    matcher: (command: string) => boolean,
+  ): boolean {
     let processTable = ''
     try {
       processTable = execFileSync('ps', ['-axo', 'pid=,ppid=,args='], { encoding: 'utf-8' })
@@ -280,13 +349,21 @@ export class PtyManager {
       if (!children) continue
 
       for (const child of children) {
-        if (isLikelyCodexCommand(child.command)) {
+        if (matcher(child.command)) {
           return true
         }
         stack.push(child.pid)
       }
     }
     return false
+  }
+
+  private isCodexRunningUnder(rootPid: number): boolean {
+    return this.isAgentRunningUnder(rootPid, isLikelyCodexCommand)
+  }
+
+  private isCrushRunningUnder(rootPid: number): boolean {
+    return this.isAgentRunningUnder(rootPid, isLikelyCrushCommand)
   }
 
   private emitTurnEvent(
@@ -387,6 +464,59 @@ export class PtyManager {
 
     instance.codexTurnActive = false
     this.emitTurnEvent(instance.workspaceId, 'codex', 'awaiting_user', instance.agentSessionId, 'success')
+  }
+
+  /** Crush is a persistent Bubbletea TUI that renders continuously even when
+   *  idle (spinner animation, cursor updates — always ~300B frames).  A plain
+   *  silence timer never fires.  Instead, detect turn completion by watching
+   *  for *novel* output: when crush is actively streaming a response, data
+   *  sizes vary (tokens, tool output, TUI layout changes).  When idle, the
+   *  TUI emits fixed-size animation frames that repeat at a steady cadence.
+   *  Only reset the timer on varied-size output; repeated frames are ignored.
+   *
+   *  If the timer fires prematurely (e.g. during a long API spinner) and
+   *  varied output resumes, the turn is automatically re-armed. */
+  private handleCrushTurnSilence(instance: PtyInstance, data: string): void {
+    if (!instance.workspaceId) return
+
+    if (instance.crushTurnActive) {
+      const prev = instance.crushPrevDataSize
+      instance.crushPrevDataSize = data.length
+
+      // Repeating same-size output (±2 bytes) = TUI animation frame.
+      // Don't reset the timer — only novel (varied-size) output counts.
+      if (prev >= 0 && Math.abs(data.length - prev) <= 2) return
+
+      // Novel output — crush is actively producing new content.
+      if (instance.crushSilenceTimer) clearTimeout(instance.crushSilenceTimer)
+      instance.crushSilenceTimer = setTimeout(() => {
+        if (!instance.crushTurnActive) return
+        instance.crushTurnActive = false
+        instance.crushSilenceTimer = null
+        instance.crushPrevDataSize = -1
+        instance.crushLastTurnEndedAt = Date.now()
+        this.emitTurnEvent(instance.workspaceId, 'crush', 'awaiting_user', instance.agentSessionId, 'success')
+      }, CRUSH_SILENCE_MS)
+      return
+    }
+
+    // Not in an active turn.  If we see varied-size output while crush is
+    // still in the process tree, a new turn likely started (e.g. the timer
+    // fired prematurely during a long API spinner and streaming just began).
+    const prev = instance.crushPrevDataSize
+    instance.crushPrevDataSize = data.length
+    if (prev >= 0 && Math.abs(data.length - prev) <= 2) return
+    if (data.length < CRUSH_REARM_MIN_DATA_LEN) return
+
+    const now = Date.now()
+    if (now - instance.crushLastTurnEndedAt < CRUSH_REARM_GRACE_MS) return
+    if (now - instance.crushLastRearmCheck < CRUSH_REARM_CHECK_INTERVAL_MS) return
+    instance.crushLastRearmCheck = now
+
+    if (!this.isCrushRunningUnder(instance.process.pid)) return
+
+    instance.crushTurnActive = true
+    this.emitTurnEvent(instance.workspaceId, 'crush', 'turn_started', instance.agentSessionId)
   }
 
   /** Update the webContents reference for an existing PTY (e.g. after renderer reload) */
