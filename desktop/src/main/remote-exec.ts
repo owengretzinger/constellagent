@@ -1,15 +1,16 @@
 import { execFile } from 'child_process'
-import { promisify } from 'util'
 import { formatSshPath, parseSshPath } from '../shared/ssh-path'
 
-const execFileAsync = promisify(execFile)
 const DEFAULT_MAX_BUFFER = 20 * 1024 * 1024
+const DEFAULT_SSH_TIMEOUT = 300_000
 
 interface ExecOptions {
   timeout?: number
   maxBuffer?: number
   input?: string | Buffer
 }
+
+type ExecFileResult = { stdout: string | Buffer; stderr: string | Buffer }
 
 export type PathTarget =
   | { kind: 'local'; path: string }
@@ -25,6 +26,40 @@ function resolveExecOptions(options?: ExecOptions): ExecOptions {
     maxBuffer: options?.maxBuffer ?? DEFAULT_MAX_BUFFER,
     input: options?.input,
   }
+}
+
+function resolveSshExecOptions(options?: ExecOptions): ExecOptions {
+  const resolved = resolveExecOptions(options)
+  return {
+    ...resolved,
+    timeout: resolved.timeout ?? DEFAULT_SSH_TIMEOUT,
+  }
+}
+
+async function execFileWithOptionalInput(
+  file: string,
+  args: string[],
+  options?: ExecOptions & { cwd?: string }
+): Promise<ExecFileResult> {
+  const { input, ...execOptions } = options ?? {}
+
+  return new Promise<ExecFileResult>((resolve, reject) => {
+    const child = execFile(file, args, execOptions, (error, stdout, stderr) => {
+      if (error) {
+        reject(error)
+        return
+      }
+      resolve({ stdout, stderr: stderr ?? '' })
+    })
+
+    if (child.stdin) {
+      child.stdin.on('error', () => {
+        // Ignore broken pipe when a command exits before consuming stdin.
+      })
+      if (input !== undefined) child.stdin.end(input)
+      else child.stdin.end()
+    }
+  })
 }
 
 export function parsePathTarget(path: string): PathTarget {
@@ -58,7 +93,7 @@ export async function execInPath(
   const execOptions = resolveExecOptions(options)
 
   if (target.kind === 'local') {
-    const { stdout, stderr } = await execFileAsync(command, args, {
+    const { stdout, stderr } = await execFileWithOptionalInput(command, args, {
       cwd: target.path,
       ...execOptions,
     })
@@ -87,9 +122,9 @@ export async function execSshScript(
   script: string,
   options?: ExecOptions
 ): Promise<{ stdout: string; stderr: string }> {
-  const execOptions = resolveExecOptions(options)
+  const execOptions = resolveSshExecOptions(options)
   const remoteCommand = `sh -lc ${shellQuote(script)}`
-  const { stdout, stderr } = await execFileAsync('ssh', [host, '--', remoteCommand], execOptions)
+  const { stdout, stderr } = await execFileWithOptionalInput('ssh', [host, '--', remoteCommand], execOptions)
   return {
     stdout: String(stdout),
     stderr: String(stderr ?? ''),

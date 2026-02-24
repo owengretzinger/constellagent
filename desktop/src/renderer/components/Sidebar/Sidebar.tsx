@@ -86,6 +86,14 @@ function githubErrorMessage(error?: GithubLookupError): string {
   return "Failed to load open pull requests.";
 }
 
+function buildRemoteProjectDisplayName(repoPath: string, fallbackHost: string): string {
+  const match = repoPath.match(/^ssh:\/\/([^/]+)(\/.*)$/);
+  const resolvedHost = (match?.[1] ?? fallbackHost).trim();
+  const resolvedPath = match?.[2] ?? "";
+  const repoName = resolvedPath.split("/").filter(Boolean).pop() || resolvedPath || "repo";
+  return `${resolvedHost}:${repoName}`;
+}
+
 interface WorkspaceCreationState {
   requestId: string;
   message: string;
@@ -410,12 +418,10 @@ export function Sidebar() {
         return;
       }
 
-      const normalizedPath = remotePath.startsWith("/") ? remotePath : `/${remotePath}`;
-      const repoName = normalizedPath.split("/").filter(Boolean).pop() || normalizedPath;
       const id = crypto.randomUUID();
       await addProjectWithRootWorkspace({
         id,
-        name: `${host}:${repoName}`,
+        name: buildRemoteProjectDisplayName(repoPath, host),
         repoPath,
       });
       setRemoteProjectDialogOpen(false);

@@ -8,8 +8,8 @@ interface Props {
 }
 
 export function AddRemoteProjectDialog({ onConfirm, onCancel, isSubmitting = false }: Props) {
-  const [host, setHost] = useState('mini')
-  const [remotePath, setRemotePath] = useState('/Users/yigitkonur/dev/projects/constellagent')
+  const [host, setHost] = useState('')
+  const [remotePath, setRemotePath] = useState('')
 
   const handleSubmit = useCallback(() => {
     const trimmedHost = host.trim()
@@ -67,4 +67,3 @@ export function AddRemoteProjectDialog({ onConfirm, onCancel, isSubmitting = fal
     </div>
   )
 }
-

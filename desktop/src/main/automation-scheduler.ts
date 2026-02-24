@@ -144,17 +144,26 @@ export class AutomationScheduler {
         // non-fatal
       }
 
-      // Spawn a shell with initialWrite — writes the claude command as soon as
-      // the shell emits its first output (ready), no manual timeout needed.
-      const shell = process.env.SHELL || '/bin/zsh'
-      const escapedPrompt = config.prompt.replace(/'/g, "'\\''")
-      const createdPtyId = this.ptyManager.create(
-        worktreePath,
-        win.webContents,
-        shell,
-        undefined,
-        `claude '${escapedPrompt}'\r`
-      )
+      const createdPtyId = worktreePath.startsWith('ssh://')
+        // SSH sessions can emit banners/prompts before the shell is ready.
+        // Running Claude as the initial command avoids initialWrite races.
+        ? this.ptyManager.create(
+            worktreePath,
+            win.webContents,
+            undefined,
+            ['claude', config.prompt]
+          )
+        : (() => {
+            const shell = process.env.SHELL || '/bin/zsh'
+            const escapedPrompt = config.prompt.replace(/'/g, "'\\''")
+            return this.ptyManager.create(
+              worktreePath,
+              win.webContents,
+              shell,
+              undefined,
+              `claude '${escapedPrompt}'\r`
+            )
+          })()
       ptyId = createdPtyId
       this.activeRuns.set(config.id, createdPtyId)
       this.ptyManager.onExit(createdPtyId, () => {

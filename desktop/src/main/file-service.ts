@@ -208,13 +208,12 @@ export class FileService {
     const target = parsePathTarget(filePath)
     if (target.kind === 'ssh') {
       const remoteDir = posix.dirname(target.path)
-      const encoded = Buffer.from(content, 'utf-8').toString('base64')
-      const pyScript = `import base64,sys;open(sys.argv[1],'wb').write(base64.b64decode(sys.argv[2]))`
       const script = [
         `mkdir -p ${shellQuote(remoteDir)}`,
-        `python3 -c ${shellQuote(pyScript)} ${shellQuote(target.path)} ${shellQuote(encoded)}`,
+        `cat > ${shellQuote(target.path)}`,
       ].join(' && ')
       await execSshScript(target.host, script, {
+        input: Buffer.from(content, 'utf-8'),
         maxBuffer: 512 * 1024,
       })
       return
