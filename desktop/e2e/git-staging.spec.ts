@@ -6,7 +6,7 @@ import { execSync } from 'child_process'
 const appPath = resolve(__dirname, '../out/main/index.js')
 
 async function launchApp(): Promise<{ app: ElectronApplication; window: Page }> {
-  const app = await electron.launch({ args: [appPath], env: { ...process.env, CI_TEST: '1' } })
+  const app = await electron.launch({ args: [appPath], env: { ...process.env, CI_TEST: '1', ELECTRON_RENDERER_URL: '' } })
   const window = await app.firstWindow()
   await window.waitForLoadState('domcontentloaded')
   await window.waitForSelector('#root', { timeout: 10000 })

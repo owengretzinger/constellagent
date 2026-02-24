@@ -19,7 +19,7 @@ test('Full visual verification: project + workspace + terminal + file tree + cha
   execSync('git add .', { cwd: repoPath })
   execSync('git commit -m "initial commit"', { cwd: repoPath })
 
-  const app = await electron.launch({ args: [appPath], env: { ...process.env, CI_TEST: '1' } })
+  const app = await electron.launch({ args: [appPath], env: { ...process.env, CI_TEST: '1', ELECTRON_RENDERER_URL: '' } })
   const window = await app.firstWindow()
   await window.waitForLoadState('domcontentloaded')
   await window.waitForSelector('#root', { timeout: 10000 })

@@ -8,7 +8,12 @@ const appPath = resolve(__dirname, '../out/main/index.js')
 async function launchAppWithHome(homeDir: string): Promise<{ app: ElectronApplication; window: Page }> {
   const app = await electron.launch({
     args: [appPath],
-    env: { ...process.env, CI_TEST: '1', HOME: homeDir },
+    env: {
+      ...process.env,
+      CI_TEST: '1',
+      ELECTRON_RENDERER_URL: '',
+      HOME: homeDir,
+    },
   })
   const window = await app.firstWindow()
   await window.waitForLoadState('domcontentloaded')
@@ -24,13 +29,17 @@ function ourHookCommands(settings: Record<string, unknown>): string[] {
   const hooks = settings.hooks as Record<string, Array<{ hooks?: Array<{ command?: string }> }>> | undefined
   if (!hooks) return []
 
-  const events = ['Stop', 'Notification', 'UserPromptSubmit']
+  const events = ['Stop', 'Notification', 'UserPromptSubmit', 'PreToolUse']
   const cmds: string[] = []
   for (const event of events) {
     for (const rule of hooks[event] ?? []) {
       for (const hook of rule.hooks ?? []) {
         const cmd = hook.command
-        if (cmd && (cmd.includes('claude-hooks/notify.sh') || cmd.includes('claude-hooks/activity.sh'))) {
+        if (cmd && (
+          cmd.includes('claude-hooks/notify.sh') ||
+          cmd.includes('claude-hooks/activity.sh') ||
+          cmd.includes('claude-hooks/question-notify.sh')
+        )) {
           cmds.push(cmd)
         }
       }
@@ -69,7 +78,7 @@ test.describe('Claude hooks config', () => {
 
       const installed = readSettings(settingsPath)
       const commands = ourHookCommands(installed)
-      expect(commands.length).toBe(3)
+      expect(commands.length).toBe(4)
       for (const cmd of commands) {
         expect(cmd.startsWith("'")).toBe(true)
         expect(cmd.endsWith("'")).toBe(true)

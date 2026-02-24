@@ -14,6 +14,11 @@ import { AutomationScheduler } from './automation-scheduler'
 import type { AutomationConfig } from '../shared/automation-types'
 import { trustPathForClaude, loadClaudeSettings, saveClaudeSettings, loadJsonFile, saveJsonFile } from './claude-config'
 import { loadCodexConfigText, saveCodexConfigText } from './codex-config'
+import {
+  checkPiActivityExtensionInstalled,
+  installPiActivityExtension,
+  uninstallPiActivityExtension,
+} from './pi-config'
 
 const ptyManager = new PtyManager()
 const automationScheduler = new AutomationScheduler(ptyManager)
@@ -463,7 +468,11 @@ export function registerIpcHandlers(): void {
   }
 
   // Stable identifiers to match our hook entries regardless of full path
-  const HOOK_IDENTIFIERS = ['claude-hooks/notify.sh', 'claude-hooks/activity.sh']
+  const HOOK_IDENTIFIERS = [
+    'claude-hooks/notify.sh',
+    'claude-hooks/activity.sh',
+    'claude-hooks/question-notify.sh',
+  ]
 
   function shellQuoteArg(value: string): string {
     // Claude executes hook commands via /bin/sh; paths can contain spaces.
@@ -482,13 +491,15 @@ export function registerIpcHandlers(): void {
     const hasStop = (hooks.Stop as Array<{ hooks?: Array<{ command?: string }> }> | undefined)?.some(isOurHook)
     const hasNotification = (hooks.Notification as Array<{ hooks?: Array<{ command?: string }> }> | undefined)?.some(isOurHook)
     const hasPromptSubmit = (hooks.UserPromptSubmit as Array<{ hooks?: Array<{ command?: string }> }> | undefined)?.some(isOurHook)
-    return { installed: !!(hasStop && hasNotification && hasPromptSubmit) }
+    const hasQuestionHook = (hooks.PreToolUse as Array<{ hooks?: Array<{ command?: string }> }> | undefined)?.some(isOurHook)
+    return { installed: !!(hasStop && hasNotification && hasPromptSubmit && hasQuestionHook) }
   })
 
   ipcMain.handle(IPC.CLAUDE_INSTALL_HOOKS, async () => {
     const settings = await loadClaudeSettings()
     const notifyPath = getHookScriptPath('notify.sh')
     const activityPath = getHookScriptPath('activity.sh')
+    const questionNotifyPath = getHookScriptPath('question-notify.sh')
 
     const hooks = (settings.hooks ?? {}) as Record<string, unknown[]>
 
@@ -503,6 +514,9 @@ export function registerIpcHandlers(): void {
     ensureHook('Stop', notifyPath)
     ensureHook('Notification', notifyPath)
     ensureHook('UserPromptSubmit', activityPath)
+    // Claude question dialogs are surfaced through AskUserQuestion tool calls.
+    // Run a filter script on PreToolUse to convert those into unread notifications.
+    ensureHook('PreToolUse', questionNotifyPath)
     settings.hooks = hooks
 
     await saveClaudeSettings(settings)
@@ -523,6 +537,7 @@ export function registerIpcHandlers(): void {
     removeHook('Stop')
     removeHook('Notification')
     removeHook('UserPromptSubmit')
+    removeHook('PreToolUse')
 
     if (Object.keys(hooks).length === 0) delete settings.hooks
     await saveClaudeSettings(settings)
@@ -634,6 +649,22 @@ export function registerIpcHandlers(): void {
     if (config) config += '\n'
 
     await saveCodexConfigText(config)
+    return { success: true }
+  })
+
+  // ── Pi interactive activity extension ──
+  ipcMain.handle(IPC.PI_CHECK_ACTIVITY_EXTENSION, async () => {
+    const installed = await checkPiActivityExtensionInstalled()
+    return { installed }
+  })
+
+  ipcMain.handle(IPC.PI_INSTALL_ACTIVITY_EXTENSION, async () => {
+    await installPiActivityExtension()
+    return { success: true }
+  })
+
+  ipcMain.handle(IPC.PI_UNINSTALL_ACTIVITY_EXTENSION, async () => {
+    await uninstallPiActivityExtension()
     return { success: true }
   })
 

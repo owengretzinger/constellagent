@@ -20,9 +20,9 @@ export function App() {
   useShortcuts()
   usePrStatusPoller()
 
-  // Listen for workspace notification signals from Claude Code hooks
+  // Listen for workspace notification signals from agent adapters/hooks.
   useEffect(() => {
-    const unsub = window.api.claude.onNotifyWorkspace((workspaceId: string) => {
+    const unsub = window.api.agent.onNotifyWorkspace((workspaceId: string) => {
       const state = useAppStore.getState()
       if (workspaceId !== state.activeWorkspaceId) {
         state.markWorkspaceUnread(workspaceId)
@@ -31,10 +31,10 @@ export function App() {
     return unsub
   }, [])
 
-  // Listen for agent activity updates (Claude hooks + Codex submit/notify markers)
+  // Listen for active agent workspace updates.
   useEffect(() => {
     let prevActive = new Set<string>()
-    const unsub = window.api.claude.onActivityUpdate((workspaceIds: string[]) => {
+    const unsub = window.api.agent.onActivityUpdate((workspaceIds: string[]) => {
       const nextActive = new Set(workspaceIds)
       const state = useAppStore.getState()
 
@@ -46,7 +46,7 @@ export function App() {
         }
       }
 
-      state.setActiveClaudeWorkspaces(workspaceIds)
+      state.setActiveAgentWorkspaces(workspaceIds)
       prevActive = nextActive
     })
     return unsub

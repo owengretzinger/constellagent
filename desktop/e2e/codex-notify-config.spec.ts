@@ -8,7 +8,12 @@ const appPath = resolve(__dirname, '../out/main/index.js')
 async function launchAppWithHome(homeDir: string): Promise<{ app: ElectronApplication; window: Page }> {
   const app = await electron.launch({
     args: [appPath],
-    env: { ...process.env, CI_TEST: '1', HOME: homeDir },
+    env: {
+      ...process.env,
+      CI_TEST: '1',
+      ELECTRON_RENDERER_URL: '',
+      HOME: homeDir,
+    },
   })
   const window = await app.firstWindow()
   await window.waitForLoadState('domcontentloaded')
