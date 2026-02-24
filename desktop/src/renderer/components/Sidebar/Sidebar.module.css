@@ -67,6 +67,22 @@
   white-space: nowrap;
 }
 
+.projectShortcutBadge {
+  min-width: 16px;
+  height: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--surface-1);
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
 /* Settings button — hidden by default, shown on hover */
 .settingsBtn {
   display: none;

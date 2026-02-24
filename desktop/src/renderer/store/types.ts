@@ -122,6 +122,8 @@ export interface AppState {
   toggleSidebar: () => void
   nextTab: () => void
   prevTab: () => void
+  nextTerminalTab: () => void
+  prevTerminalTab: () => void
   createTerminalForActiveWorkspace: () => Promise<void>
   closeActiveTab: () => void
   setTabUnsaved: (tabId: string, unsaved: boolean) => void
@@ -131,6 +133,7 @@ export interface AppState {
   nextWorkspace: () => void
   prevWorkspace: () => void
   switchToTabByIndex: (index: number) => void
+  switchToProjectByShortcutDigit: (digit: number) => void
   closeAllWorkspaceTabs: () => void
   focusOrCreateTerminal: () => Promise<void>
   openWorkspaceDialog: (projectId: string | null) => void

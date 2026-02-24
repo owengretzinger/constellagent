@@ -60,6 +60,17 @@ export function useShortcuts() {
         e.stopPropagation()
       }
 
+      // ── Browser-style terminal tab switching: Ctrl+Tab / Ctrl+Shift+Tab ──
+      if (e.ctrlKey && !e.metaKey && !alt && e.key === 'Tab') {
+        consume()
+        if (shift) {
+          store.prevTerminalTab()
+        } else {
+          store.nextTerminalTab()
+        }
+        return
+      }
+
       // ── Quick open: Cmd+P ──
       if (!shift && !alt && e.key === 'p') {
         consume()
@@ -67,10 +78,10 @@ export function useShortcuts() {
         return
       }
 
-      // ── Tab switching: Cmd+1-9 ──
+      // ── Project switching: Cmd+1-9 (9 targets last project) ──
       if (!shift && !alt && e.key >= '1' && e.key <= '9') {
         consume()
-        store.switchToTabByIndex(parseInt(e.key) - 1)
+        store.switchToProjectByShortcutDigit(parseInt(e.key, 10))
         return
       }
 

@@ -72,51 +72,71 @@ test.describe('Keyboard shortcuts', () => {
     }
   })
 
-  test('Cmd+1/Cmd+2 switches between tabs', async () => {
-    const repoPath = createTestRepo('shortcut-num')
+  test('Cmd+1/Cmd+3/Cmd+9 switches between sidebar projects', async () => {
+    const repoPath = createTestRepo('shortcut-project-num')
     const { app, window } = await launchApp()
 
     try {
-      await setupWorkspaceWithTerminal(window, repoPath)
-      await window.waitForTimeout(2000)
+      await window.evaluate((repo: string) => {
+        const store = (window as any).__store.getState()
+        store.hydrateState({ projects: [], workspaces: [] })
 
-      // Create a second terminal via Cmd+T
-      await window.keyboard.press('Meta+t')
-      await window.waitForTimeout(2000)
-
-      // Should now have 2 tabs, with tab 2 active
-      const tabCount = await window.locator('[class*="tabTitle"]').count()
-      expect(tabCount).toBe(2)
-
-      // Get active tab title
-      const activeTitle2 = await window.evaluate(() => {
-        const s = (window as any).__store.getState()
-        const tab = s.tabs.find((t: any) => t.id === s.activeTabId)
-        return tab?.title
+        for (let i = 1; i <= 10; i += 1) {
+          const projectId = crypto.randomUUID()
+          store.addProject({
+            id: projectId,
+            name: `project-${i}`,
+            repoPath: repo,
+          })
+          store.addWorkspace({
+            id: crypto.randomUUID(),
+            name: `project-${i}`,
+            branch: 'main',
+            worktreePath: repo,
+            projectId,
+            isRoot: true,
+          })
+        }
       })
-      expect(activeTitle2).toBe('Terminal 2')
+      await window.waitForTimeout(800)
 
-      // Press Cmd+1 — switch to first tab
+      const activeProjectName = async () =>
+        window.evaluate(() => {
+          const s = (window as any).__store.getState()
+          const activeWorkspace = s.workspaces.find((w: any) => w.id === s.activeWorkspaceId)
+          if (!activeWorkspace) return null
+          return s.projects.find((p: any) => p.id === activeWorkspace.projectId)?.name ?? null
+        })
+
+      await window.keyboard.down('Meta')
+      await window.waitForTimeout(200)
+      await expect(window.locator('[class*="projectShortcutBadge"]')).toHaveCount(9)
+      await expect(window.locator('[class*="projectShortcutBadge"]').first()).toHaveText('1')
+      await expect(window.locator('[class*="projectShortcutBadge"]').nth(8)).toHaveText('9')
+      await window.keyboard.up('Meta')
+      await expect(window.locator('[class*="projectShortcutBadge"]')).toHaveCount(0)
+
+      // Press Cmd+1 — switch to first project
       await window.keyboard.press('Meta+1')
-      await window.waitForTimeout(500)
+      await window.waitForTimeout(350)
+      expect(await activeProjectName()).toBe('project-1')
 
-      const activeTitle1 = await window.evaluate(() => {
+      // Press Cmd+3 — switch to third project
+      await window.keyboard.press('Meta+3')
+      await window.waitForTimeout(350)
+      expect(await activeProjectName()).toBe('project-3')
+
+      // Press Cmd+9 — switch to last project
+      await window.keyboard.press('Meta+9')
+      await window.waitForTimeout(350)
+
+      const activeLastProject = await window.evaluate(() => {
         const s = (window as any).__store.getState()
-        const tab = s.tabs.find((t: any) => t.id === s.activeTabId)
-        return tab?.title
+        const activeWorkspace = s.workspaces.find((w: any) => w.id === s.activeWorkspaceId)
+        if (!activeWorkspace) return null
+        return s.projects.find((p: any) => p.id === activeWorkspace.projectId)?.name ?? null
       })
-      expect(activeTitle1).toBe('Terminal 1')
-
-      // Press Cmd+2 — switch back to second tab
-      await window.keyboard.press('Meta+2')
-      await window.waitForTimeout(500)
-
-      const activeTitleBack = await window.evaluate(() => {
-        const s = (window as any).__store.getState()
-        const tab = s.tabs.find((t: any) => t.id === s.activeTabId)
-        return tab?.title
-      })
-      expect(activeTitleBack).toBe('Terminal 2')
+      expect(activeLastProject).toBe('project-10')
     } finally {
       await app.close()
     }
@@ -207,6 +227,66 @@ test.describe('Keyboard shortcuts', () => {
         return s.tabs.find((t: any) => t.id === s.activeTabId)?.title
       })
       expect(active).toBe('Terminal 2')
+    } finally {
+      await app.close()
+    }
+  })
+
+  test('Ctrl+Tab and Ctrl+Shift+Tab cycle terminal tabs', async () => {
+    const repoPath = createTestRepo('shortcut-ctrl-tab')
+    const { app, window } = await launchApp()
+
+    try {
+      await setupWorkspaceWithTerminal(window, repoPath)
+      await window.waitForTimeout(2000)
+
+      await window.keyboard.press('Meta+t')
+      await window.waitForTimeout(1200)
+      await window.keyboard.press('Meta+t')
+      await window.waitForTimeout(1200)
+
+      let active = await window.evaluate(() => {
+        const s = (window as any).__store.getState()
+        return s.tabs.find((t: any) => t.id === s.activeTabId)?.title
+      })
+      expect(active).toBe('Terminal 3')
+
+      const dispatchCtrlTab = async (shiftKey = false) => {
+        await window.evaluate((shiftPressed: boolean) => {
+          const evt = new KeyboardEvent('keydown', {
+            key: 'Tab',
+            code: 'Tab',
+            ctrlKey: true,
+            shiftKey: shiftPressed,
+            bubbles: true,
+            cancelable: true,
+          })
+          window.dispatchEvent(evt)
+        }, shiftKey)
+        await window.waitForTimeout(500)
+      }
+
+      // Playwright treats Ctrl+Tab as a reserved browser shortcut, so dispatch a real keydown shape.
+      await dispatchCtrlTab(false)
+      active = await window.evaluate(() => {
+        const s = (window as any).__store.getState()
+        return s.tabs.find((t: any) => t.id === s.activeTabId)?.title
+      })
+      expect(active).toBe('Terminal 1')
+
+      await dispatchCtrlTab(false)
+      active = await window.evaluate(() => {
+        const s = (window as any).__store.getState()
+        return s.tabs.find((t: any) => t.id === s.activeTabId)?.title
+      })
+      expect(active).toBe('Terminal 2')
+
+      await dispatchCtrlTab(true)
+      active = await window.evaluate(() => {
+        const s = (window as any).__store.getState()
+        return s.tabs.find((t: any) => t.id === s.activeTabId)?.title
+      })
+      expect(active).toBe('Terminal 1')
     } finally {
       await app.close()
     }

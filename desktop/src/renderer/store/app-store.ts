@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import type { AppState, PersistedState, Tab } from './types'
 import { DEFAULT_SETTINGS } from './types'
+import { getProjectIndexForShortcutDigit } from '../utils/projectShortcuts'
 
 const DEFAULT_PR_LINK_PROVIDER = 'github' as const
 
@@ -286,6 +287,38 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({ activeTabId: prev.id })
   },
 
+  nextTerminalTab: () => {
+    const s = get()
+    if (!s.activeWorkspaceId) return
+    const wsTabs = s.tabs.filter((t) => t.workspaceId === s.activeWorkspaceId)
+    if (wsTabs.length === 0) return
+
+    const activeIdx = wsTabs.findIndex((t) => t.id === s.activeTabId)
+    for (let offset = 1; offset <= wsTabs.length; offset++) {
+      const idx = (activeIdx + offset + wsTabs.length) % wsTabs.length
+      const candidate = wsTabs[idx]
+      if (candidate.type !== 'terminal') continue
+      if (candidate.id !== s.activeTabId) set({ activeTabId: candidate.id })
+      return
+    }
+  },
+
+  prevTerminalTab: () => {
+    const s = get()
+    if (!s.activeWorkspaceId) return
+    const wsTabs = s.tabs.filter((t) => t.workspaceId === s.activeWorkspaceId)
+    if (wsTabs.length === 0) return
+
+    const activeIdx = wsTabs.findIndex((t) => t.id === s.activeTabId)
+    for (let offset = 1; offset <= wsTabs.length; offset++) {
+      const idx = (activeIdx - offset + wsTabs.length) % wsTabs.length
+      const candidate = wsTabs[idx]
+      if (candidate.type !== 'terminal') continue
+      if (candidate.id !== s.activeTabId) set({ activeTabId: candidate.id })
+      return
+    }
+  },
+
   createTerminalForActiveWorkspace: async () => {
     const s = get()
     if (!s.activeWorkspaceId) return
@@ -387,6 +420,22 @@ export const useAppStore = create<AppState>((set, get) => ({
     if (index >= 0 && index < wsTabs.length) {
       set({ activeTabId: wsTabs[index].id })
     }
+  },
+
+  switchToProjectByShortcutDigit: (digit) => {
+    const s = get()
+    const projectIndex = getProjectIndexForShortcutDigit(digit, s.projects.length)
+    if (projectIndex === null) return
+
+    const targetProject = s.projects[projectIndex]
+    if (!targetProject) return
+
+    const targetWorkspace = s.workspaces
+      .filter((w) => w.projectId === targetProject.id)
+      .sort((a, b) => (Number(!!b.isRoot) - Number(!!a.isRoot)))[0]
+
+    if (!targetWorkspace) return
+    get().setActiveWorkspace(targetWorkspace.id)
   },
 
   closeAllWorkspaceTabs: () => {

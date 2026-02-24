@@ -8,6 +8,7 @@ import { ProjectSettingsDialog } from "./ProjectSettingsDialog";
 import { AddRemoteProjectDialog } from "./AddRemoteProjectDialog";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { Tooltip } from "../Tooltip/Tooltip";
+import { getProjectShortcutDigitForIndex } from "../../utils/projectShortcuts";
 import styles from "./Sidebar.module.css";
 
 const PR_ICON_SIZE = 10;
@@ -315,6 +316,7 @@ export function Sidebar() {
   const [projectPrError, setProjectPrError] = useState<
     Record<string, string | null>
   >({});
+  const [showProjectShortcutHints, setShowProjectShortcutHints] = useState(false);
   const [pullingPrKey, setPullingPrKey] = useState<string | null>(null);
   const [projectPrSearch, setProjectPrSearch] = useState("");
   const [remoteProjectDialogOpen, setRemoteProjectDialogOpen] = useState(false);
@@ -372,6 +374,31 @@ export function Sidebar() {
       setProjectPrSearch("");
     }
   }, [openProjectPrPopoverId, projects]);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.metaKey && !event.ctrlKey) {
+        setShowProjectShortcutHints(true);
+      }
+    };
+
+    const handleKeyUp = (event: KeyboardEvent) => {
+      if (!event.metaKey || event.key === "Meta") {
+        setShowProjectShortcutHints(false);
+      }
+    };
+
+    const hideHints = () => setShowProjectShortcutHints(false);
+
+    window.addEventListener("keydown", handleKeyDown, true);
+    window.addEventListener("keyup", handleKeyUp, true);
+    window.addEventListener("blur", hideHints);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown, true);
+      window.removeEventListener("keyup", handleKeyUp, true);
+      window.removeEventListener("blur", hideHints);
+    };
+  }, []);
 
   const closeProjectPrModal = useCallback(() => {
     setOpenProjectPrPopoverId(null);
@@ -822,8 +849,12 @@ export function Sidebar() {
           </div>
         )}
 
-        {projects.map((project) => {
+        {projects.map((project, projectIndex) => {
           const isExpanded = isProjectExpanded(project.id);
+          const projectShortcutDigit = getProjectShortcutDigitForIndex(
+            projectIndex,
+            projects.length,
+          );
           const projectWorkspaces = workspaces
             .filter((w) => w.projectId === project.id)
             .sort((a, b) => (Number(Boolean(b.isRoot)) - Number(Boolean(a.isRoot))));
@@ -839,6 +870,11 @@ export function Sidebar() {
                 >
                   ▶
                 </span>
+                {showProjectShortcutHints && projectShortcutDigit !== null && (
+                  <span className={styles.projectShortcutBadge}>
+                    {projectShortcutDigit}
+                  </span>
+                )}
                 <span className={styles.projectName}>{project.name}</span>
                 <Tooltip label="Project settings">
                   <button
