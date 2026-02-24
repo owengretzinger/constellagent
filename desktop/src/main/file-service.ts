@@ -1,9 +1,6 @@
-import { readdir, readFile as fsReadFile, writeFile as fsWriteFile, stat } from 'fs/promises'
-import { join, relative } from 'path'
-import { execFile } from 'child_process'
-import { promisify } from 'util'
-
-const execFileAsync = promisify(execFile)
+import { readdir, readFile as fsReadFile, writeFile as fsWriteFile } from 'fs/promises'
+import { join, posix, relative } from 'path'
+import { execInPath, execSshScript, formatTargetPath, parsePathTarget } from './remote-exec'
 
 function isEnvFile(name: string): boolean {
   return /^\.env($|\.)/.test(name)
@@ -24,9 +21,25 @@ const SKIP_DIRS = new Set([
   'coverage', '.nyc_output',
 ])
 
+const MAX_DEPTH = 8
+
+function shellQuote(value: string): string {
+  return `'${value.replace(/'/g, `'\"'\"'`)}'`
+}
+
 export class FileService {
   static async getTree(dirPath: string, depth = 0): Promise<FileNode[]> {
-    if (depth > 8) return [] // prevent infinite recursion
+    const target = parsePathTarget(dirPath)
+    if (target.kind === 'ssh') {
+      if (depth > 0) return []
+      try {
+        return await this.getGitTree(dirPath)
+      } catch {
+        return []
+      }
+    }
+
+    if (depth > MAX_DEPTH) return [] // prevent infinite recursion
 
     // Use git ls-files if in a git repo for gitignore respect
     if (depth === 0) {
@@ -73,10 +86,11 @@ export class FileService {
   }
 
   private static async getGitTree(dirPath: string): Promise<FileNode[]> {
-    const { stdout } = await execFileAsync(
+    const { stdout } = await execInPath(
+      dirPath,
       'git',
       ['ls-files', '--others', '--cached', '--exclude-standard'],
-      { cwd: dirPath }
+      { maxBuffer: 20 * 1024 * 1024 }
     )
 
     const files = stdout.trim().split('\n').filter(Boolean)
@@ -86,7 +100,27 @@ export class FileService {
   }
 
   private static async findEnvFiles(basePath: string, currentPath = basePath, depth = 0): Promise<string[]> {
-    if (depth > 8) return []
+    const target = parsePathTarget(basePath)
+    if (target.kind === 'ssh') {
+      const findArgs = ['.', '-maxdepth', String(MAX_DEPTH + 1), '(']
+      const skipDirs = Array.from(SKIP_DIRS)
+      for (let i = 0; i < skipDirs.length; i++) {
+        findArgs.push('-name', skipDirs[i])
+        if (i < skipDirs.length - 1) findArgs.push('-o')
+      }
+      findArgs.push(')', '-type', 'd', '-prune', '-o', '-type', 'f', '-name', '.env*', '-print')
+
+      const { stdout } = await execInPath(basePath, 'find', findArgs, {
+        maxBuffer: 20 * 1024 * 1024,
+      })
+      return stdout
+        .split('\n')
+        .map((line) => line.trim())
+        .filter(Boolean)
+        .map((line) => line.replace(/^\.\//, ''))
+    }
+
+    if (depth > MAX_DEPTH) return []
 
     const entries = await readdir(currentPath, { withFileTypes: true })
     const files: string[] = []
@@ -110,16 +144,21 @@ export class FileService {
   }
 
   private static buildTreeFromPaths(basePath: string, paths: string[]): FileNode[] {
+    const target = parsePathTarget(basePath)
     const root: FileNode = { name: '', path: basePath, type: 'directory', children: [] }
 
     for (const filePath of paths) {
-      const parts = filePath.split('/')
+      const parts = filePath.split('/').filter(Boolean)
+      if (parts.length === 0) continue
       let current = root
 
       for (let i = 0; i < parts.length; i++) {
         const part = parts[i]
         const isFile = i === parts.length - 1
-        const fullPath = join(basePath, ...parts.slice(0, i + 1))
+        const relPath = parts.slice(0, i + 1).join('/')
+        const fullPath = target.kind === 'ssh'
+          ? formatTargetPath(target, posix.join(target.path, relPath))
+          : join(basePath, ...parts.slice(0, i + 1))
 
         if (isFile) {
           current.children!.push({ name: part, path: fullPath, type: 'file' })
@@ -153,10 +192,33 @@ export class FileService {
   }
 
   static async readFile(filePath: string): Promise<string> {
+    const target = parsePathTarget(filePath)
+    if (target.kind === 'ssh') {
+      const fileName = posix.basename(target.path)
+      const cwd = formatTargetPath(target, posix.dirname(target.path))
+      const { stdout } = await execInPath(cwd, 'cat', [fileName], {
+        maxBuffer: 20 * 1024 * 1024,
+      })
+      return stdout
+    }
     return fsReadFile(filePath, 'utf-8')
   }
 
   static async writeFile(filePath: string, content: string): Promise<void> {
+    const target = parsePathTarget(filePath)
+    if (target.kind === 'ssh') {
+      const remoteDir = posix.dirname(target.path)
+      const encoded = Buffer.from(content, 'utf-8').toString('base64')
+      const pyScript = `import base64,sys;open(sys.argv[1],'wb').write(base64.b64decode(sys.argv[2]))`
+      const script = [
+        `mkdir -p ${shellQuote(remoteDir)}`,
+        `python3 -c ${shellQuote(pyScript)} ${shellQuote(target.path)} ${shellQuote(encoded)}`,
+      ].join(' && ')
+      await execSshScript(target.host, script, {
+        maxBuffer: 512 * 1024,
+      })
+      return
+    }
     await fsWriteFile(filePath, content, 'utf-8')
   }
 }

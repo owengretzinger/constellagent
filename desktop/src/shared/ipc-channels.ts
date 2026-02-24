@@ -39,6 +39,7 @@ export const IPC = {
   // App operations
   APP_SELECT_DIRECTORY: 'app:select-directory',
   APP_ADD_PROJECT_PATH: 'app:add-project-path',
+  APP_ADD_SSH_PROJECT: 'app:add-ssh-project',
 
   // Claude Code integration
   CLAUDE_TRUST_PATH: 'claude:trust-path',

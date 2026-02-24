@@ -100,6 +100,8 @@ const api = {
       ipcRenderer.invoke(IPC.APP_SELECT_DIRECTORY),
     addProjectPath: (dirPath: string) =>
       ipcRenderer.invoke(IPC.APP_ADD_PROJECT_PATH, dirPath),
+    addSshProject: (host: string, remotePath: string) =>
+      ipcRenderer.invoke(IPC.APP_ADD_SSH_PROJECT, host, remotePath) as Promise<string | null>,
   },
 
   claude: {

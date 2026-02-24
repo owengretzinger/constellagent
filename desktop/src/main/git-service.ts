@@ -2,8 +2,16 @@ import { execFile } from 'child_process'
 import { existsSync } from 'fs'
 import { copyFile, mkdir, readdir, rm } from 'fs/promises'
 import { promisify } from 'util'
-import { basename, dirname, isAbsolute, join, relative, resolve } from 'path'
+import { basename, dirname, isAbsolute, join, posix, relative, resolve } from 'path'
 import type { CreateWorktreeProgress } from '../shared/workspace-creation'
+import {
+  execInPath,
+  formatTargetPath,
+  parsePathTarget,
+  remotePathExists,
+  removeRemotePath,
+  unwrapPathForTarget,
+} from './remote-exec'
 
 const execFileAsync = promisify(execFile)
 
@@ -33,8 +41,7 @@ export interface PrWorktreeResult {
 }
 
 async function git(args: string[], cwd: string): Promise<string> {
-  const { stdout } = await execFileAsync('git', args, {
-    cwd,
+  const { stdout } = await execInPath(cwd, 'git', args, {
     maxBuffer: 10 * 1024 * 1024,
   })
   return stdout.trimEnd()
@@ -86,9 +93,14 @@ function sanitizeWorktreeName(name: string): string {
   return sanitized || 'workspace'
 }
 
-function ensureWithinParent(parentDir: string, candidatePath: string): void {
-  const relPath = relative(parentDir, candidatePath)
-  if (relPath.startsWith('..') || isAbsolute(relPath)) {
+function ensureWithinParent(
+  parentDir: string,
+  candidatePath: string,
+  relFn: (from: string, to: string) => string = relative,
+  isAbsFn: (path: string) => boolean = isAbsolute
+): void {
+  const relPath = relFn(parentDir, candidatePath)
+  if (relPath.startsWith('..') || isAbsFn(relPath)) {
     throw new Error('Invalid workspace name')
   }
 }
@@ -129,6 +141,7 @@ export class GitService {
   }
 
   static async listWorktrees(repoPath: string): Promise<WorktreeInfo[]> {
+    const target = parsePathTarget(repoPath)
     const output = await git(['worktree', 'list', '--porcelain'], repoPath)
     if (!output) return []
 
@@ -145,6 +158,7 @@ export class GitService {
         else if (line === 'bare') info.isBare = true
       }
       if (info.path) {
+        info.path = formatTargetPath(target, info.path)
         worktrees.push(info as WorktreeInfo)
       }
     }
@@ -210,11 +224,21 @@ export class GitService {
     branch = GitService.sanitizeBranchName(requestedBranch)
     if (!branch) throw new Error('Branch name is empty after sanitization')
 
-    const parentDir = dirname(repoPath)
-    const repoName = basename(repoPath)
+    const target = parsePathTarget(repoPath)
+    const repoFsPath = target.kind === 'ssh' ? target.path : repoPath
+    const parentDir = target.kind === 'ssh' ? posix.dirname(repoFsPath) : dirname(repoFsPath)
+    const repoName = target.kind === 'ssh' ? posix.basename(repoFsPath) : basename(repoFsPath)
     const safeWorktreeName = sanitizeWorktreeName(name)
-    const worktreePath = resolve(parentDir, `${repoName}-ws-${safeWorktreeName}`)
-    ensureWithinParent(parentDir, worktreePath)
+    const worktreeFsPath = target.kind === 'ssh'
+      ? posix.resolve(parentDir, `${repoName}-ws-${safeWorktreeName}`)
+      : resolve(parentDir, `${repoName}-ws-${safeWorktreeName}`)
+    ensureWithinParent(
+      parentDir,
+      worktreeFsPath,
+      target.kind === 'ssh' ? posix.relative : relative,
+      target.kind === 'ssh' ? posix.isAbsolute : isAbsolute
+    )
+    const worktreePath = formatTargetPath(target, worktreeFsPath)
 
     // Clean up stale worktree refs
     reportCreateWorktreeProgress(onProgress, {
@@ -248,11 +272,18 @@ export class GitService {
       stage: 'prepare-worktree-dir',
       message: 'Preparing worktree directory...',
     })
-    if (existsSync(worktreePath)) {
+    const worktreeExists = target.kind === 'ssh'
+      ? await remotePathExists(target.host, worktreeFsPath)
+      : existsSync(worktreeFsPath)
+    if (worktreeExists) {
       if (!force) {
         throw new Error('WORKTREE_PATH_EXISTS')
       }
-      await rm(worktreePath, { recursive: true, force: true })
+      if (target.kind === 'ssh') {
+        await removeRemotePath(target.host, worktreeFsPath)
+      } else {
+        await rm(worktreeFsPath, { recursive: true, force: true })
+      }
     }
 
     // Pre-check if branch exists so we never need -b retry
@@ -270,7 +301,7 @@ export class GitService {
         ? await git(['rev-parse', '--verify', `refs/remotes/origin/${branch}`], repoPath)
             .then(() => true, () => false)
         : false
-      if (!remoteExists) {
+      if (!remoteExists && target.kind === 'local') {
         try {
           const headCandidates = [requestedBranch]
           if (requestedBranch.includes(':')) {
@@ -285,7 +316,7 @@ export class GitService {
               // Resolve repo from cwd for broad gh CLI compatibility.
               'pr', 'list', '--head', headCandidate, '--json', 'number',
               '--jq', '.[0].number',
-            ], { cwd: repoPath })
+            ], { cwd: repoFsPath })
             prNumber = stdout.trim()
             if (prNumber) break
           }
@@ -302,10 +333,10 @@ export class GitService {
     const args = ['worktree', 'add']
     if (force) args.push('--force')
     if (newBranch && !branchExists) {
-      args.push('-b', branch, worktreePath)
+      args.push('-b', branch, worktreeFsPath)
       if (baseBranch) args.push(baseBranch)
     } else {
-      args.push(worktreePath, branch)
+      args.push(worktreeFsPath, branch)
     }
 
     try {
@@ -332,9 +363,11 @@ export class GitService {
     // Copy .env files that are missing from the worktree (gitignored) from the main repo
     reportCreateWorktreeProgress(onProgress, {
       stage: 'copy-env-files',
-      message: 'Copying env files...',
+      message: target.kind === 'ssh' ? 'Skipping env copy for SSH worktree...' : 'Copying env files...',
     })
-    await copyEnvFiles(repoPath, worktreePath, repoPath)
+    if (target.kind === 'local') {
+      await copyEnvFiles(repoFsPath, worktreeFsPath, repoFsPath)
+    }
 
     return worktreePath
   }
@@ -356,11 +389,21 @@ export class GitService {
     const branch = GitService.sanitizeBranchName(requestedBranch)
     if (!branch) throw new Error('Branch name is empty after sanitization')
 
-    const parentDir = dirname(repoPath)
-    const repoName = basename(repoPath)
+    const target = parsePathTarget(repoPath)
+    const repoFsPath = target.kind === 'ssh' ? target.path : repoPath
+    const parentDir = target.kind === 'ssh' ? posix.dirname(repoFsPath) : dirname(repoFsPath)
+    const repoName = target.kind === 'ssh' ? posix.basename(repoFsPath) : basename(repoFsPath)
     const safeWorktreeName = sanitizeWorktreeName(name)
-    const worktreePath = resolve(parentDir, `${repoName}-ws-${safeWorktreeName}`)
-    ensureWithinParent(parentDir, worktreePath)
+    const worktreeFsPath = target.kind === 'ssh'
+      ? posix.resolve(parentDir, `${repoName}-ws-${safeWorktreeName}`)
+      : resolve(parentDir, `${repoName}-ws-${safeWorktreeName}`)
+    ensureWithinParent(
+      parentDir,
+      worktreeFsPath,
+      target.kind === 'ssh' ? posix.relative : relative,
+      target.kind === 'ssh' ? posix.isAbsolute : isAbsolute
+    )
+    const worktreePath = formatTargetPath(target, worktreeFsPath)
 
     reportCreateWorktreeProgress(onProgress, {
       stage: 'prune-worktrees',
@@ -392,11 +435,18 @@ export class GitService {
       stage: 'prepare-worktree-dir',
       message: 'Preparing worktree directory...',
     })
-    if (existsSync(worktreePath)) {
+    const worktreeExists = target.kind === 'ssh'
+      ? await remotePathExists(target.host, worktreeFsPath)
+      : existsSync(worktreeFsPath)
+    if (worktreeExists) {
       if (!force) {
         throw new Error('WORKTREE_PATH_EXISTS')
       }
-      await rm(worktreePath, { recursive: true, force: true })
+      if (target.kind === 'ssh') {
+        await removeRemotePath(target.host, worktreeFsPath)
+      } else {
+        await rm(worktreeFsPath, { recursive: true, force: true })
+      }
     }
 
     reportCreateWorktreeProgress(onProgress, {
@@ -405,7 +455,7 @@ export class GitService {
     })
     const args = ['worktree', 'add']
     if (force) args.push('--force')
-    args.push(worktreePath, branch)
+    args.push(worktreeFsPath, branch)
 
     try {
       await git(args, repoPath)
@@ -423,27 +473,34 @@ export class GitService {
 
     reportCreateWorktreeProgress(onProgress, {
       stage: 'copy-env-files',
-      message: 'Copying env files...',
+      message: target.kind === 'ssh' ? 'Skipping env copy for SSH worktree...' : 'Copying env files...',
     })
-    await copyEnvFiles(repoPath, worktreePath, repoPath)
+    if (target.kind === 'local') {
+      await copyEnvFiles(repoFsPath, worktreeFsPath, repoFsPath)
+    }
 
     return { worktreePath, branch }
   }
 
   static async removeWorktree(repoPath: string, worktreePath: string): Promise<void> {
     try {
-      await git(['worktree', 'remove', worktreePath, '--force'], repoPath)
+      const target = parsePathTarget(repoPath)
+      const worktree = unwrapPathForTarget(target, worktreePath)
+      await git(['worktree', 'remove', worktree, '--force'], repoPath)
     } catch (err) {
       throw new Error(friendlyGitError(err, 'Failed to remove worktree'))
     }
   }
 
   static async getTopLevel(cwd: string): Promise<string> {
-    return git(['rev-parse', '--show-toplevel'], cwd)
+    const topLevel = await git(['rev-parse', '--show-toplevel'], cwd)
+    const target = parsePathTarget(cwd)
+    return target.kind === 'ssh' ? formatTargetPath(target, topLevel) : topLevel
   }
 
   static async getCurrentBranch(worktreePath: string): Promise<string> {
-    if (!existsSync(worktreePath)) return ''
+    const target = parsePathTarget(worktreePath)
+    if (target.kind === 'local' && !existsSync(worktreePath)) return ''
     try {
       return await git(['rev-parse', '--abbrev-ref', 'HEAD'], worktreePath)
     } catch {

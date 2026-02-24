@@ -37,6 +37,18 @@ bun run dist      # Package as signed macOS DMG
 bun run test      # Playwright e2e tests
 ```
 
+### Remote SSH projects
+
+You can add repositories over SSH with the new **Add remote** button in the sidebar.
+
+- Enter your SSH host alias (for example `mini`, from `~/.ssh/config`)
+- Enter an absolute remote repo path (for example `/Users/yigitkonur/dev/my-saas`)
+- Constellagent stores it as `ssh://host/path` and runs terminal, git, and file operations over SSH
+
+Notes:
+- Auto file watching is local-only; remote trees refresh on tab activation and git/file actions.
+- Creating worktrees on SSH remotes skips `.env` file copy.
+
 Automation scheduling notes:
 - If the laptop sleeps during a scheduled time while the app is still running, Constellagent runs one catch-up execution on wake.
 - If the app is fully quit, missed runs are not backfilled on next launch.

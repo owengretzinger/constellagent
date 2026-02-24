@@ -8,6 +8,7 @@ import type {
   OpenPrInfo,
   ListOpenPrsResult,
 } from '../shared/github-types'
+import { execInPath } from './remote-exec'
 
 const execFileAsync = promisify(execFile)
 
@@ -132,8 +133,7 @@ export class GithubService {
     const cached = this.repoInfoCache.get(repoPath)
     if (cached !== undefined) return cached
     try {
-      const { stdout } = await execFileAsync('git', ['remote', 'get-url', 'origin'], {
-        cwd: repoPath,
+      const { stdout } = await execInPath(repoPath, 'git', ['remote', 'get-url', 'origin'], {
         timeout: 5000,
       })
       const repoInfo = this.parseGithubRemote(stdout)

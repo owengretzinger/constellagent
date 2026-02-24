@@ -5,6 +5,7 @@ import type { CreateWorktreeProgressEvent } from "../../../shared/workspace-crea
 import type { OpenPrInfo, GithubLookupError } from "../../../shared/github-types";
 import { WorkspaceDialog } from "./WorkspaceDialog";
 import { ProjectSettingsDialog } from "./ProjectSettingsDialog";
+import { AddRemoteProjectDialog } from "./AddRemoteProjectDialog";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { Tooltip } from "../Tooltip/Tooltip";
 import styles from "./Sidebar.module.css";
@@ -308,6 +309,8 @@ export function Sidebar() {
   >({});
   const [pullingPrKey, setPullingPrKey] = useState<string | null>(null);
   const [projectPrSearch, setProjectPrSearch] = useState("");
+  const [remoteProjectDialogOpen, setRemoteProjectDialogOpen] = useState(false);
+  const [addingRemoteProject, setAddingRemoteProject] = useState(false);
   const editRef = useRef<string>("");
   const dialogProject = workspaceDialogProjectId
     ? (projects.find((p) => p.id === workspaceDialogProjectId) ?? null)
@@ -392,6 +395,40 @@ export function Sidebar() {
     const id = crypto.randomUUID();
     addProjectWithRootWorkspace({ id, name, repoPath: dirPath });
   }, [addProjectWithRootWorkspace]);
+
+  const handleAddRemoteProject = useCallback(async (host: string, remotePath: string) => {
+    if (addingRemoteProject) return;
+    setAddingRemoteProject(true);
+    try {
+      const repoPath = await window.api.app.addSshProject(host, remotePath);
+      if (!repoPath) {
+        addToast({
+          id: crypto.randomUUID(),
+          message: "Could not verify remote git repository over SSH.",
+          type: "error",
+        });
+        return;
+      }
+
+      const normalizedPath = remotePath.startsWith("/") ? remotePath : `/${remotePath}`;
+      const repoName = normalizedPath.split("/").filter(Boolean).pop() || normalizedPath;
+      const id = crypto.randomUUID();
+      await addProjectWithRootWorkspace({
+        id,
+        name: `${host}:${repoName}`,
+        repoPath,
+      });
+      setRemoteProjectDialogOpen(false);
+    } catch {
+      addToast({
+        id: crypto.randomUUID(),
+        message: "Failed to add remote project.",
+        type: "error",
+      });
+    } finally {
+      setAddingRemoteProject(false);
+    }
+  }, [addProjectWithRootWorkspace, addToast, addingRemoteProject]);
 
   const finishCreateWorkspace = useCallback(
     async (
@@ -933,6 +970,12 @@ export function Sidebar() {
             <span>Add project</span>
           </button>
         </Tooltip>
+        <Tooltip label="Add remote project">
+          <button className={styles.actionButton} onClick={() => setRemoteProjectDialogOpen(true)}>
+            <span className={styles.actionIcon}>↗</span>
+            <span>Add remote</span>
+          </button>
+        </Tooltip>
         <Tooltip label="Automations">
           <button className={styles.actionButton} onClick={toggleAutomations}>
             <span className={styles.actionIcon}>⏱</span>
@@ -946,6 +989,18 @@ export function Sidebar() {
           </button>
         </Tooltip>
       </div>
+
+      {remoteProjectDialogOpen && (
+        <AddRemoteProjectDialog
+          onConfirm={(host, remotePath) => {
+            void handleAddRemoteProject(host, remotePath);
+          }}
+          onCancel={() => {
+            if (!addingRemoteProject) setRemoteProjectDialogOpen(false);
+          }}
+          isSubmitting={addingRemoteProject}
+        />
+      )}
 
       {projectPrModalProject && (
         <div

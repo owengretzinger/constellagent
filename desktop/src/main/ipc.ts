@@ -14,6 +14,8 @@ import { AutomationScheduler } from './automation-scheduler'
 import type { AutomationConfig } from '../shared/automation-types'
 import { trustPathForClaude, loadClaudeSettings, saveClaudeSettings, loadJsonFile, saveJsonFile } from './claude-config'
 import { loadCodexConfigText, saveCodexConfigText } from './codex-config'
+import { execInPath } from './remote-exec'
+import { formatSshPath, isSshPath } from '../shared/ssh-path'
 
 const ptyManager = new PtyManager()
 const automationScheduler = new AutomationScheduler(ptyManager)
@@ -77,7 +79,11 @@ function sanitizeLoadedState(data: unknown): StateSanitizeResult {
   let removedWorkspaceCount = 0
 
   for (const workspace of rawWorkspaces) {
-    if (!isWorkspaceLike(workspace) || !existsSync(workspace.worktreePath)) {
+    if (!isWorkspaceLike(workspace)) {
+      removedWorkspaceCount += 1
+      continue
+    }
+    if (!isSshPath(workspace.worktreePath) && !existsSync(workspace.worktreePath)) {
       removedWorkspaceCount += 1
       continue
     }
@@ -437,6 +443,31 @@ export function registerIpcHandlers(): void {
       const s = await stat(dirPath)
       if (!s.isDirectory()) return null
       return dirPath
+    } catch {
+      return null
+    }
+  })
+
+  ipcMain.handle(IPC.APP_ADD_SSH_PROJECT, async (_e, host: string, remotePath: string) => {
+    try {
+      const repoPath = formatSshPath(host, remotePath)
+      const { stdout } = await execInPath(repoPath, 'git', ['rev-parse', '--show-toplevel', '--show-prefix'], {
+        timeout: 12_000,
+        maxBuffer: 256 * 1024,
+      })
+      const lines = stdout
+        .split('\n')
+        .map((line) => line.trim())
+        .filter((line) => line.length > 0)
+      if (lines.length === 0) return null
+
+      const topLevel = lines[0]
+      const prefix = lines[1] ?? ''
+      // Require selecting a repository/worktree root directly to avoid
+      // accidentally targeting a huge parent repository.
+      if (prefix) return null
+
+      return formatSshPath(host, topLevel)
     } catch {
       return null
     }

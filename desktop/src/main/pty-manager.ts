@@ -3,6 +3,7 @@ import { execFileSync } from 'child_process'
 import { existsSync, mkdirSync, unlinkSync, writeFileSync } from 'fs'
 import { WebContents } from 'electron'
 import { IPC } from '../shared/ipc-channels'
+import { parseSshPath } from '../shared/ssh-path'
 
 interface PtyInstance {
   process: pty.IPty
@@ -80,6 +81,10 @@ function getActivityDir(): string {
   return process.env.CONSTELLAGENT_ACTIVITY_DIR || DEFAULT_ACTIVITY_DIR
 }
 
+function shellQuote(value: string): string {
+  return `'${value.replace(/'/g, `'\"'\"'`)}'`
+}
+
 function appendReplayChunk(instance: PtyInstance, chunk: string): void {
   if (!chunk) return
 
@@ -109,7 +114,27 @@ export class PtyManager {
 
     let file: string
     let args: string[]
-    if (command && command.length > 0) {
+    let spawnCwd = workingDir
+    const sshTarget = parseSshPath(workingDir)
+
+    if (sshTarget) {
+      const commandScript =
+        command && command.length > 0
+          ? command.map((part) => shellQuote(part)).join(' ')
+          : null
+      const preferredShell = shell?.trim()
+      const shellScript = preferredShell
+        ? `${shellQuote(preferredShell)} -l`
+        : '"${SHELL:-/bin/zsh}" -l'
+      const script = commandScript
+        ? `cd ${shellQuote(sshTarget.remotePath)} && ${commandScript}`
+        : `cd ${shellQuote(sshTarget.remotePath)} && exec ${shellScript}`
+      const remoteCommand = `sh -lc ${shellQuote(script)}`
+
+      file = 'ssh'
+      args = ['-tt', sshTarget.host, '--', remoteCommand]
+      spawnCwd = process.cwd()
+    } else if (command && command.length > 0) {
       file = command[0]
       args = command.slice(1)
     } else {
@@ -121,7 +146,7 @@ export class PtyManager {
       name: 'xterm-256color',
       cols: 80,
       rows: 24,
-      cwd: workingDir,
+      cwd: spawnCwd,
       env: {
         ...process.env,
         TERM: 'xterm-256color',
