@@ -6,7 +6,7 @@ const appPath = resolve(__dirname, '../out/main/index.js')
 test('Phase 1: app launches with 3-panel layout', async () => {
   const app = await electron.launch({
     args: [appPath],
-    env: { ...process.env, CI_TEST: '1' },
+    env: { ...process.env, CI_TEST: '1', ELECTRON_RENDERER_URL: '' },
   })
 
   const window = await app.firstWindow()

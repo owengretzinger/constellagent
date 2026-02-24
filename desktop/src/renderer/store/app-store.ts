@@ -24,7 +24,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   toasts: [],
   quickOpenVisible: false,
   unreadWorkspaceIds: new Set<string>(),
-  activeClaudeWorkspaceIds: new Set<string>(),
+  activeAgentWorkspaceIds: new Set<string>(),
   prStatusMap: new Map(),
   ghAvailability: new Map(),
 
@@ -141,7 +141,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       const newTabs = s.tabs.filter((t) => !removedWsIds.has(t.workspaceId))
       const newAutomations = s.automations.filter((a) => a.projectId !== id)
       const newUnread = new Set(Array.from(s.unreadWorkspaceIds).filter((wsId) => !removedWsIds.has(wsId)))
-      const newActiveClaude = new Set(Array.from(s.activeClaudeWorkspaceIds).filter((wsId) => !removedWsIds.has(wsId)))
+      const newActiveAgent = new Set(Array.from(s.activeAgentWorkspaceIds).filter((wsId) => !removedWsIds.has(wsId)))
       const newPrStatusMap = new Map(
         Array.from(s.prStatusMap.entries()).filter(([key]) => !key.startsWith(`${id}:`))
       )
@@ -165,7 +165,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         tabs: newTabs,
         automations: newAutomations,
         unreadWorkspaceIds: newUnread,
-        activeClaudeWorkspaceIds: newActiveClaude,
+        activeAgentWorkspaceIds: newActiveAgent,
         prStatusMap: newPrStatusMap,
         ghAvailability: newGhAvailability,
         activeWorkspaceId,
@@ -186,15 +186,15 @@ export const useAppStore = create<AppState>((set, get) => ({
       const newTabs = s.tabs.filter((t) => t.workspaceId !== id)
       const newUnread = new Set(s.unreadWorkspaceIds)
       newUnread.delete(id)
-      const newActiveClaude = new Set(s.activeClaudeWorkspaceIds)
-      newActiveClaude.delete(id)
+      const newActiveAgent = new Set(s.activeAgentWorkspaceIds)
+      newActiveAgent.delete(id)
       const tabMap = { ...s.lastActiveTabByWorkspace }
       delete tabMap[id]
       return {
         workspaces: newWorkspaces,
         tabs: newTabs,
         unreadWorkspaceIds: newUnread,
-        activeClaudeWorkspaceIds: newActiveClaude,
+        activeAgentWorkspaceIds: newActiveAgent,
         lastActiveTabByWorkspace: tabMap,
         activeWorkspaceId:
           s.activeWorkspaceId === id
@@ -509,8 +509,8 @@ export const useAppStore = create<AppState>((set, get) => ({
       return { unreadWorkspaceIds: newUnread }
     }),
 
-  setActiveClaudeWorkspaces: (workspaceIds) =>
-    set(() => ({ activeClaudeWorkspaceIds: new Set(workspaceIds) })),
+  setActiveAgentWorkspaces: (workspaceIds) =>
+    set(() => ({ activeAgentWorkspaceIds: new Set(workspaceIds) })),
 
   setPrStatuses: (projectId, statuses) =>
     set((s) => {

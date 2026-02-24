@@ -17,6 +17,7 @@ async function launchApp(
     env: {
       ...process.env,
       CI_TEST: '1',
+      ELECTRON_RENDERER_URL: '',
       CONSTELLAGENT_NOTIFY_DIR: notifyDir,
       CONSTELLAGENT_ACTIVITY_DIR: activityDir,
     },
@@ -69,7 +70,7 @@ async function setupTwoWorkspaces(window: Page, repoPath: string) {
 /** Set up the IPC listener from the test context (mirrors what App.tsx useEffect does) */
 async function setupNotifyListener(window: Page) {
   await window.evaluate(() => {
-    ;(window as any).api.claude.onNotifyWorkspace((wsId: string) => {
+    ;(window as any).api.agent.onNotifyWorkspace((wsId: string) => {
       const state = (window as any).__store.getState()
       if (wsId !== state.activeWorkspaceId) {
         state.markWorkspaceUnread(wsId)

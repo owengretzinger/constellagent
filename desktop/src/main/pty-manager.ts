@@ -3,6 +3,8 @@ import { execFileSync } from 'child_process'
 import { existsSync, mkdirSync, unlinkSync, writeFileSync } from 'fs'
 import { WebContents } from 'electron'
 import { IPC } from '../shared/ipc-channels'
+import type { AgentTurnEventType } from '../shared/agent-events'
+import { emitAgentTurnEvent } from './agent-events'
 
 interface PtyInstance {
   process: pty.IPty
@@ -14,8 +16,12 @@ interface PtyInstance {
   replayChunks: string[]
   replayChars: number
   workspaceId?: string
+  agentSessionId: string
   codexPromptBuffer: string
   codexAwaitingAnswer: boolean
+  agentEventLineBuffer: string
+  piMonoJsonDetected: boolean
+  piMonoTurnActive: boolean
 }
 
 interface ProcessEntry {
@@ -68,6 +74,7 @@ const CODEX_PROMPT_BUFFER_MAX = 4096
 const PTY_REPLAY_BUFFER_MAX_CHARS = 8_000_000
 const CODEX_QUESTION_HEADER_RE = /Question\s+\d+\s*\/\s*\d+\s*\(\s*\d+\s+unanswered\s*\)/i
 const CODEX_QUESTION_HINT_RE = /enter to submit answer/i
+const AGENT_EVENT_LINE_BUFFER_MAX = 32_768
 
 function stripAnsiSequences(data: string): string {
   return data
@@ -117,6 +124,8 @@ export class PtyManager {
       args = []
     }
 
+    const agentSessionId = extraEnv?.AGENT_ORCH_SESSION_ID || id
+
     const proc = pty.spawn(file, args, {
       name: 'xterm-256color',
       cols: 80,
@@ -127,6 +136,8 @@ export class PtyManager {
         TERM: 'xterm-256color',
         COLORTERM: 'truecolor',
         ...extraEnv,
+        AGENT_ORCH_SESSION_ID: agentSessionId,
+        AGENT_ORCH_PTY_ID: id,
       } as Record<string, string>,
     })
 
@@ -140,8 +151,12 @@ export class PtyManager {
       replayChunks: [],
       replayChars: 0,
       workspaceId: extraEnv?.AGENT_ORCH_WS_ID,
+      agentSessionId,
       codexPromptBuffer: '',
       codexAwaitingAnswer: false,
+      agentEventLineBuffer: '',
+      piMonoJsonDetected: false,
+      piMonoTurnActive: false,
     }
 
     let pendingWrite = initialWrite
@@ -152,6 +167,7 @@ export class PtyManager {
       if (!instance.webContents.isDestroyed()) {
         instance.webContents.send(`${IPC.PTY_DATA}:${id}`, startSeq, data)
       }
+      this.handlePiMonoJsonOutput(instance, data)
       this.handleCodexQuestionPrompt(instance, data)
       // Write initial command on first output (shell is ready)
       if (pendingWrite) {
@@ -162,6 +178,16 @@ export class PtyManager {
     })
 
     proc.onExit(({ exitCode }) => {
+      const hadCodexActivity = !!instance.workspaceId && this.isCodexActivityMarked(instance.workspaceId, instance.process.pid)
+      if (hadCodexActivity) {
+        this.emitTurnEvent(
+          instance.workspaceId,
+          'codex',
+          exitCode === 0 ? 'turn_completed' : 'turn_failed',
+          instance.agentSessionId,
+        )
+      }
+
       this.clearCodexWorkspaceActivity(instance.workspaceId, instance.process.pid)
       for (const cb of instance.onExitCallbacks) cb(exitCode)
       this.ptys.delete(id)
@@ -186,6 +212,7 @@ export class PtyManager {
       instance.codexPromptBuffer = ''
       instance.codexAwaitingAnswer = false
       this.markCodexWorkspaceActive(instance.workspaceId, instance.process.pid)
+      this.emitTurnEvent(instance.workspaceId, 'codex', 'turn_started', instance.agentSessionId)
     }
 
     instance.process.write(data)
@@ -276,6 +303,76 @@ export class PtyManager {
     }
   }
 
+  private emitTurnEvent(
+    workspaceId: string | undefined,
+    agent: string,
+    type: AgentTurnEventType,
+    sessionId?: string,
+  ): void {
+    if (!workspaceId) return
+    emitAgentTurnEvent({ workspaceId, agent, type, sessionId })
+  }
+
+  private handlePiMonoJsonOutput(instance: PtyInstance, data: string): void {
+    if (!instance.workspaceId || !data) return
+
+    instance.agentEventLineBuffer = `${instance.agentEventLineBuffer}${data}`
+    if (instance.agentEventLineBuffer.length > AGENT_EVENT_LINE_BUFFER_MAX) {
+      instance.agentEventLineBuffer = instance.agentEventLineBuffer.slice(-AGENT_EVENT_LINE_BUFFER_MAX)
+    }
+
+    const lines = instance.agentEventLineBuffer.split(/\r?\n/)
+    instance.agentEventLineBuffer = lines.pop() ?? ''
+
+    for (const rawLine of lines) {
+      const line = rawLine.trim()
+      if (!line || line[0] !== '{') continue
+
+      let parsed: Record<string, unknown>
+      try {
+        parsed = JSON.parse(line) as Record<string, unknown>
+      } catch {
+        continue
+      }
+
+      const type = typeof parsed.type === 'string' ? parsed.type : ''
+      if (!type) continue
+
+      if (!instance.piMonoJsonDetected) {
+        const isSessionHeader =
+          type === 'session' &&
+          typeof parsed.id === 'string' &&
+          typeof parsed.cwd === 'string' &&
+          typeof parsed.version === 'number'
+        if (!isSessionHeader) continue
+
+        instance.piMonoJsonDetected = true
+        const sessionId = (parsed.id as string).trim()
+        if (sessionId) {
+          instance.agentSessionId = sessionId
+        }
+        continue
+      }
+
+      if (type === 'turn_start') {
+        instance.piMonoTurnActive = true
+        this.emitTurnEvent(instance.workspaceId, 'pi-mono', 'turn_started', instance.agentSessionId)
+        continue
+      }
+
+      if (type === 'turn_end') {
+        instance.piMonoTurnActive = false
+        this.emitTurnEvent(instance.workspaceId, 'pi-mono', 'awaiting_user', instance.agentSessionId)
+        continue
+      }
+
+      if (type === 'agent_end' && instance.piMonoTurnActive) {
+        instance.piMonoTurnActive = false
+        this.emitTurnEvent(instance.workspaceId, 'pi-mono', 'turn_completed', instance.agentSessionId)
+      }
+    }
+  }
+
   private handleCodexQuestionPrompt(instance: PtyInstance, data: string): void {
     if (!instance.workspaceId) return
     if (instance.codexAwaitingAnswer) return
@@ -289,13 +386,11 @@ export class PtyManager {
     if (!this.isCodexActivityMarked(instance.workspaceId, instance.process.pid)) return
 
     // Codex is explicitly waiting on user input: clear spinner activity and
-    // surface unread attention via the existing notify channel.
+    // emit a generalized "awaiting user" turn event.
     instance.codexAwaitingAnswer = true
     instance.codexPromptBuffer = ''
     this.clearCodexWorkspaceActivity(instance.workspaceId, instance.process.pid)
-    if (!instance.webContents.isDestroyed()) {
-      instance.webContents.send(IPC.CLAUDE_NOTIFY_WORKSPACE, instance.workspaceId)
-    }
+    this.emitTurnEvent(instance.workspaceId, 'codex', 'awaiting_user', instance.agentSessionId)
   }
 
   private isCodexActivityMarked(workspaceId: string, ptyPid: number): boolean {

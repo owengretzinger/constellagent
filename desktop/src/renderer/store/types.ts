@@ -103,7 +103,7 @@ export interface AppState {
   toasts: Toast[]
   quickOpenVisible: boolean
   unreadWorkspaceIds: Set<string>
-  activeClaudeWorkspaceIds: Set<string>
+  activeAgentWorkspaceIds: Set<string>
   prStatusMap: Map<string, PrInfo | null>
   ghAvailability: Map<string, boolean>
 
@@ -153,8 +153,8 @@ export interface AppState {
   markWorkspaceUnread: (workspaceId: string) => void
   clearWorkspaceUnread: (workspaceId: string) => void
 
-  // Agent activity actions (Claude + Codex)
-  setActiveClaudeWorkspaces: (workspaceIds: string[]) => void
+  // Agent activity actions (all integrations)
+  setActiveAgentWorkspaces: (workspaceIds: string[]) => void
 
   // PR status actions
   setPrStatuses: (projectId: string, statuses: Record<string, PrInfo | null>) => void

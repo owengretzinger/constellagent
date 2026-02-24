@@ -33,6 +33,7 @@ async function launchApp(
     env: {
       ...process.env,
       CI_TEST: '1',
+      ELECTRON_RENDERER_URL: '',
       CONSTELLAGENT_NOTIFY_DIR: notifyDir,
       CONSTELLAGENT_ACTIVITY_DIR: activityDir,
     },
@@ -163,7 +164,7 @@ test.describe('Codex activity indicator', () => {
       }, ptyId)
 
       await window.waitForFunction(
-        (wsId: string) => (window as any).__store.getState().activeClaudeWorkspaceIds.has(wsId),
+        (wsId: string) => (window as any).__store.getState().activeAgentWorkspaceIds.has(wsId),
         workspaceId,
         { timeout: 5000 }
       )
@@ -177,13 +178,13 @@ test.describe('Codex activity indicator', () => {
       }, { ptyId, wsId: workspaceId, notifyPath: notifyDir, activityPath: activityDir })
 
       await window.waitForFunction(
-        (wsId: string) => !(window as any).__store.getState().activeClaudeWorkspaceIds.has(wsId),
+        (wsId: string) => !(window as any).__store.getState().activeAgentWorkspaceIds.has(wsId),
         workspaceId,
         { timeout: 10000 }
       )
 
       const isActive = await window.evaluate((wsId: string) => {
-        return (window as any).__store.getState().activeClaudeWorkspaceIds.has(wsId)
+        return (window as any).__store.getState().activeAgentWorkspaceIds.has(wsId)
       }, workspaceId)
       expect(isActive).toBe(false)
     } finally {
@@ -215,7 +216,7 @@ test.describe('Codex activity indicator', () => {
       }, ptyId1)
 
       await window.waitForFunction(
-        (wsId: string) => (window as any).__store.getState().activeClaudeWorkspaceIds.has(wsId),
+        (wsId: string) => (window as any).__store.getState().activeAgentWorkspaceIds.has(wsId),
         workspaceId1,
         { timeout: 5000 }
       )
@@ -234,7 +235,7 @@ test.describe('Codex activity indicator', () => {
       }, { ptyId: ptyId1, wsId: workspaceId1, activityPath: activityDir })
 
       await window.waitForFunction(
-        (wsId: string) => !(window as any).__store.getState().activeClaudeWorkspaceIds.has(wsId),
+        (wsId: string) => !(window as any).__store.getState().activeAgentWorkspaceIds.has(wsId),
         workspaceId1,
         { timeout: 10000 }
       )
@@ -290,7 +291,7 @@ test.describe('Codex activity indicator', () => {
       }, { ptyId: primaryPtyId, wsId: workspaceId, activityPath: activityDir })
 
       await window.waitForFunction(
-        (wsId: string) => (window as any).__store.getState().activeClaudeWorkspaceIds.has(wsId),
+        (wsId: string) => (window as any).__store.getState().activeAgentWorkspaceIds.has(wsId),
         workspaceId,
         { timeout: 5000 }
       )
@@ -302,7 +303,7 @@ test.describe('Codex activity indicator', () => {
       await window.waitForTimeout(1200)
 
       const isStillActive = await window.evaluate((wsId: string) => {
-        return (window as any).__store.getState().activeClaudeWorkspaceIds.has(wsId)
+        return (window as any).__store.getState().activeAgentWorkspaceIds.has(wsId)
       }, workspaceId)
       expect(isStillActive).toBe(true)
 
@@ -337,7 +338,7 @@ test.describe('Codex activity indicator', () => {
       }, { ptyId: ptyId1, wsId: workspaceId1, activityPath: activityDir })
 
       await window.waitForFunction(
-        (wsId: string) => (window as any).__store.getState().activeClaudeWorkspaceIds.has(wsId),
+        (wsId: string) => (window as any).__store.getState().activeAgentWorkspaceIds.has(wsId),
         workspaceId1,
         { timeout: 8000 }
       )
@@ -353,7 +354,7 @@ test.describe('Codex activity indicator', () => {
 
       // The question prompt should stop activity and mark unread before process exit.
       await window.waitForFunction(
-        (wsId: string) => !(window as any).__store.getState().activeClaudeWorkspaceIds.has(wsId),
+        (wsId: string) => !(window as any).__store.getState().activeAgentWorkspaceIds.has(wsId),
         workspaceId1,
         { timeout: 7000 }
       )

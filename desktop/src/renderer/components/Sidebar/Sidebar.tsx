@@ -278,7 +278,7 @@ export function Sidebar() {
   const toggleSettings = useAppStore((s) => s.toggleSettings);
   const toggleAutomations = useAppStore((s) => s.toggleAutomations);
   const unreadWorkspaceIds = useAppStore((s) => s.unreadWorkspaceIds);
-  const activeClaudeWorkspaceIds = useAppStore((s) => s.activeClaudeWorkspaceIds);
+  const activeAgentWorkspaceIds = useAppStore((s) => s.activeAgentWorkspaceIds);
   const renameWorkspace = useAppStore((s) => s.renameWorkspace);
   const setActiveTab = useAppStore((s) => s.setActiveTab);
   const setPrStatuses = useAppStore((s) => s.setPrStatuses);
@@ -844,7 +844,7 @@ export function Sidebar() {
                         key={ws.id}
                         className={`${styles.workspaceItem} ${
                           ws.id === activeWorkspaceId ? styles.active : ""
-                        } ${unreadWorkspaceIds.has(ws.id) ? styles.unread : ""} ${activeClaudeWorkspaceIds.has(ws.id) ? styles.claudeActive : ""} ${ws.isRoot ? styles.rootWorkspace : ""}`}
+                        } ${unreadWorkspaceIds.has(ws.id) ? styles.unread : ""} ${activeAgentWorkspaceIds.has(ws.id) ? styles.claudeActive : ""} ${ws.isRoot ? styles.rootWorkspace : ""}`}
                         onClick={() =>
                           !isEditing && handleSelectWorkspace(ws.id)
                         }

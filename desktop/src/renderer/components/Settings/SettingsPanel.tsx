@@ -145,7 +145,7 @@ function ClaudeHooksSection() {
       <div className={styles.rowText}>
         <div className={styles.rowLabel}>Claude Code hooks</div>
         <div className={styles.rowDescription}>
-          Show an unread indicator when Claude Code finishes responding in a workspace
+          Show unread/active state for Claude turns, including AskUserQuestion dialogs that wait for your input
         </div>
       </div>
       {installed === true ? (
@@ -209,6 +209,70 @@ function CodexNotifySection() {
         <div className={styles.rowLabel}>Codex notify hook</div>
         <div className={styles.rowDescription}>
           Show done/unread state for Codex turns and clear active state when a turn completes
+        </div>
+      </div>
+      {installed === true ? (
+        <button
+          className={styles.actionBtnDanger}
+          onClick={handleUninstall}
+          disabled={installing}
+        >
+          {installing ? 'Removing...' : 'Uninstall'}
+        </button>
+      ) : (
+        <button
+          className={styles.actionBtn}
+          onClick={handleInstall}
+          disabled={installing || installed === null}
+        >
+          {installing ? 'Installing...' : 'Install'}
+        </button>
+      )}
+    </div>
+  )
+}
+
+function PiMonoSection() {
+  const [installed, setInstalled] = useState<boolean | null>(null)
+  const [installing, setInstalling] = useState(false)
+
+  useEffect(() => {
+    window.api.pi.checkActivityExtension().then((result: { installed: boolean }) => {
+      setInstalled(result.installed)
+    }).catch(() => setInstalled(false))
+  }, [])
+
+  const handleInstall = async () => {
+    setInstalling(true)
+    try {
+      await window.api.pi.installActivityExtension()
+      setInstalled(true)
+    } catch {
+      setInstalled(false)
+    } finally {
+      setInstalling(false)
+    }
+  }
+
+  const handleUninstall = async () => {
+    setInstalling(true)
+    try {
+      await window.api.pi.uninstallActivityExtension()
+      setInstalled(false)
+    } catch {
+      // keep current state
+    } finally {
+      setInstalling(false)
+    }
+  }
+
+  return (
+    <div className={styles.row}>
+      <div className={styles.rowText}>
+        <div className={styles.rowLabel}>Pi-mono extension</div>
+        <div className={styles.rowDescription}>
+          Install interactive activity detection for pi/pi-mono via extension events (agent_start/agent_end).
+          JSON mode detection still works as a fallback.
         </div>
       </div>
       {installed === true ? (
@@ -335,6 +399,7 @@ export function SettingsPanel() {
           <div className={styles.sectionTitle}>Agent Integrations</div>
           <ClaudeHooksSection />
           <CodexNotifySection />
+          <PiMonoSection />
         </div>
 
         <div className={styles.section}>

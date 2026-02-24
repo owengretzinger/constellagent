@@ -102,6 +102,23 @@ const api = {
       ipcRenderer.invoke(IPC.APP_ADD_PROJECT_PATH, dirPath),
   },
 
+  agent: {
+    onNotifyWorkspace: (callback: (workspaceId: string) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, wsId: string) => callback(wsId)
+      ipcRenderer.on(IPC.AGENT_NOTIFY_WORKSPACE, listener)
+      return () => {
+        ipcRenderer.removeListener(IPC.AGENT_NOTIFY_WORKSPACE, listener)
+      }
+    },
+    onActivityUpdate: (callback: (workspaceIds: string[]) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, wsIds: string[]) => callback(wsIds)
+      ipcRenderer.on(IPC.AGENT_ACTIVITY_UPDATE, listener)
+      return () => {
+        ipcRenderer.removeListener(IPC.AGENT_ACTIVITY_UPDATE, listener)
+      }
+    },
+  },
+
   claude: {
     trustPath: (dirPath: string) =>
       ipcRenderer.invoke(IPC.CLAUDE_TRUST_PATH, dirPath),
@@ -111,20 +128,11 @@ const api = {
       ipcRenderer.invoke(IPC.CLAUDE_UNINSTALL_HOOKS),
     checkHooks: () =>
       ipcRenderer.invoke(IPC.CLAUDE_CHECK_HOOKS),
-    onNotifyWorkspace: (callback: (workspaceId: string) => void) => {
-      const listener = (_event: Electron.IpcRendererEvent, wsId: string) => callback(wsId)
-      ipcRenderer.on(IPC.CLAUDE_NOTIFY_WORKSPACE, listener)
-      return () => {
-        ipcRenderer.removeListener(IPC.CLAUDE_NOTIFY_WORKSPACE, listener)
-      }
-    },
-    onActivityUpdate: (callback: (workspaceIds: string[]) => void) => {
-      const listener = (_event: Electron.IpcRendererEvent, wsIds: string[]) => callback(wsIds)
-      ipcRenderer.on(IPC.CLAUDE_ACTIVITY_UPDATE, listener)
-      return () => {
-        ipcRenderer.removeListener(IPC.CLAUDE_ACTIVITY_UPDATE, listener)
-      }
-    },
+    // Back-compat aliases: activity events are now generic across agents.
+    onNotifyWorkspace: (callback: (workspaceId: string) => void) =>
+      api.agent.onNotifyWorkspace(callback),
+    onActivityUpdate: (callback: (workspaceIds: string[]) => void) =>
+      api.agent.onActivityUpdate(callback),
   },
 
   codex: {
@@ -134,6 +142,15 @@ const api = {
       ipcRenderer.invoke(IPC.CODEX_UNINSTALL_NOTIFY),
     checkNotify: () =>
       ipcRenderer.invoke(IPC.CODEX_CHECK_NOTIFY),
+  },
+
+  pi: {
+    installActivityExtension: () =>
+      ipcRenderer.invoke(IPC.PI_INSTALL_ACTIVITY_EXTENSION),
+    uninstallActivityExtension: () =>
+      ipcRenderer.invoke(IPC.PI_UNINSTALL_ACTIVITY_EXTENSION),
+    checkActivityExtension: () =>
+      ipcRenderer.invoke(IPC.PI_CHECK_ACTIVITY_EXTENSION),
   },
 
   automations: {

@@ -40,18 +40,28 @@ export const IPC = {
   APP_SELECT_DIRECTORY: 'app:select-directory',
   APP_ADD_PROJECT_PATH: 'app:add-project-path',
 
+  // Agent activity integration
+  AGENT_NOTIFY_WORKSPACE: 'agent:notify-workspace',
+  AGENT_ACTIVITY_UPDATE: 'agent:activity-update',
+
   // Claude Code integration
   CLAUDE_TRUST_PATH: 'claude:trust-path',
   CLAUDE_INSTALL_HOOKS: 'claude:install-hooks',
   CLAUDE_UNINSTALL_HOOKS: 'claude:uninstall-hooks',
   CLAUDE_CHECK_HOOKS: 'claude:check-hooks',
-  CLAUDE_NOTIFY_WORKSPACE: 'claude:notify-workspace',
-  CLAUDE_ACTIVITY_UPDATE: 'claude:activity-update',
+  // Back-compat aliases for existing renderer/preload listeners.
+  CLAUDE_NOTIFY_WORKSPACE: 'agent:notify-workspace',
+  CLAUDE_ACTIVITY_UPDATE: 'agent:activity-update',
 
   // Codex integration
   CODEX_INSTALL_NOTIFY: 'codex:install-notify',
   CODEX_UNINSTALL_NOTIFY: 'codex:uninstall-notify',
   CODEX_CHECK_NOTIFY: 'codex:check-notify',
+
+  // Pi integration
+  PI_INSTALL_ACTIVITY_EXTENSION: 'pi:install-activity-extension',
+  PI_UNINSTALL_ACTIVITY_EXTENSION: 'pi:uninstall-activity-extension',
+  PI_CHECK_ACTIVITY_EXTENSION: 'pi:check-activity-extension',
 
   // Automation operations
   AUTOMATION_CREATE: 'automation:create',
