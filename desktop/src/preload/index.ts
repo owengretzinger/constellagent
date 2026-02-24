@@ -128,11 +128,6 @@ const api = {
       ipcRenderer.invoke(IPC.CLAUDE_UNINSTALL_HOOKS),
     checkHooks: () =>
       ipcRenderer.invoke(IPC.CLAUDE_CHECK_HOOKS),
-    // Back-compat aliases: activity events are now generic across agents.
-    onNotifyWorkspace: (callback: (workspaceId: string) => void) =>
-      api.agent.onNotifyWorkspace(callback),
-    onActivityUpdate: (callback: (workspaceIds: string[]) => void) =>
-      api.agent.onActivityUpdate(callback),
   },
 
   codex: {

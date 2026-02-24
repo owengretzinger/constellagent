@@ -49,9 +49,6 @@ export const IPC = {
   CLAUDE_INSTALL_HOOKS: 'claude:install-hooks',
   CLAUDE_UNINSTALL_HOOKS: 'claude:uninstall-hooks',
   CLAUDE_CHECK_HOOKS: 'claude:check-hooks',
-  // Back-compat aliases for existing renderer/preload listeners.
-  CLAUDE_NOTIFY_WORKSPACE: 'agent:notify-workspace',
-  CLAUDE_ACTIVITY_UPDATE: 'agent:activity-update',
 
   // Codex integration
   CODEX_INSTALL_NOTIFY: 'codex:install-notify',

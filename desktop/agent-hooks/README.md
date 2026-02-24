@@ -3,16 +3,16 @@
 `emit-event.sh` writes normalized turn events that Constellagent consumes:
 
 ```bash
-emit-event.sh <agent> <turn_event_type>
+emit-event.sh <agent> <turn_event_type> [turn_outcome]
 ```
 
-Preferred turn event types:
+Supported turn event types:
 - `turn_started`
 - `awaiting_user`
 
-Legacy turn types are still accepted and normalized:
-- `turn_completed` → `awaiting_user` (`outcome: success`)
-- `turn_failed` → `awaiting_user` (`outcome: failed`)
+Optional turn outcomes (for `awaiting_user`):
+- `success`
+- `failed`
 
 Required environment:
 - `AGENT_ORCH_WS_ID` (workspace id)

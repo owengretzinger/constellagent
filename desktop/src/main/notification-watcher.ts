@@ -2,13 +2,7 @@ import { mkdirSync, readdirSync, readFileSync, statSync, unlinkSync } from 'fs'
 import { join } from 'path'
 import { BrowserWindow } from 'electron'
 import { IPC } from '../shared/ipc-channels'
-import type {
-  AgentTurnEvent,
-  AgentTurnEventType,
-  AgentTurnEventWire,
-  AgentTurnEventWireType,
-  AgentTurnOutcome,
-} from '../shared/agent-events'
+import type { AgentTurnEvent, AgentTurnEventType, AgentTurnOutcome } from '../shared/agent-events'
 import { AGENT_EVENT_DEFAULT_DIR } from './agent-events'
 
 const DEFAULT_NOTIFY_DIR = '/tmp/constellagent-notify'
@@ -18,19 +12,14 @@ const FILE_SETTLE_MS = 100
 const CLAUDE_MARKER_SUFFIX = '.claude'
 const GENERIC_AGENT_MARKER_RE = /^(.+)\.[a-z0-9-]+\.\d+$/i
 
-const TURN_EVENT_WIRE_TYPES: AgentTurnEventWireType[] = [
-  'turn_started',
-  'awaiting_user',
-  'turn_completed',
-  'turn_failed',
-]
+const TURN_EVENT_TYPES: AgentTurnEventType[] = ['turn_started', 'awaiting_user']
 
 const TURN_OUTCOMES: AgentTurnOutcome[] = ['success', 'failed']
 
 const LEGACY_MARKER_AGENTS = new Set(['claude', 'codex'])
 
-function isTurnEventWireType(value: string): value is AgentTurnEventWireType {
-  return TURN_EVENT_WIRE_TYPES.includes(value as AgentTurnEventWireType)
+function isTurnEventType(value: string): value is AgentTurnEventType {
+  return TURN_EVENT_TYPES.includes(value as AgentTurnEventType)
 }
 
 function isTurnOutcome(value: string): value is AgentTurnOutcome {
@@ -155,7 +144,7 @@ export class NotificationWatcher {
         return
       }
 
-      const parsed = JSON.parse(raw) as Partial<AgentTurnEventWire>
+      const parsed = JSON.parse(raw) as Partial<AgentTurnEvent>
       const event = this.normalizeEvent(parsed)
       if (event) {
         this.applyEvent(event)
@@ -171,12 +160,12 @@ export class NotificationWatcher {
     }
   }
 
-  private normalizeEvent(parsed: Partial<AgentTurnEventWire>): AgentTurnEvent | null {
+  private normalizeEvent(parsed: Partial<AgentTurnEvent>): AgentTurnEvent | null {
     const workspaceId = typeof parsed.workspaceId === 'string' ? parsed.workspaceId.trim() : ''
     if (!workspaceId) return null
 
-    const rawType = typeof parsed.type === 'string' ? parsed.type.trim() : ''
-    if (!isTurnEventWireType(rawType)) return null
+    const type = typeof parsed.type === 'string' ? parsed.type.trim() : ''
+    if (!isTurnEventType(type)) return null
 
     const agent = typeof parsed.agent === 'string' && parsed.agent.trim()
       ? parsed.agent.trim()
@@ -186,21 +175,9 @@ export class NotificationWatcher {
       ? parsed.sessionId.trim()
       : undefined
 
-    const parsedOutcome = typeof parsed.outcome === 'string' && isTurnOutcome(parsed.outcome)
+    const outcome = typeof parsed.outcome === 'string' && isTurnOutcome(parsed.outcome)
       ? parsed.outcome
       : undefined
-
-    let type: AgentTurnEventType
-    let outcome: AgentTurnOutcome | undefined = parsedOutcome
-
-    if (rawType === 'turn_started') {
-      type = 'turn_started'
-      outcome = undefined
-    } else {
-      type = 'awaiting_user'
-      if (!outcome && rawType === 'turn_completed') outcome = 'success'
-      if (!outcome && rawType === 'turn_failed') outcome = 'failed'
-    }
 
     return {
       schema: 1,
