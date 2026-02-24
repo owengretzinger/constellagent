@@ -6,11 +6,13 @@
 emit-event.sh <agent> <turn_event_type>
 ```
 
-Supported turn event types:
+Preferred turn event types:
 - `turn_started`
 - `awaiting_user`
-- `turn_completed`
-- `turn_failed`
+
+Legacy turn types are still accepted and normalized:
+- `turn_completed` → `awaiting_user` (`outcome: success`)
+- `turn_failed` → `awaiting_user` (`outcome: failed`)
 
 Required environment:
 - `AGENT_ORCH_WS_ID` (workspace id)

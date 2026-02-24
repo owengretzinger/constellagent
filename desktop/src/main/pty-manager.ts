@@ -3,7 +3,7 @@ import { execFileSync } from 'child_process'
 import { existsSync, mkdirSync, unlinkSync, writeFileSync } from 'fs'
 import { WebContents } from 'electron'
 import { IPC } from '../shared/ipc-channels'
-import type { AgentTurnEventType } from '../shared/agent-events'
+import type { AgentTurnEventType, AgentTurnOutcome } from '../shared/agent-events'
 import { emitAgentTurnEvent } from './agent-events'
 
 interface PtyInstance {
@@ -183,8 +183,9 @@ export class PtyManager {
         this.emitTurnEvent(
           instance.workspaceId,
           'codex',
-          exitCode === 0 ? 'turn_completed' : 'turn_failed',
+          'awaiting_user',
           instance.agentSessionId,
+          exitCode === 0 ? 'success' : 'failed',
         )
       }
 
@@ -308,9 +309,10 @@ export class PtyManager {
     agent: string,
     type: AgentTurnEventType,
     sessionId?: string,
+    outcome?: AgentTurnOutcome,
   ): void {
     if (!workspaceId) return
-    emitAgentTurnEvent({ workspaceId, agent, type, sessionId })
+    emitAgentTurnEvent({ workspaceId, agent, type, sessionId, outcome })
   }
 
   private handlePiMonoJsonOutput(instance: PtyInstance, data: string): void {
@@ -362,13 +364,13 @@ export class PtyManager {
 
       if (type === 'turn_end') {
         instance.piMonoTurnActive = false
-        this.emitTurnEvent(instance.workspaceId, 'pi-mono', 'awaiting_user', instance.agentSessionId)
+        this.emitTurnEvent(instance.workspaceId, 'pi-mono', 'awaiting_user', instance.agentSessionId, 'success')
         continue
       }
 
       if (type === 'agent_end' && instance.piMonoTurnActive) {
         instance.piMonoTurnActive = false
-        this.emitTurnEvent(instance.workspaceId, 'pi-mono', 'turn_completed', instance.agentSessionId)
+        this.emitTurnEvent(instance.workspaceId, 'pi-mono', 'awaiting_user', instance.agentSessionId, 'success')
       }
     }
   }

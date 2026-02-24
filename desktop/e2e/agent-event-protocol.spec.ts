@@ -21,7 +21,8 @@ function writeAgentEvent(
   event: {
     workspaceId: string
     agent: string
-    type: 'turn_started' | 'awaiting_user' | 'turn_completed' | 'turn_failed'
+    type: 'turn_started' | 'awaiting_user'
+    outcome?: 'success' | 'failed'
     sessionId?: string
   },
 ): void {
@@ -35,6 +36,7 @@ function writeAgentEvent(
       workspaceId: event.workspaceId,
       agent: event.agent,
       type: event.type,
+      outcome: event.outcome,
       sessionId: event.sessionId,
       at: Date.now(),
     }),

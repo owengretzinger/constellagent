@@ -18,18 +18,27 @@ import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { mkdirSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-type AgentTurnType = "turn_started" | "awaiting_user" | "turn_completed" | "turn_failed";
+type AgentTurnType = "turn_started" | "awaiting_user";
+type AgentTurnOutcome = "success" | "failed";
 
 const WS_ID = process.env.AGENT_ORCH_WS_ID?.trim();
 const SESSION_ID = process.env.AGENT_ORCH_SESSION_ID?.trim();
 const EVENT_DIR = process.env.CONSTELLAGENT_AGENT_EVENT_DIR || "/tmp/constellagent-agent-events";
 
-function emit(type: AgentTurnType): void {
+function emit(type: AgentTurnType, outcome?: AgentTurnOutcome): void {
   if (!WS_ID) return;
 
   try {
     mkdirSync(EVENT_DIR, { recursive: true });
-    const event = {
+    const event: {
+      schema: 1;
+      workspaceId: string;
+      agent: string;
+      type: AgentTurnType;
+      outcome?: AgentTurnOutcome;
+      sessionId?: string;
+      at: number;
+    } = {
       schema: 1,
       workspaceId: WS_ID,
       agent: "pi-mono",
@@ -37,6 +46,7 @@ function emit(type: AgentTurnType): void {
       sessionId: SESSION_ID,
       at: Date.now(),
     };
+    if (outcome) event.outcome = outcome;
 
     const baseName = Date.now().toString() + "-" + process.pid.toString() + "-" + Math.random().toString(16).slice(2);
     const target = join(EVENT_DIR, baseName + ".json");
@@ -56,7 +66,7 @@ export default function(pi: ExtensionAPI) {
   });
 
   pi.on("agent_end", async () => {
-    emit("awaiting_user");
+    emit("awaiting_user", "success");
   });
 }
 `

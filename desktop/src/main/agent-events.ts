@@ -1,6 +1,6 @@
 import { mkdirSync, renameSync, writeFileSync } from 'fs'
 import { join } from 'path'
-import type { AgentTurnEvent, AgentTurnEventType } from '../shared/agent-events'
+import type { AgentTurnEvent, AgentTurnEventType, AgentTurnOutcome } from '../shared/agent-events'
 
 const DEFAULT_AGENT_EVENT_DIR = '/tmp/constellagent-agent-events'
 
@@ -8,6 +8,7 @@ interface EmitAgentTurnEventInput {
   workspaceId: string
   agent: string
   type: AgentTurnEventType
+  outcome?: AgentTurnOutcome
   sessionId?: string
   at?: number
 }
@@ -26,6 +27,7 @@ export function emitAgentTurnEvent(input: EmitAgentTurnEventInput): void {
     workspaceId,
     agent,
     type: input.type,
+    outcome: input.outcome,
     sessionId: input.sessionId,
     at: input.at ?? Date.now(),
   }

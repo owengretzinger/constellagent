@@ -2,7 +2,13 @@ import { mkdirSync, readdirSync, readFileSync, statSync, unlinkSync } from 'fs'
 import { join } from 'path'
 import { BrowserWindow } from 'electron'
 import { IPC } from '../shared/ipc-channels'
-import type { AgentTurnEvent, AgentTurnEventType } from '../shared/agent-events'
+import type {
+  AgentTurnEvent,
+  AgentTurnEventType,
+  AgentTurnEventWire,
+  AgentTurnEventWireType,
+  AgentTurnOutcome,
+} from '../shared/agent-events'
 import { AGENT_EVENT_DEFAULT_DIR } from './agent-events'
 
 const DEFAULT_NOTIFY_DIR = '/tmp/constellagent-notify'
@@ -12,17 +18,23 @@ const FILE_SETTLE_MS = 100
 const CLAUDE_MARKER_SUFFIX = '.claude'
 const GENERIC_AGENT_MARKER_RE = /^(.+)\.[a-z0-9-]+\.\d+$/i
 
-const TURN_EVENT_TYPES: AgentTurnEventType[] = [
+const TURN_EVENT_WIRE_TYPES: AgentTurnEventWireType[] = [
   'turn_started',
   'awaiting_user',
   'turn_completed',
   'turn_failed',
 ]
 
+const TURN_OUTCOMES: AgentTurnOutcome[] = ['success', 'failed']
+
 const LEGACY_MARKER_AGENTS = new Set(['claude', 'codex'])
 
-function isTurnEventType(value: string): value is AgentTurnEventType {
-  return TURN_EVENT_TYPES.includes(value as AgentTurnEventType)
+function isTurnEventWireType(value: string): value is AgentTurnEventWireType {
+  return TURN_EVENT_WIRE_TYPES.includes(value as AgentTurnEventWireType)
+}
+
+function isTurnOutcome(value: string): value is AgentTurnOutcome {
+  return TURN_OUTCOMES.includes(value as AgentTurnOutcome)
 }
 
 export class NotificationWatcher {
@@ -143,7 +155,7 @@ export class NotificationWatcher {
         return
       }
 
-      const parsed = JSON.parse(raw) as Partial<AgentTurnEvent>
+      const parsed = JSON.parse(raw) as Partial<AgentTurnEventWire>
       const event = this.normalizeEvent(parsed)
       if (event) {
         this.applyEvent(event)
@@ -159,12 +171,12 @@ export class NotificationWatcher {
     }
   }
 
-  private normalizeEvent(parsed: Partial<AgentTurnEvent>): AgentTurnEvent | null {
+  private normalizeEvent(parsed: Partial<AgentTurnEventWire>): AgentTurnEvent | null {
     const workspaceId = typeof parsed.workspaceId === 'string' ? parsed.workspaceId.trim() : ''
     if (!workspaceId) return null
 
-    const type = typeof parsed.type === 'string' ? parsed.type.trim() : ''
-    if (!isTurnEventType(type)) return null
+    const rawType = typeof parsed.type === 'string' ? parsed.type.trim() : ''
+    if (!isTurnEventWireType(rawType)) return null
 
     const agent = typeof parsed.agent === 'string' && parsed.agent.trim()
       ? parsed.agent.trim()
@@ -174,10 +186,27 @@ export class NotificationWatcher {
       ? parsed.sessionId.trim()
       : undefined
 
+    const parsedOutcome = typeof parsed.outcome === 'string' && isTurnOutcome(parsed.outcome)
+      ? parsed.outcome
+      : undefined
+
+    let type: AgentTurnEventType
+    let outcome: AgentTurnOutcome | undefined = parsedOutcome
+
+    if (rawType === 'turn_started') {
+      type = 'turn_started'
+      outcome = undefined
+    } else {
+      type = 'awaiting_user'
+      if (!outcome && rawType === 'turn_completed') outcome = 'success'
+      if (!outcome && rawType === 'turn_failed') outcome = 'failed'
+    }
+
     return {
       schema: 1,
       workspaceId,
       type,
+      outcome,
       agent,
       sessionId,
       at: typeof parsed.at === 'number' ? parsed.at : Date.now(),
@@ -194,7 +223,7 @@ export class NotificationWatcher {
 
     this.removeActiveSession(workspaceId, agent, sessionId)
 
-    if (type === 'awaiting_user' || type === 'turn_failed') {
+    if (type === 'awaiting_user') {
       this.notifyRenderer(workspaceId)
     }
   }
