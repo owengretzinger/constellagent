@@ -118,14 +118,18 @@
 
 .shortcutHint {
   margin-left: auto;
+  min-width: 24px;
+  text-align: right;
   flex-shrink: 0;
-  opacity: 0.55;
+  color: var(--text-secondary);
+  opacity: 0.72;
   font-size: 11px;
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
+  font-variant-numeric: tabular-nums;
 }
 
 .tab.active .shortcutHint {
-  opacity: 0.8;
+  opacity: 0.95;
 }
 
 /* ── Unsaved Indicator ── */
@@ -155,6 +159,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  margin-left: var(--space-2);
   width: 16px;
   height: 16px;
   border-radius: var(--radius-sm);
