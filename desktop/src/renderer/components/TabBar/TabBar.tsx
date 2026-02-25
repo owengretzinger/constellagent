@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useAppStore } from '../../store/app-store'
 import type { Tab } from '../../store/types'
 import { Tooltip } from '../Tooltip/Tooltip'
@@ -30,8 +30,7 @@ export function TabBar() {
   const tabs = allTabs.filter((t) => t.workspaceId === activeWorkspaceId)
 
   const [dragIndex, setDragIndex] = useState<number | null>(null)
-  const dragStartX = useRef(0)
-  const didDrag = useRef(false)
+  const didDragRef = useRef(false)
   const tabListRef = useRef<HTMLDivElement>(null)
 
   const handleClose = useCallback(
@@ -52,60 +51,75 @@ export function TabBar() {
     [tabs, removeTab]
   )
 
-  const handleMouseDown = useCallback((e: React.MouseEvent, index: number) => {
-    if (e.button !== 0) return
-    e.preventDefault()
-    dragStartX.current = e.clientX
-    didDrag.current = false
-
+  // Attach drag listeners directly to DOM to avoid React synthetic event issues
+  useEffect(() => {
     const container = tabListRef.current
     if (!container) return
 
-    const tabEls = Array.from(container.children) as HTMLElement[]
-    const rects = tabEls.map((el) => el.getBoundingClientRect())
+    const onMouseDown = (e: MouseEvent) => {
+      if (e.button !== 0) return
 
-    let currentFrom = index
+      const tabEl = (e.target as HTMLElement).closest('[data-tab-index]') as HTMLElement | null
+      if (!tabEl) return
+      const index = parseInt(tabEl.dataset.tabIndex!, 10)
+      if (isNaN(index)) return
 
-    const onMove = (ev: MouseEvent) => {
-      const dx = Math.abs(ev.clientX - dragStartX.current)
-      if (dx < 5 && !didDrag.current) return
-      if (!didDrag.current) {
-        didDrag.current = true
-        setDragIndex(currentFrom)
+      // Don't start drag if clicking the close button
+      if ((e.target as HTMLElement).closest('button')) return
+
+      const startX = e.clientX
+      didDragRef.current = false
+
+      const tabEls = Array.from(container.querySelectorAll('[data-tab-index]')) as HTMLElement[]
+      const rects = tabEls.map((el) => el.getBoundingClientRect())
+
+      let currentFrom = index
+      const wsId = useAppStore.getState().activeWorkspaceId
+
+      const onMove = (ev: MouseEvent) => {
+        const dx = Math.abs(ev.clientX - startX)
+        if (dx < 5 && !didDragRef.current) return
+        if (!didDragRef.current) {
+          didDragRef.current = true
+          setDragIndex(currentFrom)
+        }
+
+        let toIndex = currentFrom
+        for (let i = 0; i < rects.length; i++) {
+          const mid = rects[i].left + rects[i].width / 2
+          if (ev.clientX < mid) { toIndex = i; break }
+          toIndex = i
+        }
+
+        if (toIndex !== currentFrom && wsId) {
+          useAppStore.getState().reorderTab(wsId, currentFrom, toIndex)
+          currentFrom = toIndex
+          setDragIndex(toIndex)
+          requestAnimationFrame(() => {
+            const newEls = Array.from(container.querySelectorAll('[data-tab-index]')) as HTMLElement[]
+            for (let i = 0; i < newEls.length && i < rects.length; i++) {
+              rects[i] = newEls[i].getBoundingClientRect()
+            }
+          })
+        }
       }
 
-      let toIndex = currentFrom
-      for (let i = 0; i < rects.length; i++) {
-        const mid = rects[i].left + rects[i].width / 2
-        if (ev.clientX < mid) { toIndex = i; break }
-        toIndex = i
+      const onUp = () => {
+        setDragIndex(null)
+        document.removeEventListener('mousemove', onMove, true)
+        document.removeEventListener('mouseup', onUp, true)
       }
 
-      if (toIndex !== currentFrom && activeWorkspaceId) {
-        reorderTab(activeWorkspaceId, currentFrom, toIndex)
-        currentFrom = toIndex
-        setDragIndex(toIndex)
-        requestAnimationFrame(() => {
-          const newTabEls = Array.from(container.children) as HTMLElement[]
-          for (let i = 0; i < newTabEls.length && i < rects.length; i++) {
-            rects[i] = newTabEls[i].getBoundingClientRect()
-          }
-        })
-      }
+      document.addEventListener('mousemove', onMove, true)
+      document.addEventListener('mouseup', onUp, true)
     }
 
-    const onUp = () => {
-      setDragIndex(null)
-      window.removeEventListener('mousemove', onMove)
-      window.removeEventListener('mouseup', onUp)
-    }
-
-    window.addEventListener('mousemove', onMove)
-    window.addEventListener('mouseup', onUp)
-  }, [activeWorkspaceId, reorderTab])
+    container.addEventListener('mousedown', onMouseDown)
+    return () => container.removeEventListener('mousedown', onMouseDown)
+  }, [tabs.length])
 
   const handleTabClick = useCallback((tabId: string) => {
-    if (didDrag.current) return
+    if (didDragRef.current) return
     setActiveTab(tabId)
   }, [setActiveTab])
 
@@ -120,9 +134,9 @@ export function TabBar() {
           return (
             <div
               key={tab.id}
+              data-tab-index={index}
               className={`${styles.tab} ${tab.id === activeTabId ? styles.active : ''} ${isDragging ? styles.dragging : ''}`}
               onClick={() => handleTabClick(tab.id)}
-              onMouseDown={(e) => handleMouseDown(e, index)}
             >
               {tab.type === 'file' && tab.unsaved ? (
                 <span className={styles.unsavedDot} />
