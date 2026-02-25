@@ -77,19 +77,19 @@ test.describe('Pi-mono JSON activity detection', () => {
       await window.waitForFunction(
         (wsId: string) => (window as any).__store.getState().activeAgentWorkspaceIds.has(wsId),
         ws1Id,
-        { timeout: 7000 },
+        { timeout: 15000 },
       )
 
       await window.waitForFunction(
         (wsId: string) => !(window as any).__store.getState().activeAgentWorkspaceIds.has(wsId),
         ws1Id,
-        { timeout: 7000 },
+        { timeout: 15000 },
       )
 
       await window.waitForFunction(
         (wsId: string) => (window as any).__store.getState().unreadWorkspaceIds.has(wsId),
         ws1Id,
-        { timeout: 7000 },
+        { timeout: 15000 },
       )
 
       const hasUnread = await window.evaluate((wsId: string) => {

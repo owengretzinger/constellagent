@@ -636,7 +636,7 @@ export class GithubService {
         }
       `
 
-      const payload = await this.fetchGraphqlJson<GraphqlReviewThreadsResponse>(query, {
+      const payload: GraphqlReviewThreadsResponse = await this.fetchGraphqlJson<GraphqlReviewThreadsResponse>(query, {
         owner: repoInfo.owner,
         name: repoInfo.name,
         number,
@@ -647,7 +647,7 @@ export class GithubService {
       if (!threads) return 0
 
       const nodes = Array.isArray(threads.nodes) ? threads.nodes : []
-      unresolvedCount += nodes.filter((thread) => !thread.isResolved).length
+      unresolvedCount += nodes.filter((thread: { isResolved?: boolean }) => !thread.isResolved).length
 
       if (!threads.pageInfo?.hasNextPage) {
         return unresolvedCount
