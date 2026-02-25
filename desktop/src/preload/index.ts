@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer } from 'electron'
 import { IPC } from '../shared/ipc-channels'
 import type { AutomationConfig, AutomationRunStartedEvent } from '../shared/automation-types'
 import type { CreateWorktreeProgressEvent } from '../shared/workspace-creation'
+import type { PrLookupResult, ListOpenPrsResult } from '../shared/github-types'
 
 const api = {
   git: {
@@ -170,9 +171,9 @@ const api = {
 
   github: {
     getPrStatuses: (repoPath: string, branches: string[]) =>
-      ipcRenderer.invoke(IPC.GITHUB_GET_PR_STATUSES, repoPath, branches),
+      ipcRenderer.invoke(IPC.GITHUB_GET_PR_STATUSES, repoPath, branches) as Promise<PrLookupResult>,
     listOpenPrs: (repoPath: string) =>
-      ipcRenderer.invoke(IPC.GITHUB_LIST_OPEN_PRS, repoPath),
+      ipcRenderer.invoke(IPC.GITHUB_LIST_OPEN_PRS, repoPath) as Promise<ListOpenPrsResult>,
   },
 
   clipboard: {

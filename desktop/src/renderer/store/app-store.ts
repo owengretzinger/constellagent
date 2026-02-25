@@ -662,13 +662,14 @@ export async function hydrateFromDisk(): Promise<void> {
     if (!livePtyIds) {
       livePtyIds = new Set(await window.api.pty.list())
     }
+    const resolvedPtyIds = livePtyIds
     const store = useAppStore.getState()
     const tabs = store.tabs
 
     // Respawn PTYs for terminal tabs whose process is no longer alive
     const deadTabs = tabs.filter(
       (t): t is Extract<Tab, { type: 'terminal' }> =>
-        t.type === 'terminal' && !livePtyIds.has(t.ptyId)
+        t.type === 'terminal' && !resolvedPtyIds.has(t.ptyId)
     )
     if (deadTabs.length > 0) {
       const shell = store.settings.defaultShell || undefined

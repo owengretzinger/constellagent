@@ -102,16 +102,16 @@ app.whenReady().then(() => {
       ? [{
           label: 'View',
           submenu: [
-            { role: 'reload' },
-            { role: 'forceReload' },
-            { type: 'separator' },
-            { role: 'toggleDevTools' },
+            { role: 'reload' as const },
+            { role: 'forceReload' as const },
+            { type: 'separator' as const },
+            { role: 'toggleDevTools' as const },
           ],
         }]
       : []),
     {
       label: 'Window',
-      submenu: [{ role: 'minimize' }, { role: 'zoom' }],
+      submenu: [{ role: 'minimize' as const }, { role: 'zoom' as const }],
     },
   ]
   const menu = Menu.buildFromTemplate(menuTemplate)

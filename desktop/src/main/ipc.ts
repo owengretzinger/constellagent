@@ -316,7 +316,7 @@ export function registerIpcHandlers(): void {
         if (node.type === 'file') {
           const st = statusMap.get(rel)
           if (st) {
-            node.gitStatus = st
+            node.gitStatus = st as FileNode['gitStatus']
             hasStatus = true
           }
         } else if (node.children) {
