@@ -9,7 +9,6 @@
   overflow-x: auto;
   overflow-y: hidden;
   flex-shrink: 0;
-  -webkit-app-region: drag;
 }
 
 /* Scrollbar hidden but functional */
@@ -21,7 +20,6 @@
   display: flex;
   align-items: stretch;
   min-width: 0;
-  -webkit-app-region: no-drag;
 }
 
 /* ── Individual Tab ── */
@@ -39,7 +37,7 @@
   border-right: 1px solid var(--border-subtle);
   position: relative;
   transition: color var(--transition-fast), background var(--transition-fast);
-  -webkit-app-region: no-drag;
+  user-select: none;
 }
 
 .tab:hover {
@@ -173,7 +171,6 @@
   cursor: pointer;
   transition: color var(--transition-fast);
   flex-shrink: 0;
-  -webkit-app-region: no-drag;
 }
 
 .newTabButton:hover {
