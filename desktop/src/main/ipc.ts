@@ -272,6 +272,10 @@ export function registerIpcHandlers(): void {
     return ptyManager.reattach(ptyId, win.webContents, sinceSeq)
   })
 
+  ipcMain.handle(IPC.PTY_GET_PROCESS, async (_e, ptyId: string) => {
+    return ptyManager.getProcessName(ptyId)
+  })
+
   // ── File handlers ──
   ipcMain.handle(IPC.FS_GET_TREE, async (_e, dirPath: string) => {
     return FileService.getTree(dirPath)

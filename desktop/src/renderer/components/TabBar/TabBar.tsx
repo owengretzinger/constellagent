@@ -1,4 +1,4 @@
-import { useCallback } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import { useAppStore } from '../../store/app-store'
 import type { Tab } from '../../store/types'
 import { Tooltip } from '../Tooltip/Tooltip'
@@ -26,7 +26,12 @@ export function TabBar() {
   const createTerminalForActiveWorkspace = useAppStore((s) => s.createTerminalForActiveWorkspace)
   const lastSavedTabId = useAppStore((s) => s.lastSavedTabId)
   const settings = useAppStore((s) => s.settings)
+  const reorderTab = useAppStore((s) => s.reorderTab)
   const tabs = allTabs.filter((t) => t.workspaceId === activeWorkspaceId)
+
+  const [dragIndex, setDragIndex] = useState<number | null>(null)
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null)
+  const dragCounterRef = useRef(0)
 
   const handleClose = useCallback(
     (e: React.MouseEvent, tabId: string) => {
@@ -46,17 +51,73 @@ export function TabBar() {
     [tabs, removeTab]
   )
 
+  const handleDragStart = useCallback((e: React.DragEvent, index: number) => {
+    setDragIndex(index)
+    e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.setData('text/plain', String(index))
+    const target = e.currentTarget as HTMLElement
+    requestAnimationFrame(() => target.classList.add(styles.dragging))
+  }, [])
+
+  const handleDragEnd = useCallback(() => {
+    setDragIndex(null)
+    setDragOverIndex(null)
+    dragCounterRef.current = 0
+  }, [])
+
+  const handleDragEnter = useCallback((e: React.DragEvent, index: number) => {
+    e.preventDefault()
+    dragCounterRef.current++
+    setDragOverIndex(index)
+  }, [])
+
+  const handleDragLeave = useCallback(() => {
+    dragCounterRef.current--
+    if (dragCounterRef.current <= 0) {
+      setDragOverIndex(null)
+      dragCounterRef.current = 0
+    }
+  }, [])
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+  }, [])
+
+  const handleDrop = useCallback(
+    (e: React.DragEvent, toIndex: number) => {
+      e.preventDefault()
+      const fromIndex = dragIndex
+      setDragIndex(null)
+      setDragOverIndex(null)
+      dragCounterRef.current = 0
+      if (fromIndex === null || !activeWorkspaceId) return
+      reorderTab(activeWorkspaceId, fromIndex, toIndex)
+    },
+    [dragIndex, activeWorkspaceId, reorderTab]
+  )
+
   return (
     <div className={styles.tabBar}>
       <div className={styles.tabList}>
-        {tabs.map((tab) => {
+        {tabs.map((tab, index) => {
           const { icon, className } = TAB_ICONS[tab.type]
           const isSaved = tab.id === lastSavedTabId
+          const isDragging = dragIndex === index
+          const isDragOver = dragOverIndex === index && dragIndex !== index
+
           return (
             <div
               key={tab.id}
-              className={`${styles.tab} ${tab.id === activeTabId ? styles.active : ''}`}
+              className={`${styles.tab} ${tab.id === activeTabId ? styles.active : ''} ${isDragging ? styles.dragging : ''} ${isDragOver ? styles.dragOver : ''}`}
               onClick={() => setActiveTab(tab.id)}
+              draggable
+              onDragStart={(e) => handleDragStart(e, index)}
+              onDragEnd={handleDragEnd}
+              onDragEnter={(e) => handleDragEnter(e, index)}
+              onDragLeave={handleDragLeave}
+              onDragOver={handleDragOver}
+              onDrop={(e) => handleDrop(e, index)}
             >
               <span className={`${styles.tabIcon} ${className}`}>{icon}</span>
               <span className={`${styles.tabTitle} ${isSaved ? styles.savedFlash : ''}`}>
@@ -73,6 +134,9 @@ export function TabBar() {
                     ✕
                   </button>
                 </Tooltip>
+              )}
+              {index < 9 && (
+                <span className={styles.shortcutBadge}>⌘{index + 1}</span>
               )}
             </div>
           )

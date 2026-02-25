@@ -47,6 +47,14 @@
   background: rgba(255, 255, 255, 0.02);
 }
 
+.tab.dragging {
+  opacity: 0.4;
+}
+
+.tab.dragOver {
+  border-left: 2px solid var(--accent-blue);
+}
+
 .tab.active {
   color: var(--text-primary);
   background: var(--surface-1);
@@ -171,6 +179,26 @@
 
 .newTabButton:hover {
   color: var(--text-primary);
+}
+
+/* ── Shortcut Badge ── */
+
+.shortcutBadge {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-tertiary);
+  opacity: 0.5;
+  flex-shrink: 0;
+  margin-left: auto;
+  pointer-events: none;
+  transition: opacity var(--transition-fast);
+}
+
+.tab:hover .shortcutBadge,
+.tab.active .shortcutBadge {
+  opacity: 0;
+  width: 0;
+  overflow: hidden;
 }
 
 /* ── Spacer (drag region) ── */

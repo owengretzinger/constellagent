@@ -130,6 +130,8 @@ export interface AppState {
   openDiffTab: (workspaceId: string) => void
   nextWorkspace: () => void
   prevWorkspace: () => void
+  reorderTab: (workspaceId: string, fromIndex: number, toIndex: number) => void
+  updateTabTitle: (tabId: string, title: string) => void
   switchToTabByIndex: (index: number) => void
   closeAllWorkspaceTabs: () => void
   focusOrCreateTerminal: () => Promise<void>

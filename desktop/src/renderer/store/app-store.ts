@@ -381,6 +381,27 @@ export const useAppStore = create<AppState>((set, get) => ({
     get().setActiveWorkspace(prev.id)
   },
 
+  reorderTab: (workspaceId, fromIndex, toIndex) =>
+    set((s) => {
+      const wsTabs = s.tabs.filter((t) => t.workspaceId === workspaceId)
+      if (fromIndex < 0 || fromIndex >= wsTabs.length || toIndex < 0 || toIndex >= wsTabs.length || fromIndex === toIndex) return s
+      const movedTab = wsTabs[fromIndex]
+      wsTabs.splice(fromIndex, 1)
+      wsTabs.splice(toIndex, 0, movedTab)
+      const otherTabs = s.tabs.filter((t) => t.workspaceId !== workspaceId)
+      const insertIdx = s.tabs.findIndex((t) => t.workspaceId === workspaceId)
+      const newTabs = [...otherTabs]
+      newTabs.splice(insertIdx < 0 ? newTabs.length : Math.min(insertIdx, newTabs.length), 0, ...wsTabs)
+      return { tabs: newTabs }
+    }),
+
+  updateTabTitle: (tabId, title) =>
+    set((s) => ({
+      tabs: s.tabs.map((t) =>
+        t.id === tabId && t.type === 'terminal' ? { ...t, title } : t
+      ),
+    })),
+
   switchToTabByIndex: (index) => {
     const s = get()
     const wsTabs = s.tabs.filter((t) => t.workspaceId === s.activeWorkspaceId)

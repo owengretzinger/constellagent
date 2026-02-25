@@ -51,12 +51,22 @@ function saveTerminalSnapshot(ptyId: string, snapshot: TerminalSnapshot): void {
   }
 }
 
+function extractShortTitle(raw: string): string {
+  const trimmed = raw.trim()
+  if (!trimmed) return ''
+  const parts = trimmed.split(/[\s/]/)
+  const last = parts[parts.length - 1] || trimmed
+  if (last.startsWith('-')) return parts[0] || trimmed
+  return last
+}
+
 interface Props {
   ptyId: string
+  tabId: string
   active: boolean
 }
 
-export function TerminalPanel({ ptyId, active }: Props) {
+export function TerminalPanel({ ptyId, tabId, active }: Props) {
   const termDivRef = useRef<HTMLDivElement>(null)
   const termRef = useRef<Terminal | null>(null)
   const fitFnRef = useRef<(() => void) | null>(null)
@@ -282,6 +292,26 @@ export function TerminalPanel({ ptyId, active }: Props) {
           }, delayMs)
         }
 
+        const updateTabTitle = useAppStore.getState().updateTabTitle
+
+        const onTitleDisposable = term.onTitleChange((title: string) => {
+          const short = extractShortTitle(title)
+          if (short) updateTabTitle(tabId, short)
+        })
+
+        let processNameTimer: ReturnType<typeof setInterval> | null = null
+        let lastProcessName = ''
+        processNameTimer = setInterval(async () => {
+          try {
+            const name = await window.api.pty.getProcessName(ptyId)
+            if (name && name !== lastProcessName) {
+              lastProcessName = name
+              const short = extractShortTitle(name)
+              if (short) updateTabTitle(tabId, short)
+            }
+          } catch { /* ignore */ }
+        }, 3000)
+
         const onDataDisposable = term.onData((data: string) => {
           detectPrPollHint(data)
           window.api.pty.write(ptyId, data)
@@ -423,9 +453,11 @@ export function TerminalPanel({ ptyId, active }: Props) {
           const snapshot = lastStableSnapshotRef.current ?? captureStableSnapshot()
           if (snapshot) saveTerminalSnapshot(ptyId, snapshot)
           if (snapshotTimer) clearTimeout(snapshotTimer)
+          if (processNameTimer) clearInterval(processNameTimer)
           resizeObserver.disconnect()
           if (resizeTimer) clearTimeout(resizeTimer)
           clearTimeout(settleTimer)
+          onTitleDisposable.dispose()
           onDataDisposable.dispose()
           onResizeDisposable.dispose()
           unsubData()

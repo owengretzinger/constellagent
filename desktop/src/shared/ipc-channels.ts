@@ -25,6 +25,7 @@ export const IPC = {
   PTY_DESTROY: 'pty:destroy',
   PTY_LIST: 'pty:list',
   PTY_REATTACH: 'pty:reattach',
+  PTY_GET_PROCESS: 'pty:get-process',
   PTY_DATA: 'pty:data', // prefix for events: `pty:data:{id}`
 
   // File operations

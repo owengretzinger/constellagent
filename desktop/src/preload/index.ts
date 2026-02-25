@@ -56,6 +56,8 @@ const api = {
       ipcRenderer.invoke(IPC.PTY_LIST) as Promise<string[]>,
     reattach: (ptyId: string, sinceSeq?: number) =>
       ipcRenderer.invoke(IPC.PTY_REATTACH, ptyId, sinceSeq) as Promise<{ ok: boolean; replay?: string; baseSeq: number; endSeq: number; truncated: boolean; cols: number; rows: number }>,
+    getProcessName: (ptyId: string) =>
+      ipcRenderer.invoke(IPC.PTY_GET_PROCESS, ptyId) as Promise<string | null>,
     onData: (ptyId: string, callback: (data: string, startSeq?: number) => void) => {
       const channel = `${IPC.PTY_DATA}:${ptyId}`
       const listener = (_event: Electron.IpcRendererEvent, ...args: unknown[]) => {

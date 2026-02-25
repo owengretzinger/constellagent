@@ -97,6 +97,7 @@ export function App() {
                     <TerminalPanel
                       key={t.id}
                       ptyId={t.ptyId}
+                      tabId={t.id}
                       active={t.id === activeTabId}
                     />
                   ))}

@@ -317,6 +317,17 @@ export class PtyManager {
     return Array.from(this.ptys.keys())
   }
 
+  /** Return the current foreground process name for a PTY */
+  getProcessName(ptyId: string): string | null {
+    const instance = this.ptys.get(ptyId)
+    if (!instance) return null
+    try {
+      return instance.process.process
+    } catch {
+      return null
+    }
+  }
+
   private isAgentRunningUnder(
     rootPid: number,
     matcher: (command: string) => boolean,
