@@ -4,6 +4,7 @@ import { mkdirSync, writeFileSync, readFileSync, rmSync, existsSync, readdirSync
 import { execSync } from 'child_process'
 
 const appPath = resolve(__dirname, '../out/main/index.js')
+const cmdKey = process.platform === 'darwin' ? 'Meta' : 'Control'
 
 async function launchApp(): Promise<{ app: ElectronApplication; window: Page }> {
   const app = await electron.launch({ args: [appPath], env: { ...process.env, CI_TEST: '1', ELECTRON_RENDERER_URL: '' } })
@@ -159,12 +160,12 @@ test.describe('File tree & editor integration', () => {
       await monacoEditor.click()
 
       // Select all and type new content
-      await window.keyboard.press('Meta+a')
+      await window.keyboard.press(`${cmdKey}+a`)
       await window.keyboard.type('# Updated Content\n')
       await window.waitForTimeout(500)
 
-      // Save with Cmd+S
-      await window.keyboard.press('Meta+s')
+      // Save with Cmd+S / Ctrl+S
+      await window.keyboard.press(`${cmdKey}+s`)
       await window.waitForTimeout(1000)
 
       // Verify file on disk was updated (resolve symlinks for macOS)

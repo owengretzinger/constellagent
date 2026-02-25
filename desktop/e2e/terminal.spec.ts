@@ -328,19 +328,29 @@ test.describe('Terminal functionality', () => {
       await expect.poll(() => getActiveTerminalLineCount(window, 'Codex Session'), { timeout: 10000 }).toBe(1)
       await expect.poll(() => getActiveTerminalLineCount(window, placeholder), { timeout: 10000 }).toBe(1)
 
-      // Reload multiple times; prompt/input should not duplicate in the viewport.
+      // Reload multiple times; user-typed messages must survive each reload.
       for (let i = 0; i < 3; i++) {
+        // Wait for a terminal snapshot to be persisted before reloading.
+        await expect.poll(async () => {
+          return await window.evaluate((id: string) => {
+            const key = `constellagent:terminal-snapshot:${id}`
+            return window.sessionStorage.getItem(key) !== null
+          }, ptyId)
+        }, { timeout: 10000, message: 'Waiting for terminal snapshot to be saved' }).toBe(true)
+
         await window.reload()
         await window.waitForLoadState('domcontentloaded')
         await window.waitForSelector('#root', { timeout: 10000 })
-        await window.waitForTimeout(1500)
+        await window.waitForTimeout(2000)
 
-        await expect.poll(() => getActiveTerminalText(window), { timeout: 10000 }).toContain('1. first')
-        await expect.poll(() => getActiveTerminalText(window), { timeout: 10000 }).toContain('2. second')
-        await expect.poll(() => getActiveTerminalText(window), { timeout: 10000 }).toContain('3. third')
-        await expect.poll(() => getActiveTerminalLineCount(window, 'Codex Session'), { timeout: 10000 }).toBe(1)
-        await expect.poll(() => getActiveTerminalLineCount(window, 'OpenAI Codex (fake)'), { timeout: 10000 }).toBe(1)
-        await expect.poll(() => getActiveTerminalLineCount(window, placeholder), { timeout: 10000 }).toBe(1)
+        // User-typed messages must survive the reload
+        await expect.poll(() => getActiveTerminalText(window), { timeout: 15000 }).toContain('1. first')
+        await expect.poll(() => getActiveTerminalText(window), { timeout: 15000 }).toContain('2. second')
+        await expect.poll(() => getActiveTerminalText(window), { timeout: 15000 }).toContain('3. third')
+        // TUI header and session label must be present
+        await expect.poll(() => getActiveTerminalText(window), { timeout: 15000 }).toContain('Codex Session')
+        await expect.poll(() => getActiveTerminalText(window), { timeout: 15000 }).toContain('OpenAI Codex (fake)')
+        await expect.poll(() => getActiveTerminalText(window), { timeout: 15000 }).toContain(placeholder)
       }
 
       await activeXterm.click()

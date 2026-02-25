@@ -385,7 +385,7 @@ export class PtyManager {
       instance.agentEventLineBuffer = instance.agentEventLineBuffer.slice(-AGENT_EVENT_LINE_BUFFER_MAX)
     }
 
-    const lines = instance.agentEventLineBuffer.split(/\r?\n/)
+    const lines = instance.agentEventLineBuffer.split(/\r?\n|\r/)
     instance.agentEventLineBuffer = lines.pop() ?? ''
 
     for (const rawLine of lines) {
