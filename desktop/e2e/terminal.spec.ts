@@ -276,6 +276,28 @@ test.describe('Terminal functionality', () => {
     }
   })
 
+  test('terminal tab title updates to last command', async () => {
+    const repoPath = createTestRepo('term-title')
+    const { app, window } = await launchApp()
+
+    try {
+      await setupWorkspaceWithTerminal(window, repoPath)
+      await window.waitForTimeout(2000)
+
+      const activeTerminalInner = window.locator('[class*="terminalContainer"][class*="active"] [class*="terminalInner"]').first()
+      await expect(activeTerminalInner).toBeVisible()
+      await activeTerminalInner.click()
+
+      await window.keyboard.type('npm run dev')
+      await window.keyboard.press('Enter')
+
+      const activeTabTitle = window.locator('[class*="tab"][class*="active"] [class*="tabTitle"]').first()
+      await expect.poll(async () => (await activeTabTitle.textContent())?.trim()).toBe('npm:dev')
+    } finally {
+      await app.close()
+    }
+  })
+
   test('renderer reload keeps terminal transcript visible', async () => {
     const repoPath = createTestRepo('term-reload')
     const fakeCodexPath = join('/tmp', `fake-codex-reload-${Date.now()}.py`)

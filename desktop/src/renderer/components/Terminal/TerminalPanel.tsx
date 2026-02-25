@@ -76,6 +76,12 @@ export function TerminalPanel({ ptyId, active }: Props) {
     )
   }
 
+  const updateTerminalTitle = (command: string) => {
+    const normalized = command.trim()
+    if (!normalized) return
+    useAppStore.getState().setTerminalTitleFromCommand(ptyId, normalized)
+  }
+
   const detectPrPollHint = (chunk: string) => {
     // Remove cursor-control escape sequences so arrow keys do not pollute the command buffer.
     const cleaned = chunk
@@ -86,8 +92,11 @@ export function TerminalPanel({ ptyId, active }: Props) {
     for (const char of cleaned) {
       if (char === '\r' || char === '\n') {
         const command = inputLineRef.current.trim()
-        if (command && PR_POLL_HINT_COMMAND_RE.test(command)) {
-          emitPrPollHint(command)
+        if (command) {
+          updateTerminalTitle(command)
+          if (PR_POLL_HINT_COMMAND_RE.test(command)) {
+            emitPrPollHint(command)
+          }
         }
         inputLineRef.current = ''
         continue

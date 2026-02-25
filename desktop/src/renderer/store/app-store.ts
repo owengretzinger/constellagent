@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import type { AppState, PersistedState, Tab } from './types'
 import { DEFAULT_SETTINGS } from './types'
+import { titleFromTerminalCommand } from './terminal-tab-title'
 
 const DEFAULT_PR_LINK_PROVIDER = 'github' as const
 
@@ -261,6 +262,40 @@ export const useAppStore = create<AppState>((set, get) => ({
     }),
 
   setActiveTab: (id) => set({ activeTabId: id }),
+
+  moveTabInActiveWorkspace: (sourceTabId, targetTabId) =>
+    set((s) => {
+      const workspaceId = s.activeWorkspaceId
+      if (!workspaceId || sourceTabId === targetTabId) return s
+
+      const wsTabs = s.tabs.filter((t) => t.workspaceId === workspaceId)
+      const sourceIndex = wsTabs.findIndex((t) => t.id === sourceTabId)
+      const targetIndex = wsTabs.findIndex((t) => t.id === targetTabId)
+      if (sourceIndex < 0 || targetIndex < 0 || sourceIndex === targetIndex) return s
+
+      const reordered = [...wsTabs]
+      const [moved] = reordered.splice(sourceIndex, 1)
+      reordered.splice(targetIndex, 0, moved)
+
+      let wsCursor = 0
+      return {
+        tabs: s.tabs.map((tab) => (tab.workspaceId === workspaceId ? reordered[wsCursor++] : tab)),
+      }
+    }),
+
+  setTerminalTitleFromCommand: (ptyId, command) =>
+    set((s) => {
+      const nextTitle = titleFromTerminalCommand(command)
+      let changed = false
+      const tabs = s.tabs.map((tab) => {
+        if (tab.type !== 'terminal' || tab.ptyId !== ptyId) return tab
+        if (tab.title === nextTitle) return tab
+        changed = true
+        return { ...tab, title: nextTitle }
+      })
+
+      return changed ? { tabs } : s
+    }),
 
   setRightPanelMode: (mode) => set({ rightPanelMode: mode }),
 

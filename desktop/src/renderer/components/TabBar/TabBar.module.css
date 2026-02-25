@@ -52,6 +52,20 @@
   background: var(--surface-1);
 }
 
+.tab.dragging {
+  opacity: 0.5;
+}
+
+.tab.dragOver::before {
+  content: '';
+  position: absolute;
+  top: 5px;
+  bottom: 5px;
+  left: 0;
+  width: 2px;
+  background: var(--accent-blue);
+}
+
 /* Active tab top highlight — thin accent line */
 .tab.active::after {
   content: '';
@@ -94,11 +108,24 @@
 
 .tabTitle {
   flex: 1;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   font-family: var(--font-mono);
   font-size: var(--text-sm);
+}
+
+.shortcutHint {
+  margin-left: auto;
+  flex-shrink: 0;
+  opacity: 0.55;
+  font-size: 11px;
+  font-family: var(--font-mono);
+}
+
+.tab.active .shortcutHint {
+  opacity: 0.8;
 }
 
 /* ── Unsaved Indicator ── */
