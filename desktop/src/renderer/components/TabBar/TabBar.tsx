@@ -4,12 +4,6 @@ import type { Tab } from '../../store/types'
 import { Tooltip } from '../Tooltip/Tooltip'
 import styles from './TabBar.module.css'
 
-const TAB_ICONS: Record<Tab['type'], { icon: string; className: string }> = {
-  terminal: { icon: '⌘', className: styles.terminal },
-  file: { icon: '◇', className: styles.file },
-  diff: { icon: '±', className: styles.diff },
-}
-
 function getTabTitle(tab: Tab): string {
   if (tab.type === 'terminal') return tab.title
   if (tab.type === 'diff') return 'Changes'
@@ -92,7 +86,6 @@ export function TabBar() {
     <div className={styles.tabBar}>
       <div className={styles.tabList}>
         {tabs.map((tab, index) => {
-          const { icon, className } = TAB_ICONS[tab.type]
           const isSaved = tab.id === lastSavedTabId
           const shortcutHint = index < 9 ? `⌘${index + 1}` : null
           return (
@@ -106,11 +99,6 @@ export function TabBar() {
               onDrop={(e) => handleDrop(e, tab.id)}
               onDragEnd={clearDragState}
             >
-              <span className={`${styles.tabIcon} ${className}`}>{icon}</span>
-              <span className={`${styles.tabTitle} ${isSaved ? styles.savedFlash : ''}`}>
-                {getTabTitle(tab)}
-              </span>
-              {shortcutHint && <span className={styles.shortcutHint}>{shortcutHint}</span>}
               {tab.type === 'file' && tab.unsaved ? (
                 <span className={styles.unsavedDot} />
               ) : (
@@ -123,6 +111,10 @@ export function TabBar() {
                   </button>
                 </Tooltip>
               )}
+              <span className={`${styles.tabTitle} ${isSaved ? styles.savedFlash : ''}`}>
+                {getTabTitle(tab)}
+              </span>
+              {shortcutHint && <span className={styles.shortcutHint}>{shortcutHint}</span>}
             </div>
           )
         })}

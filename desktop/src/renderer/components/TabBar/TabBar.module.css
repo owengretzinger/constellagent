@@ -77,33 +77,6 @@
   background: var(--accent-blue);
 }
 
-/* ── Tab Icon ── */
-
-.tabIcon {
-  font-size: var(--text-sm);
-  flex-shrink: 0;
-  width: 14px;
-  text-align: center;
-  opacity: 0.6;
-}
-
-.tab.active .tabIcon {
-  opacity: 1;
-}
-
-/* Color-code by type */
-.tabIcon.terminal {
-  color: var(--accent-green);
-}
-
-.tabIcon.file {
-  color: var(--accent-blue);
-}
-
-.tabIcon.diff {
-  color: var(--accent-orange);
-}
-
 /* ── Tab Title ── */
 
 .tabTitle {
@@ -159,7 +132,6 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-left: var(--space-2);
   width: 16px;
   height: 16px;
   border-radius: var(--radius-sm);
@@ -168,14 +140,14 @@
   color: var(--text-tertiary);
   font-size: 10px;
   cursor: pointer;
-  opacity: 0;
+  opacity: 0.72;
   transition: all var(--transition-fast);
   flex-shrink: 0;
 }
 
 .tab:hover .closeButton,
 .tab.active .closeButton {
-  opacity: 1;
+  opacity: 0.95;
 }
 
 .closeButton:hover {
