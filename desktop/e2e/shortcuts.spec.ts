@@ -122,6 +122,52 @@ test.describe('Keyboard shortcuts', () => {
     }
   })
 
+  test('drag reorder keeps Cmd+number aligned with tab order', async () => {
+    const repoPath = createTestRepo('shortcut-drag-reorder')
+    const { app, window } = await launchApp()
+
+    try {
+      await setupWorkspaceWithTerminal(window, repoPath)
+      await window.waitForTimeout(2000)
+
+      await window.keyboard.press('Meta+t')
+      await window.keyboard.press('Meta+t')
+      await window.waitForTimeout(2000)
+
+      const tabItems = window.locator('[class*="tab"][draggable="true"]')
+      await expect(tabItems).toHaveCount(3)
+
+      await expect(tabItems.nth(0).locator('[class*="shortcutHint"]')).toHaveText('⌘1')
+      await expect(tabItems.nth(1).locator('[class*="shortcutHint"]')).toHaveText('⌘2')
+      await expect(tabItems.nth(2).locator('[class*="shortcutHint"]')).toHaveText('⌘3')
+
+      await tabItems.nth(2).dragTo(tabItems.nth(0))
+      await window.waitForTimeout(1000)
+
+      const titlesAfterDrag = await window.evaluate(() => {
+        const s = (window as any).__store.getState()
+        return s.tabs
+          .filter((t: any) => t.workspaceId === s.activeWorkspaceId)
+          .map((t: any) => t.title)
+      })
+      expect(titlesAfterDrag).toEqual(['Terminal 3', 'Terminal 1', 'Terminal 2'])
+
+      await expect(tabItems.nth(0).locator('[class*="tabTitle"]')).toHaveText('Terminal 3')
+      await expect(tabItems.nth(0).locator('[class*="shortcutHint"]')).toHaveText('⌘1')
+
+      await window.keyboard.press('Meta+1')
+      await window.waitForTimeout(500)
+
+      const activeTitle = await window.evaluate(() => {
+        const s = (window as any).__store.getState()
+        return s.tabs.find((t: any) => t.id === s.activeTabId)?.title
+      })
+      expect(activeTitle).toBe('Terminal 3')
+    } finally {
+      await app.close()
+    }
+  })
+
   test('Cmd+W closes active tab', async () => {
     const repoPath = createTestRepo('shortcut-w')
     const { app, window } = await launchApp()

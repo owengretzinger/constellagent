@@ -117,6 +117,8 @@ export interface AppState {
   addTab: (tab: Tab) => void
   removeTab: (id: string) => void
   setActiveTab: (id: string | null) => void
+  moveTabInActiveWorkspace: (sourceTabId: string, targetTabId: string) => void
+  setTerminalTitleFromCommand: (ptyId: string, command: string) => void
   setRightPanelMode: (mode: RightPanelMode) => void
   toggleRightPanel: () => void
   toggleSidebar: () => void

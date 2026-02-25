@@ -52,6 +52,20 @@
   background: var(--surface-1);
 }
 
+.tab.dragging {
+  opacity: 0.5;
+}
+
+.tab.dragOver::before {
+  content: '';
+  position: absolute;
+  top: 5px;
+  bottom: 5px;
+  left: 0;
+  width: 2px;
+  background: var(--accent-blue);
+}
+
 /* Active tab top highlight — thin accent line */
 .tab.active::after {
   content: '';
@@ -63,42 +77,32 @@
   background: var(--accent-blue);
 }
 
-/* ── Tab Icon ── */
-
-.tabIcon {
-  font-size: var(--text-sm);
-  flex-shrink: 0;
-  width: 14px;
-  text-align: center;
-  opacity: 0.6;
-}
-
-.tab.active .tabIcon {
-  opacity: 1;
-}
-
-/* Color-code by type */
-.tabIcon.terminal {
-  color: var(--accent-green);
-}
-
-.tabIcon.file {
-  color: var(--accent-blue);
-}
-
-.tabIcon.diff {
-  color: var(--accent-orange);
-}
-
 /* ── Tab Title ── */
 
 .tabTitle {
   flex: 1;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   font-family: var(--font-mono);
   font-size: var(--text-sm);
+}
+
+.shortcutHint {
+  margin-left: auto;
+  min-width: 24px;
+  text-align: right;
+  flex-shrink: 0;
+  color: var(--text-secondary);
+  opacity: 0.72;
+  font-size: 11px;
+  font-family: var(--font-ui);
+  font-variant-numeric: tabular-nums;
+}
+
+.tab.active .shortcutHint {
+  opacity: 0.95;
 }
 
 /* ── Unsaved Indicator ── */
@@ -136,14 +140,14 @@
   color: var(--text-tertiary);
   font-size: 10px;
   cursor: pointer;
-  opacity: 0;
+  opacity: 0.72;
   transition: all var(--transition-fast);
   flex-shrink: 0;
 }
 
 .tab:hover .closeButton,
 .tab.active .closeButton {
-  opacity: 1;
+  opacity: 0.95;
 }
 
 .closeButton:hover {
