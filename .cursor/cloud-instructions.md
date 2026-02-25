@@ -23,4 +23,5 @@ Constellagent is a self-contained Electron desktop app (no backend services need
 ## Key caveats
 
 - `node-pty` must be compiled for the Electron Node ABI. `bun install` triggers `postinstall` which runs `bunx electron-rebuild`. If native modules break, run `bun run rebuild` from repo root.
+- The `postinstall` also runs `patch-electron-dev.sh` which patches Electron.app icon/name on macOS; it exits cleanly on Linux via an explicit platform guard.
 - Standard dev commands are documented in the root `CLAUDE.md`.

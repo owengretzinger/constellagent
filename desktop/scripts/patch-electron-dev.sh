@@ -1,6 +1,12 @@
 #!/bin/bash
 # Patches Electron.app for dev mode: replaces icon + sets app name in plist.
+# macOS only — exits cleanly on other platforms.
 # Run after `bun install` or manually. Requires full app restart (Cmd+Q) to take effect.
+
+if [ "$(uname)" != "Darwin" ]; then
+  echo "Not macOS, skipping Electron.app patch"
+  exit 0
+fi
 
 PLIST="node_modules/electron/dist/Electron.app/Contents/Info.plist"
 ICNS_SRC="build/icon.icns"
