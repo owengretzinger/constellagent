@@ -48,11 +48,8 @@
 }
 
 .tab.dragging {
-  opacity: 0.4;
-}
-
-.tab.dragOver {
-  border-left: 2px solid var(--accent-blue);
+  opacity: 0.5;
+  background: var(--surface-1);
 }
 
 .tab.active {

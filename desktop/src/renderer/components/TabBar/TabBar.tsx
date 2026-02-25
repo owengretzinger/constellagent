@@ -30,8 +30,9 @@ export function TabBar() {
   const tabs = allTabs.filter((t) => t.workspaceId === activeWorkspaceId)
 
   const [dragIndex, setDragIndex] = useState<number | null>(null)
-  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null)
-  const dragCounterRef = useRef(0)
+  const dragStartX = useRef(0)
+  const didDrag = useRef(false)
+  const tabListRef = useRef<HTMLDivElement>(null)
 
   const handleClose = useCallback(
     (e: React.MouseEvent, tabId: string) => {
@@ -51,73 +52,104 @@ export function TabBar() {
     [tabs, removeTab]
   )
 
-  const handleDragStart = useCallback((e: React.DragEvent, index: number) => {
-    setDragIndex(index)
-    e.dataTransfer.effectAllowed = 'move'
-    e.dataTransfer.setData('text/plain', String(index))
-    const target = e.currentTarget as HTMLElement
-    requestAnimationFrame(() => target.classList.add(styles.dragging))
-  }, [])
+  const handlePointerDown = useCallback((e: React.PointerEvent, index: number) => {
+    if (e.button !== 0) return
+    dragStartX.current = e.clientX
+    didDrag.current = false
 
-  const handleDragEnd = useCallback(() => {
-    setDragIndex(null)
-    setDragOverIndex(null)
-    dragCounterRef.current = 0
-  }, [])
+    const fromIndex = index
+    const container = tabListRef.current
+    if (!container) return
 
-  const handleDragEnter = useCallback((e: React.DragEvent, index: number) => {
-    e.preventDefault()
-    dragCounterRef.current++
-    setDragOverIndex(index)
-  }, [])
+    const tabEls = Array.from(container.children) as HTMLElement[]
+    const rects = tabEls.map((el) => el.getBoundingClientRect())
 
-  const handleDragLeave = useCallback(() => {
-    dragCounterRef.current--
-    if (dragCounterRef.current <= 0) {
-      setDragOverIndex(null)
-      dragCounterRef.current = 0
+    const onMove = (ev: PointerEvent) => {
+      const dx = Math.abs(ev.clientX - dragStartX.current)
+      if (dx < 5 && !didDrag.current) return
+      if (!didDrag.current) {
+        didDrag.current = true
+        setDragIndex(fromIndex)
+      }
+
+      let toIndex = fromIndex
+      for (let i = 0; i < rects.length; i++) {
+        const mid = rects[i].left + rects[i].width / 2
+        if (ev.clientX < mid) { toIndex = i; break }
+        toIndex = i
+      }
+
+      if (toIndex !== fromIndex && activeWorkspaceId) {
+        reorderTab(activeWorkspaceId, fromIndex, toIndex)
+        // Update rects and fromIndex to reflect new position
+        const newTabEls = Array.from(container.children) as HTMLElement[]
+        for (let i = 0; i < newTabEls.length; i++) {
+          rects[i] = newTabEls[i].getBoundingClientRect()
+        }
+        // Reassign — closure trick via object property
+        ;(onMove as any)._from = toIndex
+        setDragIndex(toIndex)
+      }
     }
-  }, [])
+    // Wrap to track current fromIndex across live reorders
+    const wrappedMove = (ev: PointerEvent) => {
+      const currentFrom = (wrappedMove as any)._from ?? fromIndex
+      let toIndex = currentFrom
+      const dx = Math.abs(ev.clientX - dragStartX.current)
+      if (dx < 5 && !didDrag.current) return
+      if (!didDrag.current) {
+        didDrag.current = true
+        setDragIndex(currentFrom)
+      }
 
-  const handleDragOver = useCallback((e: React.DragEvent) => {
-    e.preventDefault()
-    e.dataTransfer.dropEffect = 'move'
-  }, [])
+      for (let i = 0; i < rects.length; i++) {
+        const mid = rects[i].left + rects[i].width / 2
+        if (ev.clientX < mid) { toIndex = i; break }
+        toIndex = i
+      }
 
-  const handleDrop = useCallback(
-    (e: React.DragEvent, toIndex: number) => {
-      e.preventDefault()
-      const fromIndex = dragIndex
+      if (toIndex !== currentFrom && activeWorkspaceId) {
+        reorderTab(activeWorkspaceId, currentFrom, toIndex)
+        ;(wrappedMove as any)._from = toIndex
+        setDragIndex(toIndex)
+        requestAnimationFrame(() => {
+          const newTabEls = Array.from(container.children) as HTMLElement[]
+          for (let i = 0; i < newTabEls.length && i < rects.length; i++) {
+            rects[i] = newTabEls[i].getBoundingClientRect()
+          }
+        })
+      }
+    }
+
+    const onUp = () => {
       setDragIndex(null)
-      setDragOverIndex(null)
-      dragCounterRef.current = 0
-      if (fromIndex === null || !activeWorkspaceId) return
-      reorderTab(activeWorkspaceId, fromIndex, toIndex)
-    },
-    [dragIndex, activeWorkspaceId, reorderTab]
-  )
+      window.removeEventListener('pointermove', wrappedMove)
+      window.removeEventListener('pointerup', onUp)
+    }
+
+    window.addEventListener('pointermove', wrappedMove)
+    window.addEventListener('pointerup', onUp)
+  }, [activeWorkspaceId, reorderTab])
+
+  const handleTabClick = useCallback((tabId: string) => {
+    if (didDrag.current) return
+    setActiveTab(tabId)
+  }, [setActiveTab])
 
   return (
     <div className={styles.tabBar}>
-      <div className={styles.tabList}>
+      <div className={styles.tabList} ref={tabListRef}>
         {tabs.map((tab, index) => {
           const { icon, className } = TAB_ICONS[tab.type]
           const isSaved = tab.id === lastSavedTabId
           const isDragging = dragIndex === index
-          const isDragOver = dragOverIndex === index && dragIndex !== index
 
           return (
             <div
               key={tab.id}
-              className={`${styles.tab} ${tab.id === activeTabId ? styles.active : ''} ${isDragging ? styles.dragging : ''} ${isDragOver ? styles.dragOver : ''}`}
-              onClick={() => setActiveTab(tab.id)}
-              draggable
-              onDragStart={(e) => handleDragStart(e, index)}
-              onDragEnd={handleDragEnd}
-              onDragEnter={(e) => handleDragEnter(e, index)}
-              onDragLeave={handleDragLeave}
-              onDragOver={handleDragOver}
-              onDrop={(e) => handleDrop(e, index)}
+              className={`${styles.tab} ${tab.id === activeTabId ? styles.active : ''} ${isDragging ? styles.dragging : ''}`}
+              onClick={() => handleTabClick(tab.id)}
+              onPointerDown={(e) => handlePointerDown(e, index)}
             >
               {tab.type === 'file' && tab.unsaved ? (
                 <span className={styles.unsavedDot} />
