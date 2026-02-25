@@ -30,7 +30,7 @@
   display: flex;
   align-items: center;
   gap: var(--space-3);
-  padding: 0 var(--space-6);
+  padding: 0 var(--space-4);
   min-width: 120px;
   max-width: 280px;
   cursor: pointer;
@@ -102,11 +102,13 @@
 
 .tabTitle {
   flex: 1;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   font-family: var(--font-mono);
   font-size: var(--text-sm);
+  line-height: var(--tab-height);
 }
 
 /* ── Unsaved Indicator ── */
@@ -186,19 +188,11 @@
 .shortcutBadge {
   font-family: var(--font-mono);
   font-size: 10px;
+  line-height: var(--tab-height);
   color: var(--text-tertiary);
   opacity: 0.5;
   flex-shrink: 0;
-  margin-left: auto;
   pointer-events: none;
-  transition: opacity var(--transition-fast);
-}
-
-.tab:hover .shortcutBadge,
-.tab.active .shortcutBadge {
-  opacity: 0;
-  width: 0;
-  overflow: hidden;
 }
 
 /* ── Spacer (drag region) ── */

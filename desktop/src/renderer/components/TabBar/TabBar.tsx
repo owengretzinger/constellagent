@@ -5,7 +5,7 @@ import { Tooltip } from '../Tooltip/Tooltip'
 import styles from './TabBar.module.css'
 
 const TAB_ICONS: Record<Tab['type'], { icon: string; className: string }> = {
-  terminal: { icon: '⌘', className: styles.terminal },
+  terminal: { icon: '', className: styles.terminal },
   file: { icon: '◇', className: styles.file },
   diff: { icon: '±', className: styles.diff },
 }
@@ -131,7 +131,7 @@ export function TabBar() {
                   </button>
                 </Tooltip>
               )}
-              <span className={`${styles.tabIcon} ${className}`}>{icon}</span>
+              {icon && <span className={`${styles.tabIcon} ${className}`}>{icon}</span>}
               <span className={`${styles.tabTitle} ${isSaved ? styles.savedFlash : ''}`}>
                 {getTabTitle(tab)}
               </span>
