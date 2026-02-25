@@ -86,8 +86,11 @@ export function TerminalPanel({ ptyId, active }: Props) {
     for (const char of cleaned) {
       if (char === '\r' || char === '\n') {
         const command = inputLineRef.current.trim()
-        if (command && PR_POLL_HINT_COMMAND_RE.test(command)) {
-          emitPrPollHint(command)
+        if (command) {
+          if (PR_POLL_HINT_COMMAND_RE.test(command)) {
+            emitPrPollHint(command)
+          }
+          useAppStore.getState().updateTerminalTabTitle(ptyId, command)
         }
         inputLineRef.current = ''
         continue

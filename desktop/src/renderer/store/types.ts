@@ -131,6 +131,8 @@ export interface AppState {
   nextWorkspace: () => void
   prevWorkspace: () => void
   switchToTabByIndex: (index: number) => void
+  reorderTabs: (workspaceId: string, fromIndex: number, toIndex: number) => void
+  updateTerminalTabTitle: (ptyId: string, title: string) => void
   closeAllWorkspaceTabs: () => void
   focusOrCreateTerminal: () => Promise<void>
   openWorkspaceDialog: (projectId: string | null) => void

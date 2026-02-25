@@ -101,6 +101,20 @@
   font-size: var(--text-sm);
 }
 
+/* ── Tab Shortcut (⌘1, ⌘2, …) ── */
+
+.tabShortcut {
+  font-size: 10px;
+  color: var(--text-tertiary);
+  opacity: 0.7;
+  flex-shrink: 0;
+  margin-left: var(--space-2);
+}
+
+.tab.active .tabShortcut {
+  opacity: 1;
+}
+
 /* ── Unsaved Indicator ── */
 
 .unsavedDot {
