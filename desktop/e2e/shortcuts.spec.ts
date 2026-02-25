@@ -88,35 +88,30 @@ test.describe('Keyboard shortcuts', () => {
       const tabCount = await window.locator('[class*="tabTitle"]').count()
       expect(tabCount).toBe(2)
 
-      // Get active tab title
-      const activeTitle2 = await window.evaluate(() => {
+      // Get tab IDs in order (titles are dynamic — use IDs to verify switching)
+      const [tab1Id, tab2Id] = await window.evaluate(() => {
         const s = (window as any).__store.getState()
-        const tab = s.tabs.find((t: any) => t.id === s.activeTabId)
-        return tab?.title
+        const wsTabs = s.tabs.filter((t: any) => t.workspaceId === s.activeWorkspaceId)
+        return wsTabs.map((t: any) => t.id)
       })
-      expect(activeTitle2).toBe('Terminal 2')
+
+      // Tab 2 should be active (just created)
+      const activeId2 = await window.evaluate(() => (window as any).__store.getState().activeTabId)
+      expect(activeId2).toBe(tab2Id)
 
       // Press Cmd+1 — switch to first tab
       await window.keyboard.press('Meta+1')
       await window.waitForTimeout(500)
 
-      const activeTitle1 = await window.evaluate(() => {
-        const s = (window as any).__store.getState()
-        const tab = s.tabs.find((t: any) => t.id === s.activeTabId)
-        return tab?.title
-      })
-      expect(activeTitle1).toBe('Terminal 1')
+      const activeId1 = await window.evaluate(() => (window as any).__store.getState().activeTabId)
+      expect(activeId1).toBe(tab1Id)
 
       // Press Cmd+2 — switch back to second tab
       await window.keyboard.press('Meta+2')
       await window.waitForTimeout(500)
 
-      const activeTitleBack = await window.evaluate(() => {
-        const s = (window as any).__store.getState()
-        const tab = s.tabs.find((t: any) => t.id === s.activeTabId)
-        return tab?.title
-      })
-      expect(activeTitleBack).toBe('Terminal 2')
+      const activeIdBack = await window.evaluate(() => (window as any).__store.getState().activeTabId)
+      expect(activeIdBack).toBe(tab2Id)
     } finally {
       await app.close()
     }
@@ -181,32 +176,30 @@ test.describe('Keyboard shortcuts', () => {
       await window.keyboard.press('Meta+t')
       await window.waitForTimeout(2000)
 
-      // Active should be Terminal 2
-      let active = await window.evaluate(() => {
+      // Get tab IDs (titles are dynamic — use IDs to verify cycling)
+      const [tab1Id, tab2Id] = await window.evaluate(() => {
         const s = (window as any).__store.getState()
-        return s.tabs.find((t: any) => t.id === s.activeTabId)?.title
+        const wsTabs = s.tabs.filter((t: any) => t.workspaceId === s.activeWorkspaceId)
+        return wsTabs.map((t: any) => t.id)
       })
-      expect(active).toBe('Terminal 2')
+
+      // Active should be tab 2 (just created)
+      let activeId = await window.evaluate(() => (window as any).__store.getState().activeTabId)
+      expect(activeId).toBe(tab2Id)
 
       // Cmd+Shift+[ — previous tab
       await window.keyboard.press('Meta+Shift+[')
       await window.waitForTimeout(500)
 
-      active = await window.evaluate(() => {
-        const s = (window as any).__store.getState()
-        return s.tabs.find((t: any) => t.id === s.activeTabId)?.title
-      })
-      expect(active).toBe('Terminal 1')
+      activeId = await window.evaluate(() => (window as any).__store.getState().activeTabId)
+      expect(activeId).toBe(tab1Id)
 
       // Cmd+Shift+] — next tab
       await window.keyboard.press('Meta+Shift+]')
       await window.waitForTimeout(500)
 
-      active = await window.evaluate(() => {
-        const s = (window as any).__store.getState()
-        return s.tabs.find((t: any) => t.id === s.activeTabId)?.title
-      })
-      expect(active).toBe('Terminal 2')
+      activeId = await window.evaluate(() => (window as any).__store.getState().activeTabId)
+      expect(activeId).toBe(tab2Id)
     } finally {
       await app.close()
     }
