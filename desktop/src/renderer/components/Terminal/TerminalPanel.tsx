@@ -86,18 +86,24 @@ export function TerminalPanel({ ptyId, tabId, active }: Props) {
     )
   }
 
-  const detectPrPollHint = (chunk: string) => {
-    // Remove cursor-control escape sequences so arrow keys do not pollute the command buffer.
+  const detectInputAndUpdateTitle = (chunk: string) => {
     const cleaned = chunk
       .replace(/\x1b\[[0-9;?]*[ -/]*[@-~]/g, '')
       .replace(/\x1bO./g, '')
       .replace(/\x1b./g, '')
 
+    const updateTitle = useAppStore.getState().updateTabTitle
+
     for (const char of cleaned) {
       if (char === '\r' || char === '\n') {
         const command = inputLineRef.current.trim()
-        if (command && PR_POLL_HINT_COMMAND_RE.test(command)) {
-          emitPrPollHint(command)
+        if (command) {
+          if (PR_POLL_HINT_COMMAND_RE.test(command)) {
+            emitPrPollHint(command)
+          }
+          const firstWord = command.split(/\s+/)[0]
+          const label = firstWord.replace(/^.*\//, '')
+          if (label) updateTitle(tabId, label)
         }
         inputLineRef.current = ''
         continue
@@ -313,7 +319,7 @@ export function TerminalPanel({ ptyId, tabId, active }: Props) {
         }, 3000)
 
         const onDataDisposable = term.onData((data: string) => {
-          detectPrPollHint(data)
+          detectInputAndUpdateTitle(data)
           window.api.pty.write(ptyId, data)
         })
 
