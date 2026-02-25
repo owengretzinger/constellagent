@@ -31,8 +31,8 @@
   align-items: center;
   gap: var(--space-3);
   padding: 0 var(--space-6);
-  min-width: 100px;
-  max-width: 200px;
+  min-width: 120px;
+  max-width: 280px;
   cursor: pointer;
   color: var(--text-tertiary);
   font-size: var(--text-sm);

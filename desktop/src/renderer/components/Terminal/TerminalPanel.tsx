@@ -101,9 +101,7 @@ export function TerminalPanel({ ptyId, tabId, active }: Props) {
           if (PR_POLL_HINT_COMMAND_RE.test(command)) {
             emitPrPollHint(command)
           }
-          const firstWord = command.split(/\s+/)[0]
-          const label = firstWord.replace(/^.*\//, '')
-          if (label) updateTitle(tabId, label)
+          updateTitle(tabId, command)
         }
         inputLineRef.current = ''
         continue

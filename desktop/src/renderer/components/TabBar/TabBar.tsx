@@ -119,10 +119,6 @@ export function TabBar() {
               onDragOver={handleDragOver}
               onDrop={(e) => handleDrop(e, index)}
             >
-              <span className={`${styles.tabIcon} ${className}`}>{icon}</span>
-              <span className={`${styles.tabTitle} ${isSaved ? styles.savedFlash : ''}`}>
-                {getTabTitle(tab)}
-              </span>
               {tab.type === 'file' && tab.unsaved ? (
                 <span className={styles.unsavedDot} />
               ) : (
@@ -135,6 +131,10 @@ export function TabBar() {
                   </button>
                 </Tooltip>
               )}
+              <span className={`${styles.tabIcon} ${className}`}>{icon}</span>
+              <span className={`${styles.tabTitle} ${isSaved ? styles.savedFlash : ''}`}>
+                {getTabTitle(tab)}
+              </span>
               {index < 9 && (
                 <span className={styles.shortcutBadge}>⌘{index + 1}</span>
               )}
