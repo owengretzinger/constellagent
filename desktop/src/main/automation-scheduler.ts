@@ -1,11 +1,11 @@
 import * as cron from 'node-cron'
-import { BrowserWindow } from 'electron'
 import { IPC } from '../shared/ipc-channels'
 import type { AutomationConfig, AutomationRunStartedEvent } from '../shared/automation-types'
 import { PtyManager } from './pty-manager'
 import { GitService } from './git-service'
 import { trustPathForClaude } from './claude-config'
 import { shouldCatchUpOnWake } from './automation-catchup'
+import { getAllWindows } from './electrobun-bridge'
 
 interface AutomationRuntime {
   task: cron.ScheduledTask
@@ -115,7 +115,7 @@ export class AutomationScheduler {
 
     let ptyId: string | null = null
     try {
-      const win = BrowserWindow.getAllWindows()[0]
+      const win = getAllWindows()[0]
       if (!win) return false
 
       const sanitized = config.name

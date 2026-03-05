@@ -8,7 +8,7 @@ export default defineConfig({
   workers: 1,
   projects: [
     {
-      name: 'electron',
+      name: 'desktop',
     },
   ],
 })

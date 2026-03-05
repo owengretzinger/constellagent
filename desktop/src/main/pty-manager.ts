@@ -1,13 +1,14 @@
-import * as pty from 'node-pty'
-import { execFileSync } from 'child_process'
-import { WebContents } from 'electron'
+import { execFileSync, spawn, type ChildProcessWithoutNullStreams } from 'child_process'
+import { join } from 'path'
 import { IPC } from '../shared/ipc-channels'
 import type { AgentTurnEventType, AgentTurnOutcome } from '../shared/agent-events'
 import { emitAgentTurnEvent } from './agent-events'
+import type { WebContentsLike } from './window-types'
 
 interface PtyInstance {
-  process: pty.IPty
-  webContents: WebContents
+  worker: ChildProcessWithoutNullStreams
+  ptyPid: number
+  webContents: WebContentsLike
   onExitCallbacks: Array<(exitCode: number) => void>
   cols: number
   rows: number
@@ -149,7 +150,12 @@ export class PtyManager {
   private ptys = new Map<string, PtyInstance>()
   private nextId = 0
 
-  create(workingDir: string, webContents: WebContents, shell?: string, command?: string[], initialWrite?: string, extraEnv?: Record<string, string>): string {
+  private sendToWorker(instance: PtyInstance, message: Record<string, unknown>): void {
+    if (instance.worker.stdin.destroyed) return
+    instance.worker.stdin.write(`${JSON.stringify(message)}\n`)
+  }
+
+  create(workingDir: string, webContents: WebContentsLike, shell?: string, command?: string[], initialWrite?: string, extraEnv?: Record<string, string>): string {
     const id = `pty-${++this.nextId}`
 
     let file: string
@@ -163,9 +169,10 @@ export class PtyManager {
     }
 
     const agentSessionId = extraEnv?.AGENT_ORCH_SESSION_ID || id
-
-    const proc = pty.spawn(file, args, {
-      name: 'xterm-256color',
+    const workerScriptPath = join(__dirname, 'pty-worker.cjs')
+    const workerPayload = JSON.stringify({
+      file,
+      args,
       cols: 80,
       rows: 24,
       cwd: workingDir,
@@ -178,9 +185,13 @@ export class PtyManager {
         AGENT_ORCH_PTY_ID: id,
       } as Record<string, string>,
     })
+    const worker = spawn(process.env.NODE_BINARY || 'node', [workerScriptPath, workerPayload], {
+      stdio: ['pipe', 'pipe', 'pipe'],
+    })
 
     const instance: PtyInstance = {
-      process: proc,
+      worker,
+      ptyPid: 0,
       webContents,
       onExitCallbacks: [],
       cols: 80,
@@ -204,58 +215,102 @@ export class PtyManager {
     }
 
     let pendingWrite = initialWrite
-    proc.onData((data) => {
-      const startSeq = instance.outputSeq
-      instance.outputSeq += data.length
-      appendReplayChunk(instance, data)
-      if (!instance.webContents.isDestroyed()) {
-        instance.webContents.send(`${IPC.PTY_DATA}:${id}`, startSeq, data)
+    worker.stderr.on('data', (chunk) => {
+      const message = chunk.toString('utf-8').trim()
+      if (message) {
+        console.error('[pty-worker]', message)
       }
-      this.handlePiMonoJsonOutput(instance, data)
-      this.handleCodexQuestionPrompt(instance, data)
-      this.handleCodexProcessCompletion(instance)
-      this.handleCrushTurnSilence(instance, data)
-      // Write initial command on first output (shell is ready)
-      if (pendingWrite) {
-        const toWrite = pendingWrite
-        pendingWrite = undefined
-        proc.write(toWrite)
+    })
+    let stdoutBuffer = ''
+    worker.stdout.on('data', (chunk) => {
+      stdoutBuffer += chunk.toString('utf-8')
+      let lineBreak = stdoutBuffer.indexOf('\n')
+      while (lineBreak !== -1) {
+        const rawLine = stdoutBuffer.slice(0, lineBreak)
+        stdoutBuffer = stdoutBuffer.slice(lineBreak + 1)
+        lineBreak = stdoutBuffer.indexOf('\n')
+        if (!rawLine.trim()) continue
+
+        let message: { type?: string; data?: string; pid?: number; exitCode?: number }
+        try {
+          message = JSON.parse(rawLine) as { type?: string; data?: string; pid?: number; exitCode?: number }
+        } catch {
+          continue
+        }
+
+        if (message.type === 'ready') {
+          if (typeof message.pid === 'number') {
+            instance.ptyPid = message.pid
+          }
+          continue
+        }
+
+        if (message.type === 'data' && typeof message.data === 'string') {
+          const data = message.data
+          const startSeq = instance.outputSeq
+          instance.outputSeq += data.length
+          appendReplayChunk(instance, data)
+          if (!instance.webContents.isDestroyed()) {
+            instance.webContents.send(`${IPC.PTY_DATA}:${id}`, startSeq, data)
+          }
+          this.handlePiMonoJsonOutput(instance, data)
+          this.handleCodexQuestionPrompt(instance, data)
+          this.handleCodexProcessCompletion(instance)
+          this.handleCrushTurnSilence(instance, data)
+          // Write initial command on first output (shell is ready)
+          if (pendingWrite) {
+            const toWrite = pendingWrite
+            pendingWrite = undefined
+            this.sendToWorker(instance, { type: 'write', data: toWrite })
+          }
+          continue
+        }
+
+        if (message.type === 'exit') {
+          const exitCode = typeof message.exitCode === 'number' ? message.exitCode : 0
+          this.handleProcessExit(id, instance, exitCode)
+        }
       }
     })
 
-    proc.onExit(({ exitCode }) => {
-      if (instance.codexTurnActive) {
-        instance.codexTurnActive = false
-        this.emitTurnEvent(
-          instance.workspaceId,
-          'codex',
-          'awaiting_user',
-          instance.agentSessionId,
-          exitCode === 0 ? 'success' : 'failed',
-        )
-      }
-
-      if (instance.crushTurnActive) {
-        instance.crushTurnActive = false
-        if (instance.crushSilenceTimer) {
-          clearTimeout(instance.crushSilenceTimer)
-          instance.crushSilenceTimer = null
-        }
-        this.emitTurnEvent(
-          instance.workspaceId,
-          'crush',
-          'awaiting_user',
-          instance.agentSessionId,
-          exitCode === 0 ? 'success' : 'failed',
-        )
-      }
-
-      for (const cb of instance.onExitCallbacks) cb(exitCode)
-      this.ptys.delete(id)
+    worker.on('exit', (exitCode) => {
+      this.handleProcessExit(id, instance, exitCode ?? 0)
     })
 
     this.ptys.set(id, instance)
     return id
+  }
+
+  private handleProcessExit(ptyId: string, instance: PtyInstance, exitCode: number): void {
+    if (!this.ptys.has(ptyId)) return
+    if (instance.codexTurnActive) {
+      instance.codexTurnActive = false
+      this.emitTurnEvent(
+        instance.workspaceId,
+        'codex',
+        'awaiting_user',
+        instance.agentSessionId,
+        exitCode === 0 ? 'success' : 'failed',
+      )
+    }
+
+    if (instance.crushTurnActive) {
+      instance.crushTurnActive = false
+      if (instance.crushSilenceTimer) {
+        clearTimeout(instance.crushSilenceTimer)
+        instance.crushSilenceTimer = null
+      }
+      this.emitTurnEvent(
+        instance.workspaceId,
+        'crush',
+        'awaiting_user',
+        instance.agentSessionId,
+        exitCode === 0 ? 'success' : 'failed',
+      )
+    }
+
+    for (const cb of instance.onExitCallbacks) cb(exitCode)
+    this.ptys.delete(ptyId)
   }
 
   onExit(ptyId: string, callback: (exitCode: number) => void): void {
@@ -272,20 +327,20 @@ export class PtyManager {
     // Crush (by Charm) is a TUI agent with no hook system — use the same
     // process-tree detection approach.
     if (instance.workspaceId && /[\r\n]/.test(data)) {
-      if (this.isCodexRunningUnder(instance.process.pid)) {
+      if (instance.ptyPid > 0 && this.isCodexRunningUnder(instance.ptyPid)) {
         instance.codexPromptBuffer = ''
         instance.codexAwaitingAnswer = false
         if (!instance.codexTurnActive) {
           instance.codexTurnActive = true
           this.emitTurnEvent(instance.workspaceId, 'codex', 'turn_started', instance.agentSessionId)
         }
-      } else if (!instance.crushTurnActive && this.isCrushRunningUnder(instance.process.pid)) {
+      } else if (!instance.crushTurnActive && instance.ptyPid > 0 && this.isCrushRunningUnder(instance.ptyPid)) {
         instance.crushTurnActive = true
         this.emitTurnEvent(instance.workspaceId, 'crush', 'turn_started', instance.agentSessionId)
       }
     }
 
-    instance.process.write(data)
+    this.sendToWorker(instance, { type: 'write', data })
   }
 
   resize(ptyId: string, cols: number, rows: number): void {
@@ -294,7 +349,7 @@ export class PtyManager {
       if (instance.cols === cols && instance.rows === rows) return
       instance.cols = cols
       instance.rows = rows
-      instance.process.resize(cols, rows)
+      this.sendToWorker(instance, { type: 'resize', cols, rows })
     }
   }
 
@@ -307,7 +362,10 @@ export class PtyManager {
         clearTimeout(instance.crushSilenceTimer)
         instance.crushSilenceTimer = null
       }
-      instance.process.kill()
+      this.sendToWorker(instance, { type: 'terminate' })
+      if (!instance.worker.killed) {
+        instance.worker.kill()
+      }
       this.ptys.delete(ptyId)
     }
   }
@@ -460,7 +518,7 @@ export class PtyManager {
   private handleCodexProcessCompletion(instance: PtyInstance): void {
     if (!instance.workspaceId) return
     if (!instance.codexTurnActive) return
-    if (this.isCodexRunningUnder(instance.process.pid)) return
+    if (instance.ptyPid > 0 && this.isCodexRunningUnder(instance.ptyPid)) return
 
     instance.codexTurnActive = false
     this.emitTurnEvent(instance.workspaceId, 'codex', 'awaiting_user', instance.agentSessionId, 'success')
@@ -513,7 +571,7 @@ export class PtyManager {
     if (now - instance.crushLastRearmCheck < CRUSH_REARM_CHECK_INTERVAL_MS) return
     instance.crushLastRearmCheck = now
 
-    if (!this.isCrushRunningUnder(instance.process.pid)) return
+    if (instance.ptyPid <= 0 || !this.isCrushRunningUnder(instance.ptyPid)) return
 
     instance.crushTurnActive = true
     this.emitTurnEvent(instance.workspaceId, 'crush', 'turn_started', instance.agentSessionId)
@@ -522,7 +580,7 @@ export class PtyManager {
   /** Update the webContents reference for an existing PTY (e.g. after renderer reload) */
   reattach(
     ptyId: string,
-    webContents: WebContents,
+    webContents: WebContentsLike,
     sinceSeq?: number
   ): { ok: boolean; replay?: string; baseSeq: number; endSeq: number; truncated: boolean; cols: number; rows: number } {
     const instance = this.ptys.get(ptyId)

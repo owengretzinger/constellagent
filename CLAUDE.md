@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Constellagent — macOS desktop app for running multiple AI agents in parallel with integrated terminal, editor, git, and automation scheduling.
+Constellagent — desktop app for running multiple AI agents in parallel with integrated terminal, editor, git, and automation scheduling.
 
 ## Repo Structure
 
@@ -9,9 +9,9 @@ Monorepo with root package.json delegating to `desktop/`.
 ```
 constellagent/
 ├── package.json          # Root scripts (proxy to desktop/)
-└── desktop/              # Electron app (all source code lives here)
-    ├── src/main/         # Main process: PTY, git, file services, IPC
-    ├── src/preload/      # contextBridge (window.api)
+└── desktop/              # Electrobun app (all source code lives here)
+    ├── src/main/         # Bun main process: PTY, git, file services, IPC bridge
+    ├── src/preload/      # renderer bridge (window.api)
     ├── src/renderer/     # React UI (components, store, styles)
     ├── src/shared/       # IPC channel constants (@shared alias)
     ├── e2e/              # Playwright tests
@@ -24,16 +24,15 @@ constellagent/
 All commands run from repo root via bun:
 
 ```bash
-bun run dev       # Dev server + Electron
+bun run dev       # Vite HMR + Electrobun
 bun run build     # Production build
 bun run test      # Playwright e2e tests
-bun run rebuild   # Rebuild native modules (node-pty)
-bun run dist      # Package signed macOS DMG
+bun run rebuild   # Native module recovery helper
 ```
 
 ## Tech Stack
 
-Electron 40 · React 19 · TypeScript (strict) · Zustand · Monaco Editor · xterm.js · node-pty · electron-vite · Playwright · bun
+Electrobun · React 19 · TypeScript (strict) · Zustand · Monaco Editor · xterm.js · node-pty · Vite · Playwright · bun
 
 ## Git Conventions
 

@@ -5,22 +5,22 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Commands
 
 ```bash
-bun run dev          # Start dev server + Electron app
-bun run build        # Production build to out/
+bun run dev          # Start Vite HMR + Electrobun app
+bun run build        # Production build (Vite + Electrobun)
 bun run test         # Run Playwright e2e tests (all)
 bunx playwright test e2e/tabs.spec.ts              # Single test file
 bunx playwright test --grep "creates terminal"     # Single test by name
-bun run rebuild      # Rebuild native modules (node-pty) for Electron
+bun run rebuild      # Native module recovery helper
 ```
 
 After modifying native dependencies: `bun run rebuild`
 
 ## Architecture
 
-Electron app with three processes communicating via IPC:
+Electrobun app with a Bun main process and renderer IPC bridge:
 
 ```
-Main Process (Node.js)          Preload (contextBridge)       Renderer (React)
+Main Process (Bun)              Preload bridge                Renderer (React)
 ├── pty-manager.ts              └── index.ts                  ├── App.tsx (Allotment layout)
 ├── git-service.ts                  exposes window.api        ├── store/app-store.ts (Zustand)
 ├── file-service.ts                 namespaces:               └── components/
@@ -31,7 +31,7 @@ Main Process (Node.js)          Preload (contextBridge)       Renderer (React)
 
 **GitHub PR integration**: `github-service.ts` uses the `gh` CLI (same `execFileAsync` pattern as `GitService`) to fetch PR status per branch. Polls every 90s via `usePrStatusPoller` hook. Ephemeral state in Zustand (`prStatusMap`, `ghAvailability`) — not persisted to disk. Degrades silently when `gh` is missing, not authenticated, or repo isn't on GitHub.
 
-**Shared code**: `src/shared/ipc-channels.ts` defines channel name constants used by both main and preload. The `@shared` alias resolves to `src/shared/` across all three processes (configured in `electron-vite.config.ts`). Shared types live in `src/shared/` (e.g., `github-types.ts`).
+**Shared code**: `src/shared/ipc-channels.ts` defines channel name constants used by both main and preload. The `@shared` alias resolves to `src/shared/` via `vite.config.ts`. Shared types live in `src/shared/` (e.g., `github-types.ts`).
 
 ## State Management
 

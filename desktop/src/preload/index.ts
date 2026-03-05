@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from 'electron'
+import { contextBridge, ipcRenderer, type IpcRendererEvent } from '../renderer/electrobun-ipc'
 import { IPC } from '../shared/ipc-channels'
 import type { AutomationConfig, AutomationRunStartedEvent } from '../shared/automation-types'
 import type { CreateWorktreeProgressEvent } from '../shared/workspace-creation'
@@ -13,7 +13,7 @@ const api = {
     createWorktreeFromPr: (repoPath: string, name: string, prNumber: number, localBranch: string, force?: boolean, requestId?: string) =>
       ipcRenderer.invoke(IPC.GIT_CREATE_WORKTREE_FROM_PR, repoPath, name, prNumber, localBranch, force, requestId) as Promise<{ worktreePath: string; branch: string }>,
     onCreateWorktreeProgress: (callback: (progress: CreateWorktreeProgressEvent) => void) => {
-      const listener = (_event: Electron.IpcRendererEvent, progress: CreateWorktreeProgressEvent) => callback(progress)
+      const listener = (_event: IpcRendererEvent, progress: CreateWorktreeProgressEvent) => callback(progress)
       ipcRenderer.on(IPC.GIT_CREATE_WORKTREE_PROGRESS, listener)
       return () => {
         ipcRenderer.removeListener(IPC.GIT_CREATE_WORKTREE_PROGRESS, listener)
@@ -58,7 +58,7 @@ const api = {
       ipcRenderer.invoke(IPC.PTY_REATTACH, ptyId, sinceSeq) as Promise<{ ok: boolean; replay?: string; baseSeq: number; endSeq: number; truncated: boolean; cols: number; rows: number }>,
     onData: (ptyId: string, callback: (data: string, startSeq?: number) => void) => {
       const channel = `${IPC.PTY_DATA}:${ptyId}`
-      const listener = (_event: Electron.IpcRendererEvent, ...args: unknown[]) => {
+      const listener = (_event: IpcRendererEvent, ...args: unknown[]) => {
         if (typeof args[0] === 'number' && typeof args[1] === 'string') {
           callback(args[1], args[0])
           return
@@ -88,7 +88,7 @@ const api = {
     unwatchDir: (dirPath: string) =>
       ipcRenderer.send(IPC.FS_WATCH_STOP, dirPath),
     onDirChanged: (callback: (dirPath: string) => void) => {
-      const listener = (_event: Electron.IpcRendererEvent, dirPath: string) => callback(dirPath)
+      const listener = (_event: IpcRendererEvent, dirPath: string) => callback(dirPath)
       ipcRenderer.on(IPC.FS_WATCH_CHANGED, listener)
       return () => {
         ipcRenderer.removeListener(IPC.FS_WATCH_CHANGED, listener)
@@ -105,14 +105,14 @@ const api = {
 
   agent: {
     onNotifyWorkspace: (callback: (workspaceId: string) => void) => {
-      const listener = (_event: Electron.IpcRendererEvent, wsId: string) => callback(wsId)
+      const listener = (_event: IpcRendererEvent, wsId: string) => callback(wsId)
       ipcRenderer.on(IPC.AGENT_NOTIFY_WORKSPACE, listener)
       return () => {
         ipcRenderer.removeListener(IPC.AGENT_NOTIFY_WORKSPACE, listener)
       }
     },
     onActivityUpdate: (callback: (workspaceIds: string[]) => void) => {
-      const listener = (_event: Electron.IpcRendererEvent, wsIds: string[]) => callback(wsIds)
+      const listener = (_event: IpcRendererEvent, wsIds: string[]) => callback(wsIds)
       ipcRenderer.on(IPC.AGENT_ACTIVITY_UPDATE, listener)
       return () => {
         ipcRenderer.removeListener(IPC.AGENT_ACTIVITY_UPDATE, listener)
@@ -161,7 +161,7 @@ const api = {
     stop: (automationId: string) =>
       ipcRenderer.invoke(IPC.AUTOMATION_STOP, automationId),
     onRunStarted: (callback: (data: AutomationRunStartedEvent) => void) => {
-      const listener = (_event: Electron.IpcRendererEvent, data: AutomationRunStartedEvent) => callback(data)
+      const listener = (_event: IpcRendererEvent, data: AutomationRunStartedEvent) => callback(data)
       ipcRenderer.on(IPC.AUTOMATION_RUN_STARTED, listener)
       return () => {
         ipcRenderer.removeListener(IPC.AUTOMATION_RUN_STARTED, listener)
@@ -185,7 +185,7 @@ const api = {
     save: (data: unknown) =>
       ipcRenderer.invoke(IPC.STATE_SAVE, data),
     saveSync: (data: unknown) =>
-      ipcRenderer.sendSync(IPC.STATE_SAVE_SYNC, data) as boolean,
+      (ipcRenderer.send(IPC.STATE_SAVE_SYNC, data), true),
     load: () =>
       ipcRenderer.invoke(IPC.STATE_LOAD),
   },

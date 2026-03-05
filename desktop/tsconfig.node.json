@@ -7,5 +7,5 @@
     "noEmit": true,
     "composite": true
   },
-  "include": ["electron-vite.config.ts"]
+  "include": ["electrobun.config.ts", "vite.config.ts"]
 }

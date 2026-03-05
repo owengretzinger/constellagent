@@ -1,4 +1,4 @@
-import { ipcMain, dialog, app, BrowserWindow, clipboard, type WebContents } from 'electron'
+import { ipcMain, dialog, app, clipboard, getWindowFromWebContents, type IpcWebContents as WebContents } from './electrobun-bridge'
 import { join, relative } from 'path'
 import { mkdir, writeFile } from 'fs/promises'
 import { existsSync, mkdirSync, writeFileSync } from 'fs'
@@ -245,7 +245,7 @@ export function registerIpcHandlers(): void {
 
   // ── PTY handlers ──
   ipcMain.handle(IPC.PTY_CREATE, async (_e, workingDir: string, shell?: string, extraEnv?: Record<string, string>) => {
-    const win = BrowserWindow.fromWebContents(_e.sender)
+    const win = getWindowFromWebContents(_e.sender)
     if (!win) throw new Error('No window found')
     return ptyManager.create(workingDir, win.webContents, shell, undefined, undefined, extraEnv)
   })
@@ -267,7 +267,7 @@ export function registerIpcHandlers(): void {
   })
 
   ipcMain.handle(IPC.PTY_REATTACH, async (_e, ptyId: string, sinceSeq?: number) => {
-    const win = BrowserWindow.fromWebContents(_e.sender)
+    const win = getWindowFromWebContents(_e.sender)
     if (!win) throw new Error('No window found')
     return ptyManager.reattach(ptyId, win.webContents, sinceSeq)
   })
@@ -454,15 +454,17 @@ export function registerIpcHandlers(): void {
 
   // ── Claude Code hooks ──
   function getHookScriptPath(name: string): string {
-    if (app.isPackaged) {
-      return join(process.resourcesPath, 'claude-hooks', name)
+    const resourcesPath = (process as NodeJS.Process & { resourcesPath?: string }).resourcesPath
+    if (app.isPackaged && resourcesPath) {
+      return join(resourcesPath, 'claude-hooks', name)
     }
     return join(__dirname, '..', '..', 'claude-hooks', name)
   }
 
   function getCodexHookScriptPath(name: string): string {
-    if (app.isPackaged) {
-      return join(process.resourcesPath, 'codex-hooks', name)
+    const resourcesPath = (process as NodeJS.Process & { resourcesPath?: string }).resourcesPath
+    if (app.isPackaged && resourcesPath) {
+      return join(resourcesPath, 'codex-hooks', name)
     }
     return join(__dirname, '..', '..', 'codex-hooks', name)
   }
