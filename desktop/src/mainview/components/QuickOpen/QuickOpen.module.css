@@ -1,0 +1,112 @@
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  justify-content: center;
+  padding-top: 15vh;
+  z-index: 100;
+}
+
+.panel {
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  width: 500px;
+  max-height: 400px;
+  display: flex;
+  flex-direction: column;
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+  align-self: flex-start;
+}
+
+.inputWrap {
+  padding: var(--space-4);
+  border-bottom: 1px solid var(--border-subtle);
+  flex-shrink: 0;
+}
+
+.input {
+  width: 100%;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--surface-1);
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  font-family: var(--font-mono);
+  outline: none;
+  transition: border-color var(--transition-fast);
+}
+
+.input:focus {
+  border-color: var(--accent-blue);
+}
+
+.input::placeholder {
+  color: var(--text-ghost);
+}
+
+.results {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-2) 0;
+}
+
+.resultItem {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-6);
+  cursor: pointer;
+  font-size: var(--text-sm);
+  font-family: var(--font-mono);
+  color: var(--text-secondary);
+  transition: background var(--transition-fast);
+}
+
+.resultItem:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.resultItem.selected {
+  background: var(--accent-blue-glow);
+  color: var(--text-primary);
+}
+
+.resultIcon {
+  font-size: var(--text-sm);
+  width: 14px;
+  text-align: center;
+  flex-shrink: 0;
+  opacity: 0.5;
+}
+
+.resultPath {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.resultDir {
+  color: var(--text-tertiary);
+}
+
+.resultName {
+  color: var(--text-primary);
+}
+
+.matchChar {
+  color: var(--accent-blue);
+  font-weight: var(--weight-semibold);
+}
+
+.empty {
+  padding: var(--space-8);
+  text-align: center;
+  color: var(--text-tertiary);
+  font-size: var(--text-sm);
+  font-family: var(--font-ui);
+}

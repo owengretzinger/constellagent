@@ -1,5 +1,4 @@
 import { execFile } from 'child_process'
-import { promisify } from 'util'
 import type {
   PrInfo,
   PrLookupResult,
@@ -9,7 +8,20 @@ import type {
   ListOpenPrsResult,
 } from '../shared/github-types'
 
-const execFileAsync = promisify(execFile)
+function execFileAsync(cmd: string, args: string[], opts?: any): Promise<{ stdout: string; stderr: string }> {
+  return new Promise((resolve, reject) => {
+    execFile(cmd, args, opts, (error, stdout, stderr) => {
+      if (error) {
+        const err = error as any;
+        err.stdout = stdout;
+        err.stderr = stderr;
+        reject(err);
+      } else {
+        resolve({ stdout: stdout as string, stderr: stderr as string });
+      }
+    });
+  });
+}
 
 interface GithubRepoInfo {
   owner: string

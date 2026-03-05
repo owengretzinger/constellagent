@@ -1,0 +1,66 @@
+.tooltip {
+  position: fixed;
+  z-index: 9999;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  background: var(--surface-4);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  white-space: nowrap;
+}
+
+.top {
+  transform: translateX(-50%) translateY(-100%);
+  animation: tooltipInTop 120ms ease;
+}
+
+.bottom {
+  transform: translateX(-50%);
+  animation: tooltipInBottom 120ms ease;
+}
+
+.label {
+  font-family: var(--font-ui);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  color: var(--text-primary);
+  line-height: 1;
+}
+
+.kbd {
+  font-family: var(--font-ui);
+  font-size: 9px;
+  font-weight: var(--weight-medium);
+  color: var(--text-secondary);
+  background: var(--surface-3);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  padding: 1px 4px;
+  line-height: 1;
+}
+
+@keyframes tooltipInTop {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(calc(-100% + 4px));
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(-100%);
+  }
+}
+
+@keyframes tooltipInBottom {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%);
+  }
+}

@@ -1,0 +1,381 @@
+/* Right Panel — file tree + changes view */
+
+.rightPanel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--surface-0);
+  border-left: 1px solid var(--border-subtle);
+  overflow: hidden;
+}
+
+/* ── Mode Toggle (pill buttons) ── */
+
+.header {
+  display: flex;
+  align-items: center;
+  padding: var(--space-4) var(--space-6);
+  flex-shrink: 0;
+}
+
+.modeToggle {
+  display: flex;
+  align-items: center;
+  background: var(--surface-2);
+  border-radius: var(--radius-full);
+  padding: 2px;
+  gap: 2px;
+  width: 100%;
+}
+
+.modeButton {
+  flex: 1;
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-full);
+  border: none;
+  background: none;
+  color: var(--text-tertiary);
+  font-size: var(--text-sm);
+  font-family: var(--font-ui);
+  font-weight: var(--weight-medium);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  text-align: center;
+}
+
+.modeButton:hover {
+  color: var(--text-secondary);
+}
+
+.modeButton.active {
+  background: var(--surface-4);
+  color: var(--text-primary);
+  box-shadow: var(--shadow-sm);
+}
+
+/* ── Content Area ── */
+
+.content {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── File Tree (react-arborist) ── */
+
+.treeContainer {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.treeNode {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding-right: var(--space-4);
+  cursor: pointer;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  font-family: var(--font-mono);
+  white-space: nowrap;
+  height: 100%;
+}
+
+.treeNode:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.treeNodeActive {
+  background: var(--accent-blue-glow);
+}
+
+.treeNodeActive .treeName {
+  color: var(--text-primary);
+}
+
+.treeChevron {
+  width: 12px;
+  text-align: center;
+  flex-shrink: 0;
+  color: var(--text-tertiary);
+  font-size: 11px;
+}
+
+.treeName {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── Git Status Colors (must override active/hover states) ── */
+
+.treeName.gitModified {
+  color: var(--accent-orange);
+}
+
+.treeName.gitAdded {
+  color: var(--accent-green);
+}
+
+.treeName.gitDeleted {
+  color: var(--accent-red);
+}
+
+.treeName.gitRenamed {
+  color: var(--accent-cyan);
+}
+
+.treeName.gitUntracked {
+  color: var(--accent-green-muted);
+}
+
+/* ── Changed Files ── */
+
+.changedFilesList {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 0;
+}
+
+/* ── Commit Area ── */
+
+.commitArea {
+  padding: var(--space-4) var(--space-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.commitInput {
+  width: 100%;
+  min-height: 28px;
+  max-height: 80px;
+  padding: var(--space-2) var(--space-3);
+  background: var(--surface-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  font-family: var(--font-ui);
+  resize: vertical;
+  outline: none;
+}
+
+.commitInput:focus {
+  border-color: var(--accent-blue);
+}
+
+.commitInput::placeholder {
+  color: var(--text-tertiary);
+}
+
+.commitButton {
+  padding: var(--space-2) var(--space-4);
+  background: var(--accent-blue);
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  font-family: var(--font-ui);
+  font-weight: var(--weight-medium);
+  cursor: pointer;
+  transition: opacity var(--transition-fast);
+}
+
+.commitButton:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.commitButton:not(:disabled):hover {
+  opacity: 0.85;
+}
+
+/* ── Change Sections ── */
+
+.changeSection {
+  padding: var(--space-2) 0;
+}
+
+.sectionHeader {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-6);
+  font-size: var(--text-xs);
+  font-family: var(--font-ui);
+  font-weight: var(--weight-semibold);
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.sectionLabel {
+  flex-shrink: 0;
+}
+
+.sectionCount {
+  background: var(--surface-4);
+  border-radius: var(--radius-full);
+  padding: 0 6px;
+  font-size: 10px;
+  line-height: 18px;
+  min-width: 18px;
+  text-align: center;
+}
+
+.sectionActions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.sectionAction {
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: none;
+  color: var(--text-tertiary);
+  font-size: 16px;
+  font-weight: var(--weight-semibold);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  transition: all var(--transition-fast);
+}
+
+.sectionAction:hover {
+  color: var(--text-primary);
+  background: var(--surface-4);
+}
+
+.sectionAction:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+/* ── File Rows ── */
+
+.changedFile {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-6);
+  font-size: var(--text-sm);
+  font-family: var(--font-mono);
+  color: var(--text-secondary);
+  transition: background var(--transition-fast);
+}
+
+.changedFile:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.changedFile:hover .fileActions {
+  opacity: 1;
+}
+
+.statusBadge {
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+  width: 14px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.statusBadge.modified {
+  color: var(--accent-orange);
+}
+
+.statusBadge.added {
+  color: var(--accent-green);
+}
+
+.statusBadge.deleted {
+  color: var(--accent-red);
+}
+
+.statusBadge.renamed {
+  color: var(--accent-cyan);
+}
+
+.changePath {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.changeDir {
+  color: var(--text-tertiary);
+}
+
+/* ── File Action Buttons (hover-reveal) ── */
+
+.fileActions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity var(--transition-fast);
+}
+
+.fileActionBtn {
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: none;
+  color: var(--text-tertiary);
+  font-size: 14px;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  transition: all var(--transition-fast);
+}
+
+.fileActionBtn:hover {
+  color: var(--text-primary);
+  background: var(--surface-4);
+}
+
+.fileActionBtn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+/* ── Empty States ── */
+
+.emptyState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-16) var(--space-8);
+  color: var(--text-tertiary);
+  text-align: center;
+  gap: var(--space-4);
+}
+
+.emptyIcon {
+  font-size: 24px;
+  opacity: 0.3;
+}
+
+.emptyText {
+  font-size: var(--text-sm);
+  line-height: var(--leading-relaxed);
+}

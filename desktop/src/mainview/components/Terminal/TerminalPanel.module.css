@@ -1,0 +1,35 @@
+/* Terminal fills container with zero chrome. */
+
+.terminalContainer {
+  /* Absolute-fill so all terminals stack and share the same dimensions.
+     We use visibility (not display:none) so hidden terminals keep real
+     width/height and preserve TUI state while backgrounded. */
+  position: absolute;
+  inset: 0;
+  background: var(--term-bg);
+  overflow: hidden;
+  padding: 4px 0 0 8px;
+  box-sizing: border-box;
+}
+
+.terminalContainer.active {
+  visibility: visible;
+  z-index: 1;
+}
+
+.terminalContainer.hidden {
+  visibility: hidden;
+  z-index: 0;
+}
+
+/* Inner div where xterm renders (outside React's control). */
+.terminalInner {
+  width: 100%;
+  height: 100%;
+  position: relative;
+}
+
+/* Ensure xterm consumes full pane height for fit calculations. */
+.terminalInner :global(.xterm) {
+  height: 100%;
+}

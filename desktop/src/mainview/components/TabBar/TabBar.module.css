@@ -1,0 +1,185 @@
+/* Tab Bar — VS Code-inspired but cleaner */
+
+.tabBar {
+  display: flex;
+  align-items: stretch;
+  height: var(--tab-height);
+  background: var(--surface-0);
+  border-bottom: 1px solid var(--border-subtle);
+  overflow-x: auto;
+  overflow-y: hidden;
+  flex-shrink: 0;
+  -webkit-app-region: drag;
+}
+
+/* Scrollbar hidden but functional */
+.tabBar::-webkit-scrollbar {
+  height: 0;
+}
+
+.tabList {
+  display: flex;
+  align-items: stretch;
+  min-width: 0;
+  -webkit-app-region: no-drag;
+}
+
+/* ── Individual Tab ── */
+
+.tab {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 0 var(--space-6);
+  min-width: 100px;
+  max-width: 200px;
+  cursor: pointer;
+  color: var(--text-tertiary);
+  font-size: var(--text-sm);
+  border-right: 1px solid var(--border-subtle);
+  position: relative;
+  transition: color var(--transition-fast), background var(--transition-fast);
+  -webkit-app-region: no-drag;
+}
+
+.tab:hover {
+  color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.tab.active {
+  color: var(--text-primary);
+  background: var(--surface-1);
+}
+
+.tab.dragging {
+  opacity: 0.5;
+}
+
+.tab.dragOver::before {
+  content: '';
+  position: absolute;
+  top: 5px;
+  bottom: 5px;
+  left: 0;
+  width: 2px;
+  background: var(--accent-blue);
+}
+
+/* Active tab top highlight — thin accent line */
+.tab.active::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: var(--accent-blue);
+}
+
+/* ── Tab Title ── */
+
+.tabTitle {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+}
+
+.shortcutHint {
+  margin-left: auto;
+  min-width: 24px;
+  text-align: right;
+  flex-shrink: 0;
+  color: var(--text-secondary);
+  opacity: 0.72;
+  font-size: 11px;
+  font-family: var(--font-ui);
+  font-variant-numeric: tabular-nums;
+}
+
+.tab.active .shortcutHint {
+  opacity: 0.95;
+}
+
+/* ── Unsaved Indicator ── */
+
+.unsavedDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent-blue);
+  flex-shrink: 0;
+}
+
+/* ── Save Flash ── */
+
+.savedFlash {
+  animation: savedPulse 1.2s ease-out forwards;
+}
+
+@keyframes savedPulse {
+  0% { color: var(--accent-green); }
+  100% { color: inherit; }
+}
+
+/* ── Close Button ── */
+
+.closeButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: var(--radius-sm);
+  border: none;
+  background: none;
+  color: var(--text-tertiary);
+  font-size: 10px;
+  cursor: pointer;
+  opacity: 0.72;
+  transition: all var(--transition-fast);
+  flex-shrink: 0;
+}
+
+.tab:hover .closeButton,
+.tab.active .closeButton {
+  opacity: 0.95;
+}
+
+.closeButton:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text-primary);
+}
+
+/* ── New Tab Button ── */
+
+.newTabButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--tab-height);
+  height: var(--tab-height);
+  border: none;
+  background: none;
+  color: var(--text-tertiary);
+  font-size: var(--text-lg);
+  cursor: pointer;
+  transition: color var(--transition-fast);
+  flex-shrink: 0;
+  -webkit-app-region: no-drag;
+}
+
+.newTabButton:hover {
+  color: var(--text-primary);
+}
+
+/* ── Spacer (drag region) ── */
+
+.dragSpacer {
+  flex: 1;
+  -webkit-app-region: drag;
+}

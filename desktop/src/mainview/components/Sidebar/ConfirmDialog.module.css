@@ -1,0 +1,99 @@
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+
+.dialog {
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  padding: var(--space-8);
+  width: 320px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  box-shadow: var(--shadow-lg);
+}
+
+.title {
+  font-size: var(--text-md);
+  font-weight: var(--weight-semibold);
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+}
+
+.message {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  font-family: var(--font-ui);
+  line-height: 1.5;
+}
+
+.tip {
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+  font-family: var(--font-ui);
+}
+
+.actions {
+  display: flex;
+  gap: var(--space-3);
+  justify-content: flex-end;
+  margin-top: var(--space-4);
+}
+
+.cancelBtn {
+  padding: var(--space-2) var(--space-6);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: none;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  font-family: var(--font-ui);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.cancelBtn:hover {
+  background: var(--surface-3);
+  color: var(--text-primary);
+}
+
+.confirmBtn {
+  padding: var(--space-2) var(--space-6);
+  border: none;
+  border-radius: var(--radius-md);
+  background: var(--accent-blue);
+  color: #fff;
+  font-size: var(--text-sm);
+  font-family: var(--font-ui);
+  font-weight: var(--weight-medium);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.confirmBtn:hover {
+  filter: brightness(1.1);
+}
+
+.destructiveBtn {
+  padding: var(--space-2) var(--space-6);
+  border: 1px solid var(--accent-red);
+  border-radius: var(--radius-md);
+  background: var(--accent-red-dim);
+  color: var(--accent-red);
+  font-size: var(--text-sm);
+  font-family: var(--font-ui);
+  font-weight: var(--weight-medium);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.destructiveBtn:hover {
+  background: rgba(247, 118, 142, 0.2);
+}

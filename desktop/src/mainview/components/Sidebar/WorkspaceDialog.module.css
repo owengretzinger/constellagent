@@ -1,0 +1,236 @@
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+
+.dialog {
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  padding: var(--space-8);
+  width: 320px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  box-shadow: var(--shadow-lg);
+}
+
+.title {
+  font-size: var(--text-md);
+  font-weight: var(--weight-semibold);
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  margin-bottom: var(--space-2);
+}
+
+.label {
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+  font-family: var(--font-ui);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.input {
+  padding: var(--space-3) var(--space-4);
+  background: var(--surface-0);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  font-family: var(--font-mono);
+  outline: none;
+  transition: border-color var(--transition-fast);
+}
+
+.input:focus {
+  border-color: var(--accent-blue);
+}
+
+.branchToggle {
+  display: flex;
+  gap: 2px;
+  background: var(--surface-0);
+  border-radius: var(--radius-full);
+  padding: 2px;
+}
+
+.toggleBtn {
+  flex: 1;
+  padding: var(--space-2) var(--space-4);
+  border: none;
+  border-radius: var(--radius-full);
+  background: none;
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+  font-family: var(--font-ui);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.toggleBtn.active {
+  background: var(--surface-4);
+  color: var(--text-primary);
+}
+
+.toggleBtn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.actions {
+  display: flex;
+  gap: var(--space-3);
+  justify-content: flex-end;
+  margin-top: var(--space-4);
+}
+
+.cancelBtn {
+  padding: var(--space-2) var(--space-6);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: none;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  font-family: var(--font-ui);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.cancelBtn:hover {
+  background: var(--surface-3);
+  color: var(--text-primary);
+}
+
+.cancelBtn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.createBtn {
+  padding: var(--space-2) var(--space-6);
+  border: none;
+  border-radius: var(--radius-md);
+  background: var(--accent-blue);
+  color: #fff;
+  font-size: var(--text-sm);
+  font-family: var(--font-ui);
+  font-weight: var(--weight-medium);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.createBtn:hover {
+  filter: brightness(1.1);
+}
+
+.createBtn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.createStatus {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  font-family: var(--font-ui);
+}
+
+.createSpinner {
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--border-default);
+  border-top-color: var(--accent-blue);
+  border-radius: var(--radius-full);
+  animation: dialogSpinner 0.8s linear infinite;
+}
+
+.createSlowNote {
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+  font-family: var(--font-ui);
+}
+
+@keyframes dialogSpinner {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.branchInputRow {
+  display: flex;
+  gap: var(--space-2);
+  position: relative;
+}
+
+.branchInputRow .input {
+  flex: 1;
+  min-width: 0;
+}
+
+.pickerBtn {
+  padding: 0 var(--space-3);
+  background: var(--surface-0);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  flex-shrink: 0;
+}
+
+.pickerBtn:hover {
+  background: var(--surface-3);
+  color: var(--text-primary);
+}
+
+.pickerBtn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.pickerDropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  min-width: 100%;
+  width: max-content;
+  max-width: 360px;
+  margin-top: var(--space-1);
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  max-height: 160px;
+  overflow-y: auto;
+  z-index: 10;
+  box-shadow: var(--shadow-lg);
+}
+
+.pickerOption {
+  padding: var(--space-2) var(--space-4);
+  font-size: var(--text-sm);
+  font-family: var(--font-mono);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background var(--transition-fast);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pickerOption:hover {
+  background: var(--surface-3);
+  color: var(--text-primary);
+}
+
+.pickerOptionActive {
+  color: var(--accent-blue);
+}

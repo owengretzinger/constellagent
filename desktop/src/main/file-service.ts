@@ -1,9 +1,21 @@
 import { readdir, readFile as fsReadFile, writeFile as fsWriteFile, stat } from 'fs/promises'
 import { join, relative } from 'path'
 import { execFile } from 'child_process'
-import { promisify } from 'util'
 
-const execFileAsync = promisify(execFile)
+function execFileAsync(cmd: string, args: string[], opts?: any): Promise<{ stdout: string; stderr: string }> {
+  return new Promise((resolve, reject) => {
+    execFile(cmd, args, opts, (error, stdout, stderr) => {
+      if (error) {
+        const err = error as any;
+        err.stdout = stdout;
+        err.stderr = stderr;
+        reject(err);
+      } else {
+        resolve({ stdout: stdout as string, stderr: stderr as string });
+      }
+    });
+  });
+}
 
 function isEnvFile(name: string): boolean {
   return /^\.env($|\.)/.test(name)

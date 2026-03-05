@@ -1,0 +1,70 @@
+/* Main app layout — 3-panel with allotment */
+
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden;
+  background: var(--surface-1);
+}
+
+.layout {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+}
+
+/* Center panel */
+.centerPanel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-width: 0;
+  background: var(--surface-1);
+}
+
+.contentArea {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+  /* Monaco needs a concrete pixel height — use min-height: 0 so flex shrinks properly */
+  min-height: 0;
+}
+
+/* Welcome state when no tabs open */
+.welcome {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  gap: var(--space-8);
+  color: var(--text-ghost);
+}
+
+.welcomeLogo {
+  font-size: 48px;
+  opacity: 0.15;
+  font-weight: 200;
+  font-family: var(--font-ui);
+  letter-spacing: -2px;
+}
+
+.welcomeHint {
+  font-size: var(--text-sm);
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+}
+
+.welcomeShortcut {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-3);
+  background: var(--surface-3);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  margin: 0 var(--space-1);
+}

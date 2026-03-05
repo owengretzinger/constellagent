@@ -1,14 +1,11 @@
 {
-  "name": "constellagent-root",
+  "name": "constellagent-monorepo",
+  "version": "1.0.0",
   "private": true,
   "scripts": {
-    "postinstall": "bun install --cwd desktop",
-    "setup": "bun install --cwd desktop && bun run --cwd desktop rebuild",
-    "dev": "bun run --cwd desktop dev",
+    "dev": "bun run --cwd desktop start",
     "build": "bun run --cwd desktop build",
     "test": "bun run --cwd desktop test",
-    "rebuild": "bun run --cwd desktop rebuild",
-    "dist": "bun run --cwd desktop dist",
-    "landing": "bunx serve landing-page"
+    "hmr": "bun run --cwd desktop dev:hmr"
   }
 }

@@ -1,0 +1,104 @@
+@import './design-tokens.css';
+
+/* ═══════════════════════════════════════════════════════
+   RESET + BASE
+   ═══════════════════════════════════════════════════════ */
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body, #root {
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+  background: var(--surface-0);
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  font-size: var(--text-base);
+  line-height: var(--leading-normal);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  user-select: none;
+}
+
+/* Electron: make the title bar area draggable */
+body {
+  -webkit-app-region: no-drag;
+}
+
+/* ═══════════════════════════════════════════════════════
+   SCROLLBAR — thin, subtle, macOS-feeling
+   ═══════════════════════════════════════════════════════ */
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-default);
+  border-radius: var(--radius-full);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--border-strong);
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* ═══════════════════════════════════════════════════════
+   FOCUS — accent ring for keyboard navigation
+   ═══════════════════════════════════════════════════════ */
+
+:focus-visible {
+  outline: 1px solid var(--accent-blue);
+  outline-offset: -1px;
+  border-radius: var(--radius-sm);
+}
+
+/* ═══════════════════════════════════════════════════════
+   SELECTION
+   ═══════════════════════════════════════════════════════ */
+
+::selection {
+  background: rgba(122, 162, 247, 0.25);
+  color: inherit;
+}
+
+/* ═══════════════════════════════════════════════════════
+   UTILITY CLASSES
+   ═══════════════════════════════════════════════════════ */
+
+.text-mono {
+  font-family: var(--font-mono);
+}
+
+.text-ellipsis {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ═══════════════════════════════════════════════════════
+   ALLOTMENT OVERRIDES — style the split pane sashes
+   ═══════════════════════════════════════════════════════ */
+
+.sash-container .sash {
+  background: var(--border-subtle) !important;
+  transition: background var(--transition-default) !important;
+}
+
+.sash-container .sash:hover,
+.sash-container .sash.active {
+  background: var(--accent-blue) !important;
+  transition-delay: 100ms !important;
+}

@@ -1,0 +1,137 @@
+/*
+ * Constellagent — "Midnight Instrument Panel" Design System
+ *
+ * Layered surfaces with subtle depth. Tokyo Night palette refined
+ * for a precision-tooling aesthetic. Surgical accent usage.
+ */
+
+:root {
+  /* ═══════════════════════════════════════════════════════
+     SURFACE LAYERS — depth through subtle value shifts
+     Each layer is slightly lighter, creating visual hierarchy
+     ═══════════════════════════════════════════════════════ */
+  --surface-0: #13141b;          /* Deepest — app background, sidebar bg */
+  --surface-1: #16171f;          /* Primary panels — center area */
+  --surface-2: #1a1b26;          /* Elevated — tab bar, right panel header */
+  --surface-3: #1e1f2b;          /* Higher — active tab, hover states */
+  --surface-4: #24253a;          /* Highest — dropdowns, dialogs, tooltips */
+
+  /* ═══════════════════════════════════════════════════════
+     BORDERS — barely there, just enough to define edges
+     ═══════════════════════════════════════════════════════ */
+  --border-subtle: #1e1f2e;      /* Panel dividers — almost invisible */
+  --border-default: #282a3a;     /* More visible borders — tab separators */
+  --border-strong: #363852;      /* Focused elements, active outlines */
+  --border-accent: #7aa2f7;      /* Focus rings, accent outlines */
+
+  /* ═══════════════════════════════════════════════════════
+     TEXT — four levels of emphasis
+     ═══════════════════════════════════════════════════════ */
+  --text-primary: #c0caf5;       /* Primary content — file names, code */
+  --text-secondary: #8e95b4;     /* Secondary — descriptions, metadata */
+  --text-tertiary: #565b7e;      /* Tertiary — disabled, placeholder */
+  --text-ghost: #3b3f5c;         /* Barely visible — decorative text */
+  --text-inverse: #13141b;       /* On accent backgrounds */
+
+  /* ═══════════════════════════════════════════════════════
+     ACCENTS — Tokyo Night spectrum, used sparingly
+     ═══════════════════════════════════════════════════════ */
+  --accent-blue: #7aa2f7;        /* Primary accent — active states, focus */
+  --accent-blue-dim: #3d5a9e;    /* Muted blue — selected bg tint */
+  --accent-blue-glow: rgba(122, 162, 247, 0.08); /* Subtle glow/bg */
+  --accent-cyan: #7dcfff;        /* Info, links */
+  --accent-purple: #bb9af7;      /* Keywords, special items */
+  --accent-green: #9ece6a;       /* Success, additions, new items */
+  --accent-green-muted: #73a94c; /* Untracked/new files (dimmer green) */
+  --accent-green-dim: rgba(158, 206, 106, 0.12);
+  --accent-red: #f7768e;         /* Errors, deletions, destructive */
+  --accent-red-dim: rgba(247, 118, 142, 0.12);
+  --accent-orange: #ff9e64;      /* Warnings, modified */
+  --accent-orange-dim: rgba(255, 158, 100, 0.12);
+  --accent-yellow: #e0af68;      /* Caution, highlighted */
+
+  /* ═══════════════════════════════════════════════════════
+     TERMINAL PALETTE — matches Tokyo Night terminal colors
+     ═══════════════════════════════════════════════════════ */
+  --term-bg: #13141b;
+  --term-fg: #c0caf5;
+  --term-cursor: #c0caf5;
+  --term-selection: rgba(122, 162, 247, 0.2);
+  --term-black: #15161e;
+  --term-red: #f7768e;
+  --term-green: #9ece6a;
+  --term-yellow: #e0af68;
+  --term-blue: #7aa2f7;
+  --term-magenta: #bb9af7;
+  --term-cyan: #7dcfff;
+  --term-white: #a9b1d6;
+
+  /* ═══════════════════════════════════════════════════════
+     TYPOGRAPHY
+     ═══════════════════════════════════════════════════════ */
+  --font-mono: 'SF Mono', 'Menlo', 'Cascadia Code', 'JetBrains Mono', monospace;
+  --font-ui: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', sans-serif;
+
+  --text-xs: 10px;
+  --text-sm: 11px;
+  --text-base: 12px;
+  --text-md: 13px;
+  --text-lg: 14px;
+  --text-xl: 16px;
+
+  --leading-tight: 1.3;
+  --leading-normal: 1.5;
+  --leading-relaxed: 1.7;
+
+  --weight-normal: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+
+  /* ═══════════════════════════════════════════════════════
+     SPACING — 4px base grid
+     ═══════════════════════════════════════════════════════ */
+  --space-0: 0px;
+  --space-1: 2px;
+  --space-2: 4px;
+  --space-3: 6px;
+  --space-4: 8px;
+  --space-5: 10px;
+  --space-6: 12px;
+  --space-8: 16px;
+  --space-10: 20px;
+  --space-12: 24px;
+  --space-16: 32px;
+
+  /* ═══════════════════════════════════════════════════════
+     RADII
+     ═══════════════════════════════════════════════════════ */
+  --radius-sm: 3px;
+  --radius-md: 5px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+  --radius-full: 100px;
+
+  /* ═══════════════════════════════════════════════════════
+     SHADOWS — subtle depth indicators
+     ═══════════════════════════════════════════════════════ */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.5);
+  --shadow-inset: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+
+  /* ═══════════════════════════════════════════════════════
+     TRANSITIONS
+     ═══════════════════════════════════════════════════════ */
+  --transition-fast: 80ms ease;
+  --transition-default: 150ms ease;
+  --transition-slow: 250ms ease;
+
+  /* ═══════════════════════════════════════════════════════
+     LAYOUT
+     ═══════════════════════════════════════════════════════ */
+  --sidebar-width: 220px;
+  --right-panel-width: 280px;
+  --tab-height: 35px;
+  --titlebar-height: 38px;     /* macOS traffic lights area */
+  --status-bar-height: 22px;
+}

@@ -1,11 +1,23 @@
 import { execFile } from 'child_process'
 import { existsSync } from 'fs'
 import { copyFile, mkdir, readdir, rm } from 'fs/promises'
-import { promisify } from 'util'
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'path'
 import type { CreateWorktreeProgress } from '../shared/workspace-creation'
 
-const execFileAsync = promisify(execFile)
+function execFileAsync(cmd: string, args: string[], opts?: any): Promise<{ stdout: string; stderr: string }> {
+  return new Promise((resolve, reject) => {
+    execFile(cmd, args, opts, (error, stdout, stderr) => {
+      if (error) {
+        const err = error as any;
+        err.stdout = stdout;
+        err.stderr = stderr;
+        reject(err);
+      } else {
+        resolve({ stdout: stdout as string, stderr: stderr as string });
+      }
+    });
+  });
+}
 
 type CreateWorktreeProgressReporter = (progress: CreateWorktreeProgress) => void
 

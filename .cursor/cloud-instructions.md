@@ -2,19 +2,20 @@
 
 ## Overview
 
-Constellagent is a self-contained Electron desktop app (no backend services needed). All source lives in `desktop/`. The root `package.json` proxies all scripts to `desktop/`.
+Constellagent is a self-contained Electrobun desktop app (no backend services needed). All source lives in `desktop/`. The root `package.json` proxies all scripts to `desktop/`.
 
 ## Running the app
 
-- **Dev mode**: `DISPLAY=:1 bun run dev` from repo root (starts electron-vite dev server + Electron). On headless Linux, ensure a virtual display is running (xvfb is pre-installed; DISPLAY=:1 is usually available).
-- **Build**: `bun run build` — builds to `desktop/out/`.
-- dbus errors on Linux are harmless and expected.
+- **Dev mode**: `cd desktop && DISPLAY=:1 bunx electrobun dev` (builds bun process and serves the app). On headless Linux, ensure a virtual display is running (xvfb is pre-installed; DISPLAY=:1 is usually available).
+- **Build view**: `cd desktop && npx vite build` — builds the React view to `desktop/dist/`.
+- **Full build**: `cd desktop && npx vite build && bunx electrobun dev` — builds view + runs the app.
+- **HMR mode**: `cd desktop && bun run dev:hmr` — runs Vite dev server + Electrobun concurrently for hot reload.
+- dbus/libEGL/X11 errors on Linux are harmless and expected.
 
 ## Testing
 
-- **E2e tests**: `CI_TEST=1 xvfb-run --auto-servernum bun run test` — runs Playwright Electron tests serially.
-- Single test: `cd desktop && CI_TEST=1 xvfb-run --auto-servernum bunx playwright test e2e/<file>.spec.ts`
-- Playwright browsers are installed via `npx playwright install --with-deps`.
+- Manual testing: Launch the app and interact with it.
+- Playwright e2e tests are not yet adapted for Electrobun.
 
 ## Lint
 
@@ -22,6 +23,6 @@ Constellagent is a self-contained Electron desktop app (no backend services need
 
 ## Key caveats
 
-- `node-pty` must be compiled for the Electron Node ABI. `bun install` triggers `postinstall` which runs `bunx electron-rebuild`. If native modules break, run `bun run rebuild` from repo root.
-- The `postinstall` also runs `patch-electron-dev.sh` which patches Electron.app icon/name on macOS; it exits cleanly on Linux via an explicit platform guard.
+- PTY support uses Bun's built-in `Bun.Terminal` API (no native node-pty module needed).
+- The app requires `libwebkit2gtk-4.1-dev` and GTK3 dev packages on Linux for the system webview.
 - Standard dev commands are documented in the root `CLAUDE.md`.
