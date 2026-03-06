@@ -129,6 +129,8 @@ export interface AppState {
   setTabUnsaved: (tabId: string, unsaved: boolean) => void
   notifyTabSaved: (tabId: string) => void
   openFileTab: (filePath: string) => void
+  retargetTabsForPath: (oldPath: string, newPath: string) => void
+  closeTabsForPath: (targetPath: string) => void
   openDiffTab: (workspaceId: string) => void
   nextWorkspace: () => void
   prevWorkspace: () => void

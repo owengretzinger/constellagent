@@ -69,6 +69,72 @@
   flex: 1;
   min-height: 0;
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.treeViewport {
+  flex: 1;
+  min-height: 0;
+}
+
+.treeActionBar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--surface-1);
+}
+
+.treeActionLabel {
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+  font-family: var(--font-ui);
+  flex-shrink: 0;
+}
+
+.treeActionInput {
+  flex: 1;
+  min-width: 0;
+  padding: var(--space-2) var(--space-3);
+  background: var(--surface-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  font-family: var(--font-mono);
+  outline: none;
+}
+
+.treeActionInput:focus {
+  border-color: var(--accent-blue);
+}
+
+.treeActionButton,
+.treeActionButtonSecondary {
+  padding: var(--space-2) var(--space-3);
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: var(--text-xs);
+  font-family: var(--font-ui);
+  cursor: pointer;
+  transition: opacity var(--transition-fast);
+}
+
+.treeActionButton {
+  background: var(--accent-blue);
+  color: var(--text-primary);
+}
+
+.treeActionButtonSecondary {
+  background: var(--surface-4);
+  color: var(--text-secondary);
+}
+
+.treeActionButton:hover,
+.treeActionButtonSecondary:hover {
+  opacity: 0.85;
 }
 
 .treeNode {
@@ -86,6 +152,11 @@
 
 .treeNode:hover {
   background: rgba(255, 255, 255, 0.03);
+}
+
+.treeNode:hover .treeActions,
+.treeNodeActive .treeActions {
+  opacity: 1;
 }
 
 .treeNodeActive {
@@ -109,6 +180,15 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.treeActions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity var(--transition-fast);
 }
 
 /* ── Git Status Colors (must override active/hover states) ── */
@@ -355,6 +435,15 @@
 .fileActionBtn:disabled {
   opacity: 0.3;
   cursor: not-allowed;
+}
+
+.treeActionBtn {
+  width: auto;
+  min-width: 22px;
+  padding: 0 4px;
+  font-size: 11px;
+  font-family: var(--font-ui);
+  font-weight: var(--weight-semibold);
 }
 
 /* ── Empty States ── */

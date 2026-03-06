@@ -5,6 +5,25 @@ import { titleFromTerminalCommand } from './terminal-tab-title'
 
 const DEFAULT_PR_LINK_PROVIDER = 'github' as const
 
+function pathMatchesTarget(filePath: string, targetPath: string): boolean {
+  return filePath === targetPath || filePath.startsWith(`${targetPath}/`)
+}
+
+function remapFilePath(filePath: string, oldPath: string, newPath: string): string {
+  if (filePath === oldPath) return newPath
+  if (filePath.startsWith(`${oldPath}/`)) {
+    return `${newPath}${filePath.slice(oldPath.length)}`
+  }
+  return filePath
+}
+
+function pruneLastActiveTabMap(tabMap: Record<string, string>, tabs: Tab[]): Record<string, string> {
+  const liveTabIds = new Set(tabs.map((tab) => tab.id))
+  return Object.fromEntries(
+    Object.entries(tabMap).filter(([, tabId]) => liveTabIds.has(tabId))
+  )
+}
+
 export const useAppStore = create<AppState>((set, get) => ({
   projects: [],
   workspaces: [],
@@ -258,6 +277,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       return {
         tabs: newTabs,
         activeTabId: wasActive ? (wsTabs[wsTabs.length - 1]?.id ?? null) : s.activeTabId,
+        lastActiveTabByWorkspace: pruneLastActiveTabMap(s.lastActiveTabByWorkspace, newTabs),
       }
     }),
 
@@ -386,6 +406,31 @@ export const useAppStore = create<AppState>((set, get) => ({
       filePath,
     })
   },
+
+  retargetTabsForPath: (oldPath, newPath) =>
+    set((s) => ({
+      tabs: s.tabs.map((tab) => {
+        if (tab.type !== 'file') return tab
+        const nextPath = remapFilePath(tab.filePath, oldPath, newPath)
+        return nextPath === tab.filePath ? tab : { ...tab, filePath: nextPath }
+      }),
+    })),
+
+  closeTabsForPath: (targetPath) =>
+    set((s) => {
+      const tabs = s.tabs.filter(
+        (tab) => tab.type !== 'file' || !pathMatchesTarget(tab.filePath, targetPath)
+      )
+      const activeTabId = tabs.some((tab) => tab.id === s.activeTabId)
+        ? s.activeTabId
+        : (tabs.find((tab) => tab.workspaceId === s.activeWorkspaceId)?.id ?? tabs[0]?.id ?? null)
+
+      return {
+        tabs,
+        activeTabId,
+        lastActiveTabByWorkspace: pruneLastActiveTabMap(s.lastActiveTabByWorkspace, tabs),
+      }
+    }),
 
   nextWorkspace: () => {
     const s = get()

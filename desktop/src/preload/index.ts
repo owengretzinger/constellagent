@@ -83,6 +83,14 @@ const api = {
       ipcRenderer.invoke(IPC.FS_READ_FILE, filePath),
     writeFile: (filePath: string, content: string) =>
       ipcRenderer.invoke(IPC.FS_WRITE_FILE, filePath, content),
+    createFile: (filePath: string) =>
+      ipcRenderer.invoke(IPC.FS_CREATE_FILE, filePath),
+    createDirectory: (dirPath: string) =>
+      ipcRenderer.invoke(IPC.FS_CREATE_DIRECTORY, dirPath),
+    renamePath: (oldPath: string, newPath: string) =>
+      ipcRenderer.invoke(IPC.FS_RENAME_PATH, oldPath, newPath),
+    deletePath: (targetPath: string) =>
+      ipcRenderer.invoke(IPC.FS_DELETE_PATH, targetPath),
     watchDir: (dirPath: string) =>
       ipcRenderer.invoke(IPC.FS_WATCH_START, dirPath),
     unwatchDir: (dirPath: string) =>

@@ -1,5 +1,12 @@
-import { readdir, readFile as fsReadFile, writeFile as fsWriteFile, stat } from 'fs/promises'
-import { join, relative } from 'path'
+import {
+  readdir,
+  readFile as fsReadFile,
+  writeFile as fsWriteFile,
+  mkdir,
+  rename as fsRename,
+  rm,
+} from 'fs/promises'
+import { dirname, join, relative } from 'path'
 import { execFile } from 'child_process'
 import { promisify } from 'util'
 
@@ -24,6 +31,19 @@ const SKIP_DIRS = new Set([
   'coverage', '.nyc_output',
 ])
 
+interface TreeEntry {
+  path: string
+  type: 'file' | 'directory'
+}
+
+function shouldIncludeDirectory(name: string): boolean {
+  return !name.startsWith('.') && !SKIP_DIRS.has(name)
+}
+
+function shouldIncludeFile(name: string): boolean {
+  return (!name.startsWith('.') || name === '.gitignore' || isEnvFile(name)) && !SKIP_DIRS.has(name)
+}
+
 export class FileService {
   static async getTree(dirPath: string, depth = 0): Promise<FileNode[]> {
     if (depth > 8) return [] // prevent infinite recursion
@@ -41,8 +61,7 @@ export class FileService {
     const nodes: FileNode[] = []
 
     const sorted = entries
-      .filter((e) => !e.name.startsWith('.') || e.name === '.gitignore' || isEnvFile(e.name))
-      .filter((e) => !SKIP_DIRS.has(e.name))
+      .filter((e) => e.isDirectory() ? shouldIncludeDirectory(e.name) : shouldIncludeFile(e.name))
       .sort((a, b) => {
         // Directories first, then alphabetical
         if (a.isDirectory() && !b.isDirectory()) return -1
@@ -79,10 +98,19 @@ export class FileService {
       { cwd: dirPath }
     )
 
-    const files = stdout.trim().split('\n').filter(Boolean)
+    const files = stdout.trim().split('\n').filter(Boolean).map((filePath) => ({
+      path: filePath,
+      type: 'file' as const,
+    }))
     const envFiles = await this.findEnvFiles(dirPath)
-    const merged = Array.from(new Set([...files, ...envFiles]))
-    return this.buildTreeFromPaths(dirPath, merged)
+    const directories = await this.findVisibleDirectories(dirPath)
+    const merged = new Map<string, TreeEntry>()
+
+    for (const entry of [...files, ...envFiles.map((filePath) => ({ path: filePath, type: 'file' as const })), ...directories.map((directoryPath) => ({ path: directoryPath, type: 'directory' as const }))]) {
+      merged.set(`${entry.type}:${entry.path}`, entry)
+    }
+
+    return this.buildTreeFromEntries(dirPath, Array.from(merged.values()))
   }
 
   private static async findEnvFiles(basePath: string, currentPath = basePath, depth = 0): Promise<string[]> {
@@ -96,7 +124,7 @@ export class FileService {
 
       const fullPath = join(currentPath, entry.name)
       if (entry.isDirectory()) {
-        if (entry.name.startsWith('.')) continue
+        if (!shouldIncludeDirectory(entry.name)) continue
         files.push(...await this.findEnvFiles(basePath, fullPath, depth + 1))
         continue
       }
@@ -109,24 +137,46 @@ export class FileService {
     return files
   }
 
-  private static buildTreeFromPaths(basePath: string, paths: string[]): FileNode[] {
+  private static async findVisibleDirectories(basePath: string, currentPath = basePath, depth = 0): Promise<string[]> {
+    if (depth > 8) return []
+
+    const entries = await readdir(currentPath, { withFileTypes: true })
+    const directories: string[] = []
+
+    for (const entry of entries) {
+      if (!entry.isDirectory() || !shouldIncludeDirectory(entry.name)) continue
+
+      const fullPath = join(currentPath, entry.name)
+      directories.push(relative(basePath, fullPath).replaceAll('\\', '/'))
+      directories.push(...await this.findVisibleDirectories(basePath, fullPath, depth + 1))
+    }
+
+    return directories
+  }
+
+  private static buildTreeFromEntries(basePath: string, entries: TreeEntry[]): FileNode[] {
     const root: FileNode = { name: '', path: basePath, type: 'directory', children: [] }
 
-    for (const filePath of paths) {
-      const parts = filePath.split('/')
+    for (const entry of entries) {
+      const parts = entry.path.split('/').filter(Boolean)
+      if (parts.length === 0) continue
       let current = root
 
       for (let i = 0; i < parts.length; i++) {
         const part = parts[i]
-        const isFile = i === parts.length - 1
+        const isLeaf = i === parts.length - 1
+        const nodeType: FileNode['type'] = isLeaf ? entry.type : 'directory'
         const fullPath = join(basePath, ...parts.slice(0, i + 1))
+        const existing = current.children!.find(
+          (child) => child.name === part && child.type === nodeType
+        )
 
-        if (isFile) {
-          current.children!.push({ name: part, path: fullPath, type: 'file' })
+        if (nodeType === 'file') {
+          if (!existing) {
+            current.children!.push({ name: part, path: fullPath, type: 'file' })
+          }
         } else {
-          let dir = current.children!.find(
-            (c) => c.name === part && c.type === 'directory'
-          )
+          let dir = existing
           if (!dir) {
             dir = { name: part, path: fullPath, type: 'directory', children: [] }
             current.children!.push(dir)
@@ -158,5 +208,22 @@ export class FileService {
 
   static async writeFile(filePath: string, content: string): Promise<void> {
     await fsWriteFile(filePath, content, 'utf-8')
+  }
+
+  static async createFile(filePath: string): Promise<void> {
+    await mkdir(dirname(filePath), { recursive: true })
+    await fsWriteFile(filePath, '', { encoding: 'utf-8', flag: 'wx' })
+  }
+
+  static async createDirectory(dirPath: string): Promise<void> {
+    await mkdir(dirPath, { recursive: false })
+  }
+
+  static async renamePath(oldPath: string, newPath: string): Promise<void> {
+    await fsRename(oldPath, newPath)
+  }
+
+  static async deletePath(targetPath: string): Promise<void> {
+    await rm(targetPath, { recursive: true, force: false })
   }
 }

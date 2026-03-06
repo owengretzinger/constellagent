@@ -298,3 +298,99 @@ test.describe('Changed files & diff viewer', () => {
     }
   })
 })
+
+test.describe('File tree management', () => {
+  test('can create, rename, and delete a file from the tree', async () => {
+    test.setTimeout(45000)
+    const repoPath = createTestRepo('tree-manage-1')
+    const { app, window } = await launchApp()
+
+    try {
+      const worktreePath = await setupWorkspace(window, repoPath, 'tree-manage')
+      const realWt = realpathSync(worktreePath)
+
+      await window.waitForTimeout(1500)
+
+      const rootRow = window.locator('[class*="treeNode"]').first()
+      await rootRow.hover()
+      await rootRow.locator('button[title="New file"]').click()
+
+      const actionBar = window.locator('[class*="treeActionBar"]')
+      await expect(actionBar).toBeVisible()
+      await actionBar.locator('input').fill('notes.ts')
+      await actionBar.locator('button', { hasText: 'Create file' }).click()
+
+      const createdPath = join(realWt, 'notes.ts')
+      await expect(window.locator('[class*="tabTitle"]', { hasText: 'notes.ts' })).toBeVisible()
+      expect(existsSync(createdPath)).toBe(true)
+
+      const monacoEditor = window.locator('.monaco-editor .view-lines').first()
+      await monacoEditor.click()
+      await window.keyboard.press(`${cmdKey}+a`)
+      await window.keyboard.type('export const created = true\n')
+      await window.keyboard.press(`${cmdKey}+s`)
+      await window.waitForTimeout(500)
+      expect(readFileSync(createdPath, 'utf-8')).toContain('created = true')
+
+      const createdRow = window.locator('[class*="treeNode"]', { hasText: 'notes.ts' }).first()
+      await createdRow.hover()
+      await createdRow.locator('button[title="Rename"]').click()
+      await actionBar.locator('input').fill('notes-renamed.ts')
+      await actionBar.locator('button', { hasText: 'Rename' }).click()
+
+      const renamedPath = join(realWt, 'notes-renamed.ts')
+      expect(existsSync(createdPath)).toBe(false)
+      expect(existsSync(renamedPath)).toBe(true)
+      await expect(window.locator('[class*="tabTitle"]', { hasText: 'notes-renamed.ts' })).toBeVisible()
+      const openFilePaths = await window.evaluate(() =>
+        (window as any).__store
+          .getState()
+          .tabs.filter((tab: any) => tab.type === 'file')
+          .map((tab: any) => tab.filePath)
+      )
+      expect(openFilePaths).toContain(renamedPath)
+      expect(openFilePaths).not.toContain(createdPath)
+
+      const renamedRow = window.locator('[class*="treeNode"]', { hasText: 'notes-renamed.ts' }).first()
+      await renamedRow.hover()
+      await renamedRow.locator('button[title="Delete"]').click()
+      await window.locator('button', { hasText: 'Delete' }).last().click()
+      await window.waitForTimeout(500)
+
+      expect(existsSync(renamedPath)).toBe(false)
+      await expect(window.locator('[class*="tabTitle"]', { hasText: 'notes-renamed.ts' })).toHaveCount(0)
+      await expect(window.locator('[class*="treeNode"]', { hasText: 'notes-renamed.ts' })).toHaveCount(0)
+    } finally {
+      await app.close()
+      cleanupTestRepo(repoPath)
+    }
+  })
+
+  test('shows newly created empty folders in the tree', async () => {
+    const repoPath = createTestRepo('tree-manage-2')
+    const { app, window } = await launchApp()
+
+    try {
+      const worktreePath = await setupWorkspace(window, repoPath, 'tree-folder')
+      const realWt = realpathSync(worktreePath)
+
+      await window.waitForTimeout(1500)
+
+      const rootRow = window.locator('[class*="treeNode"]').first()
+      await rootRow.hover()
+      await rootRow.locator('button[title="New folder"]').click()
+
+      const actionBar = window.locator('[class*="treeActionBar"]')
+      await expect(actionBar).toBeVisible()
+      await actionBar.locator('input').fill('empty-folder')
+      await actionBar.locator('button', { hasText: 'Create folder' }).click()
+      await window.waitForTimeout(500)
+
+      expect(existsSync(join(realWt, 'empty-folder'))).toBe(true)
+      await expect(window.locator('[class*="treeNode"]', { hasText: 'empty-folder' })).toBeVisible()
+    } finally {
+      await app.close()
+      cleanupTestRepo(repoPath)
+    }
+  })
+})

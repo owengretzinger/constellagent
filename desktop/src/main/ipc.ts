@@ -342,6 +342,22 @@ export function registerIpcHandlers(): void {
     return FileService.writeFile(filePath, content)
   })
 
+  ipcMain.handle(IPC.FS_CREATE_FILE, async (_e, filePath: string) => {
+    return FileService.createFile(filePath)
+  })
+
+  ipcMain.handle(IPC.FS_CREATE_DIRECTORY, async (_e, dirPath: string) => {
+    return FileService.createDirectory(dirPath)
+  })
+
+  ipcMain.handle(IPC.FS_RENAME_PATH, async (_e, oldPath: string, newPath: string) => {
+    return FileService.renamePath(oldPath, newPath)
+  })
+
+  ipcMain.handle(IPC.FS_DELETE_PATH, async (_e, targetPath: string) => {
+    return FileService.deletePath(targetPath)
+  })
+
   // ── Filesystem watcher handlers ──
   ipcMain.handle(IPC.FS_WATCH_START, (_e, dirPath: string) => {
     const senderId = _e.sender.id
