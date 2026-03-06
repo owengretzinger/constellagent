@@ -1,9 +1,9 @@
 import { mkdirSync, readdirSync, readFileSync, statSync, unlinkSync } from 'fs'
 import { join } from 'path'
-import { BrowserWindow } from 'electron'
 import { IPC } from '../shared/ipc-channels'
 import type { AgentTurnEvent, AgentTurnEventType, AgentTurnOutcome } from '../shared/agent-events'
 import { AGENT_EVENT_DEFAULT_DIR } from './agent-events'
+import { broadcastToRenderer } from './runtime-bridge'
 
 const POLL_INTERVAL = 500
 const FILE_SETTLE_MS = 100
@@ -197,18 +197,10 @@ export class NotificationWatcher {
   }
 
   private notifyRenderer(workspaceId: string): void {
-    for (const win of BrowserWindow.getAllWindows()) {
-      if (!win.isDestroyed()) {
-        win.webContents.send(IPC.AGENT_NOTIFY_WORKSPACE, workspaceId)
-      }
-    }
+    broadcastToRenderer(IPC.AGENT_NOTIFY_WORKSPACE, workspaceId)
   }
 
   private sendActivity(workspaceIds: string[]): void {
-    for (const win of BrowserWindow.getAllWindows()) {
-      if (!win.isDestroyed()) {
-        win.webContents.send(IPC.AGENT_ACTIVITY_UPDATE, workspaceIds)
-      }
-    }
+    broadcastToRenderer(IPC.AGENT_ACTIVITY_UPDATE, workspaceIds)
   }
 }

@@ -39,6 +39,7 @@ export const IPC = {
   // App operations
   APP_SELECT_DIRECTORY: 'app:select-directory',
   APP_ADD_PROJECT_PATH: 'app:add-project-path',
+  APP_OPEN_EXTERNAL: 'app:open-external',
 
   // Agent activity integration
   AGENT_NOTIFY_WORKSPACE: 'agent:notify-workspace',
@@ -77,6 +78,5 @@ export const IPC = {
 
   // State persistence
   STATE_SAVE: 'state:save',
-  STATE_SAVE_SYNC: 'state:save-sync',
   STATE_LOAD: 'state:load',
 } as const

@@ -170,7 +170,7 @@ export function TerminalPanel({ ptyId, active }: Props) {
         const serializeAddon = new SerializeAddon()
         const webLinksAddon = new WebLinksAddon((event, uri) => {
           event.preventDefault()
-          window.open(uri, '_blank')
+          void window.api.app.openExternal(uri)
         })
         term.loadAddon(fitAddon)
         term.loadAddon(serializeAddon)

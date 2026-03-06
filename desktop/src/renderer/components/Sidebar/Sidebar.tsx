@@ -199,7 +199,7 @@ function WorkspaceMeta({
           title={`PR #${prInfo!.number}: ${prInfo!.title}`}
           onClick={(e) => {
             e.stopPropagation();
-            window.open(providerUrl(prInfo!.url, prLinkProvider));
+            void window.api.app.openExternal(providerUrl(prInfo!.url, prLinkProvider));
           }}
         >
           <PrStateIcon state={prInfo!.state} />
@@ -727,7 +727,7 @@ export function Sidebar() {
       const provider =
         projects.find((project) => project.id === projectId)?.prLinkProvider ??
         "github";
-      window.open(providerUrl(url, provider));
+      void window.api.app.openExternal(providerUrl(url, provider));
     },
     [projects],
   );

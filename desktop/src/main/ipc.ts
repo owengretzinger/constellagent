@@ -1,9 +1,8 @@
-import { ipcMain, dialog, app, BrowserWindow, clipboard, type WebContents } from 'electron'
+import { Utils } from 'electrobun/bun'
 import { join, relative } from 'path'
 import { mkdir, writeFile } from 'fs/promises'
-import { existsSync, mkdirSync, writeFileSync } from 'fs'
-import { tmpdir } from 'os'
-import { watch, type FSWatcher } from 'fs'
+import { existsSync, watch, type FSWatcher } from 'fs'
+import { homedir, tmpdir } from 'os'
 import { IPC } from '../shared/ipc-channels'
 import type { CreateWorktreeProgressEvent } from '../shared/workspace-creation'
 import { PtyManager } from './pty-manager'
@@ -19,6 +18,11 @@ import {
   installPiActivityExtension,
   uninstallPiActivityExtension,
 } from './pi-config'
+import {
+  type RendererConnection,
+  broadcastToRenderer,
+  requireRendererConnection,
+} from './runtime-bridge'
 
 const ptyManager = new PtyManager()
 const automationScheduler = new AutomationScheduler(ptyManager)
@@ -27,21 +31,12 @@ export async function catchUpAutomationsOnWake(now = new Date()): Promise<void> 
   await automationScheduler.catchUpOnWake(now)
 }
 
-interface FsWatchSubscriber {
-  webContents: WebContents
-  refs: number
-}
-
 interface FsWatcherEntry {
   watcher: FSWatcher
   timer: ReturnType<typeof setTimeout> | null
-  subscribers: Map<number, FsWatchSubscriber>
-  totalRefs: number
+  refs: number
 }
 
-// Filesystem watchers keyed by watched directory.
-// Each renderer subscription increments a ref count so one panel unmounting
-// does not tear down a shared watcher used by another panel.
 const fsWatchers = new Map<string, FsWatcherEntry>()
 
 interface StateSanitizeResult {
@@ -59,6 +54,13 @@ interface TabLike {
   id: string
   workspaceId: string
 }
+
+type InvokeHandler = (sender: RendererConnection, ...args: any[]) => unknown | Promise<unknown>
+type SendHandler = (sender: RendererConnection, ...args: any[]) => void | Promise<void>
+
+const invokeHandlers = new Map<string, InvokeHandler>()
+const sendHandlers = new Map<string, SendHandler>()
+let handlersRegistered = false
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null
@@ -127,7 +129,7 @@ function sanitizeLoadedState(data: unknown): StateSanitizeResult {
       nextActiveTabId = rawActiveTabId
     } else if (nextActiveWorkspaceId) {
       const fallback = keptTabs.find(
-        (tab) => isTabLike(tab) && tab.workspaceId === nextActiveWorkspaceId
+        (tab) => isTabLike(tab) && tab.workspaceId === nextActiveWorkspaceId,
       )
       if (isTabLike(fallback)) nextActiveTabId = fallback.id
     }
@@ -140,8 +142,8 @@ function sanitizeLoadedState(data: unknown): StateSanitizeResult {
   if (isRecord(data.lastActiveTabByWorkspace)) {
     const filtered = Object.fromEntries(
       Object.entries(data.lastActiveTabByWorkspace).filter(([workspaceId]) =>
-        keptWorkspaceIds.has(workspaceId)
-      )
+        keptWorkspaceIds.has(workspaceId),
+      ),
     )
     if (
       Object.keys(filtered).length !==
@@ -155,160 +157,230 @@ function sanitizeLoadedState(data: unknown): StateSanitizeResult {
   return { data: next, changed, removedWorkspaceCount }
 }
 
+function userDataDir(): string {
+  if (process.env.CONSTELLAGENT_USER_DATA_DIR) {
+    return process.env.CONSTELLAGENT_USER_DATA_DIR
+  }
+  if (process.platform === 'darwin') {
+    return join(homedir(), 'Library', 'Application Support', 'Constellagent')
+  }
+  if (process.platform === 'win32') {
+    return join(process.env.APPDATA || join(homedir(), 'AppData', 'Roaming'), 'Constellagent')
+  }
+  return join(process.env.XDG_CONFIG_HOME || join(homedir(), '.config'), 'constellagent')
+}
+
+function stateFilePath(): string {
+  return join(userDataDir(), 'constellagent-state.json')
+}
+
+function resourceRoot(): string {
+  return process.env.CONSTELLAGENT_RESOURCE_ROOT || join(import.meta.dir, '..')
+}
+
+function getHookScriptPath(name: string): string {
+  return join(resourceRoot(), 'claude-hooks', name)
+}
+
+function getCodexHookScriptPath(name: string): string {
+  return join(resourceRoot(), 'codex-hooks', name)
+}
+
+function registerInvoke(channel: string, handler: InvokeHandler): void {
+  invokeHandlers.set(channel, handler)
+}
+
+function registerSend(channel: string, handler: SendHandler): void {
+  sendHandlers.set(channel, handler)
+}
+
+export async function handleInvoke(
+  channel: string,
+  args: unknown[],
+  sender = requireRendererConnection(),
+): Promise<unknown> {
+  const handler = invokeHandlers.get(channel)
+  if (!handler) {
+    throw new Error(`No invoke handler registered for ${channel}`)
+  }
+  return handler(sender, ...(args as any[]))
+}
+
+export async function handleSend(
+  channel: string,
+  args: unknown[],
+  sender = requireRendererConnection(),
+): Promise<void> {
+  const handler = sendHandlers.get(channel)
+  if (!handler) {
+    throw new Error(`No send handler registered for ${channel}`)
+  }
+  await handler(sender, ...(args as any[]))
+}
+
 export function registerIpcHandlers(): void {
-  // ── Git handlers ──
-  ipcMain.handle(IPC.GIT_LIST_WORKTREES, async (_e, repoPath: string) => {
+  if (handlersRegistered) return
+  handlersRegistered = true
+
+  registerInvoke(IPC.GIT_LIST_WORKTREES, async (_sender, repoPath: string) => {
     return GitService.listWorktrees(repoPath)
   })
 
-  ipcMain.handle(IPC.GIT_CREATE_WORKTREE, async (_e, repoPath: string, name: string, branch: string, newBranch: boolean, baseBranch?: string, force?: boolean, requestId?: string) => {
-    return GitService.createWorktree(
-      repoPath,
-      name,
-      branch,
-      newBranch,
-      baseBranch,
-      force,
-      (progress) => {
-        const payload: CreateWorktreeProgressEvent = { requestId, ...progress }
-        _e.sender.send(IPC.GIT_CREATE_WORKTREE_PROGRESS, payload)
-      }
-    )
-  })
+  registerInvoke(
+    IPC.GIT_CREATE_WORKTREE,
+    async (
+      sender,
+      repoPath: string,
+      name: string,
+      branch: string,
+      newBranch: boolean,
+      baseBranch?: string,
+      force?: boolean,
+      requestId?: string,
+    ) => {
+      return GitService.createWorktree(
+        repoPath,
+        name,
+        branch,
+        newBranch,
+        baseBranch,
+        force,
+        (progress) => {
+          const payload: CreateWorktreeProgressEvent = { requestId, ...progress }
+          sender.send(IPC.GIT_CREATE_WORKTREE_PROGRESS, payload)
+        },
+      )
+    },
+  )
 
-  ipcMain.handle(IPC.GIT_CREATE_WORKTREE_FROM_PR, async (_e, repoPath: string, name: string, prNumber: number, localBranch: string, force?: boolean, requestId?: string) => {
-    return GitService.createWorktreeFromPr(
-      repoPath,
-      name,
-      prNumber,
-      localBranch,
-      force,
-      (progress) => {
-        const payload: CreateWorktreeProgressEvent = { requestId, ...progress }
-        _e.sender.send(IPC.GIT_CREATE_WORKTREE_PROGRESS, payload)
-      }
-    )
-  })
+  registerInvoke(
+    IPC.GIT_CREATE_WORKTREE_FROM_PR,
+    async (
+      sender,
+      repoPath: string,
+      name: string,
+      prNumber: number,
+      localBranch: string,
+      force?: boolean,
+      requestId?: string,
+    ) => {
+      return GitService.createWorktreeFromPr(
+        repoPath,
+        name,
+        prNumber,
+        localBranch,
+        force,
+        (progress) => {
+          const payload: CreateWorktreeProgressEvent = { requestId, ...progress }
+          sender.send(IPC.GIT_CREATE_WORKTREE_PROGRESS, payload)
+        },
+      )
+    },
+  )
 
-  ipcMain.handle(IPC.GIT_REMOVE_WORKTREE, async (_e, repoPath: string, worktreePath: string) => {
+  registerInvoke(IPC.GIT_REMOVE_WORKTREE, async (_sender, repoPath: string, worktreePath: string) => {
     return GitService.removeWorktree(repoPath, worktreePath)
   })
 
-  ipcMain.handle(IPC.GIT_GET_STATUS, async (_e, worktreePath: string) => {
+  registerInvoke(IPC.GIT_GET_STATUS, async (_sender, worktreePath: string) => {
     return GitService.getStatus(worktreePath)
   })
 
-  ipcMain.handle(IPC.GIT_GET_DIFF, async (_e, worktreePath: string, staged: boolean) => {
+  registerInvoke(IPC.GIT_GET_DIFF, async (_sender, worktreePath: string, staged: boolean) => {
     return GitService.getDiff(worktreePath, staged)
   })
 
-  ipcMain.handle(IPC.GIT_GET_FILE_DIFF, async (_e, worktreePath: string, filePath: string) => {
+  registerInvoke(IPC.GIT_GET_FILE_DIFF, async (_sender, worktreePath: string, filePath: string) => {
     return GitService.getFileDiff(worktreePath, filePath)
   })
 
-  ipcMain.handle(IPC.GIT_GET_BRANCHES, async (_e, repoPath: string) => {
+  registerInvoke(IPC.GIT_GET_BRANCHES, async (_sender, repoPath: string) => {
     return GitService.getBranches(repoPath)
   })
 
-  ipcMain.handle(IPC.GIT_STAGE, async (_e, worktreePath: string, paths: string[]) => {
+  registerInvoke(IPC.GIT_STAGE, async (_sender, worktreePath: string, paths: string[]) => {
     return GitService.stage(worktreePath, paths)
   })
 
-  ipcMain.handle(IPC.GIT_UNSTAGE, async (_e, worktreePath: string, paths: string[]) => {
+  registerInvoke(IPC.GIT_UNSTAGE, async (_sender, worktreePath: string, paths: string[]) => {
     return GitService.unstage(worktreePath, paths)
   })
 
-  ipcMain.handle(IPC.GIT_DISCARD, async (_e, worktreePath: string, paths: string[], untracked: string[]) => {
+  registerInvoke(IPC.GIT_DISCARD, async (_sender, worktreePath: string, paths: string[], untracked: string[]) => {
     return GitService.discard(worktreePath, paths, untracked)
   })
 
-  ipcMain.handle(IPC.GIT_COMMIT, async (_e, worktreePath: string, message: string) => {
+  registerInvoke(IPC.GIT_COMMIT, async (_sender, worktreePath: string, message: string) => {
     return GitService.commit(worktreePath, message)
   })
 
-  ipcMain.handle(IPC.GIT_GET_CURRENT_BRANCH, async (_e, worktreePath: string) => {
+  registerInvoke(IPC.GIT_GET_CURRENT_BRANCH, async (_sender, worktreePath: string) => {
     return GitService.getCurrentBranch(worktreePath)
   })
 
-  ipcMain.handle(IPC.GIT_GET_DEFAULT_BRANCH, async (_e, repoPath: string) => {
+  registerInvoke(IPC.GIT_GET_DEFAULT_BRANCH, async (_sender, repoPath: string) => {
     return GitService.getDefaultBranch(repoPath)
   })
 
-  // ── GitHub handlers ──
-  ipcMain.handle(IPC.GITHUB_GET_PR_STATUSES, async (_e, repoPath: string, branches: string[]) => {
+  registerInvoke(IPC.GITHUB_GET_PR_STATUSES, async (_sender, repoPath: string, branches: string[]) => {
     return GithubService.getPrStatuses(repoPath, branches)
   })
 
-  ipcMain.handle(IPC.GITHUB_LIST_OPEN_PRS, async (_e, repoPath: string) => {
+  registerInvoke(IPC.GITHUB_LIST_OPEN_PRS, async (_sender, repoPath: string) => {
     return GithubService.listOpenPrs(repoPath)
   })
 
-  // ── PTY handlers ──
-  ipcMain.handle(IPC.PTY_CREATE, async (_e, workingDir: string, shell?: string, extraEnv?: Record<string, string>) => {
-    const win = BrowserWindow.fromWebContents(_e.sender)
-    if (!win) throw new Error('No window found')
-    return ptyManager.create(workingDir, win.webContents, shell, undefined, undefined, extraEnv)
+  registerInvoke(IPC.PTY_CREATE, async (sender, workingDir: string, shell?: string, extraEnv?: Record<string, string>) => {
+    return ptyManager.create(workingDir, sender, shell, undefined, undefined, extraEnv)
   })
 
-  ipcMain.on(IPC.PTY_WRITE, (_e, ptyId: string, data: string) => {
+  registerSend(IPC.PTY_WRITE, (_sender, ptyId: string, data: string) => {
     ptyManager.write(ptyId, data)
   })
 
-  ipcMain.on(IPC.PTY_RESIZE, (_e, ptyId: string, cols: number, rows: number) => {
+  registerSend(IPC.PTY_RESIZE, (_sender, ptyId: string, cols: number, rows: number) => {
     ptyManager.resize(ptyId, cols, rows)
   })
 
-  ipcMain.on(IPC.PTY_DESTROY, (_e, ptyId: string) => {
+  registerSend(IPC.PTY_DESTROY, (_sender, ptyId: string) => {
     ptyManager.destroy(ptyId)
   })
 
-  ipcMain.handle(IPC.PTY_LIST, async () => {
+  registerInvoke(IPC.PTY_LIST, async () => {
     return ptyManager.list()
   })
 
-  ipcMain.handle(IPC.PTY_REATTACH, async (_e, ptyId: string, sinceSeq?: number) => {
-    const win = BrowserWindow.fromWebContents(_e.sender)
-    if (!win) throw new Error('No window found')
-    return ptyManager.reattach(ptyId, win.webContents, sinceSeq)
+  registerInvoke(IPC.PTY_REATTACH, async (sender, ptyId: string, sinceSeq?: number) => {
+    return ptyManager.reattach(ptyId, sender, sinceSeq)
   })
 
-  // ── File handlers ──
-  ipcMain.handle(IPC.FS_GET_TREE, async (_e, dirPath: string) => {
+  registerInvoke(IPC.FS_GET_TREE, async (_sender, dirPath: string) => {
     return FileService.getTree(dirPath)
   })
 
-  ipcMain.handle(IPC.FS_GET_TREE_WITH_STATUS, async (_e, dirPath: string) => {
+  registerInvoke(IPC.FS_GET_TREE_WITH_STATUS, async (_sender, dirPath: string) => {
     const [tree, statuses, topLevel] = await Promise.all([
       FileService.getTree(dirPath),
       GitService.getStatus(dirPath).catch(() => []),
       GitService.getTopLevel(dirPath).catch(() => dirPath),
     ])
 
-    // git status --porcelain paths are relative to repo root, but
-    // git ls-files paths (used for the tree) are relative to cwd (dirPath).
-    // Compute prefix to convert between them.
-    const prefix = relative(topLevel, dirPath) // e.g. 'desktop' or ''
-
-    // Build map: dirPath-relative path → git status
+    const prefix = relative(topLevel, dirPath)
     const statusMap = new Map<string, string>()
     for (const s of statuses) {
       let p = s.path
-      // Handle renamed files: "old -> new" — use the new path
       if (p.includes(' -> ')) {
         p = p.split(' -> ')[1]
       }
-      // Strip repo-root prefix to get dirPath-relative path
       if (prefix && p.startsWith(prefix + '/')) {
         p = p.slice(prefix.length + 1)
       }
       statusMap.set(p, s.status)
     }
 
-    // Attach gitStatus to nodes, propagate to parent dirs
     function annotate(nodes: FileNode[]): boolean {
       let hasStatus = false
       for (const node of nodes) {
-        // Compute relative path from dirPath
         const rel = node.path.startsWith(dirPath)
           ? node.path.slice(dirPath.length + 1)
           : node.path
@@ -334,109 +406,70 @@ export function registerIpcHandlers(): void {
     return tree
   })
 
-  ipcMain.handle(IPC.FS_READ_FILE, async (_e, filePath: string) => {
+  registerInvoke(IPC.FS_READ_FILE, async (_sender, filePath: string) => {
     return FileService.readFile(filePath)
   })
 
-  ipcMain.handle(IPC.FS_WRITE_FILE, async (_e, filePath: string, content: string) => {
+  registerInvoke(IPC.FS_WRITE_FILE, async (_sender, filePath: string, content: string) => {
     return FileService.writeFile(filePath, content)
   })
 
-  // ── Filesystem watcher handlers ──
-  ipcMain.handle(IPC.FS_WATCH_START, (_e, dirPath: string) => {
-    const senderId = _e.sender.id
+  registerInvoke(IPC.FS_WATCH_START, async (_sender, dirPath: string) => {
     const existing = fsWatchers.get(dirPath)
     if (existing) {
-      const subscriber = existing.subscribers.get(senderId)
-      if (subscriber) {
-        subscriber.refs += 1
-      } else {
-        existing.subscribers.set(senderId, { webContents: _e.sender, refs: 1 })
-      }
-      existing.totalRefs += 1
+      existing.refs += 1
       return
     }
 
     try {
       const watcher = watch(dirPath, { recursive: true }, (_eventType, filename) => {
-        // For .git/ changes, only notify on meaningful state changes (commit, stage, branch switch)
-        // Ignore noisy internals like objects/, logs/, COMMIT_EDITMSG
         if (filename && (filename.startsWith('.git/') || filename.startsWith('.git\\'))) {
-          const f = filename.replaceAll('\\', '/')
+          const normalized = filename.replaceAll('\\', '/')
           const isStateChange =
-            f === '.git/index' || f === '.git/HEAD' || f.startsWith('.git/refs/')
+            normalized === '.git/index' ||
+            normalized === '.git/HEAD' ||
+            normalized.startsWith('.git/refs/')
           if (!isStateChange) return
         }
 
         const entry = fsWatchers.get(dirPath)
         if (!entry) return
-
-        // Debounce: wait 500ms of quiet before notifying
         if (entry.timer) clearTimeout(entry.timer)
         entry.timer = setTimeout(() => {
-          for (const [id, subscriber] of entry.subscribers.entries()) {
-            if (subscriber.webContents.isDestroyed()) {
-              entry.totalRefs = Math.max(0, entry.totalRefs - subscriber.refs)
-              entry.subscribers.delete(id)
-              continue
-            }
-            subscriber.webContents.send(IPC.FS_WATCH_CHANGED, dirPath)
-          }
-
-          if (entry.totalRefs <= 0 || entry.subscribers.size === 0) {
-            if (entry.timer) clearTimeout(entry.timer)
-            entry.watcher.close()
-            fsWatchers.delete(dirPath)
-          }
+          broadcastToRenderer(IPC.FS_WATCH_CHANGED, dirPath)
         }, 500)
       })
 
       fsWatchers.set(dirPath, {
         watcher,
         timer: null,
-        subscribers: new Map([[senderId, { webContents: _e.sender, refs: 1 }]]),
-        totalRefs: 1,
+        refs: 1,
       })
     } catch {
-      // Directory may not exist or be inaccessible — ignore
+      // Directory may not exist or be inaccessible.
     }
   })
 
-  ipcMain.on(IPC.FS_WATCH_STOP, (_e, dirPath: string) => {
+  registerSend(IPC.FS_WATCH_STOP, async (_sender, dirPath: string) => {
     const entry = fsWatchers.get(dirPath)
     if (!entry) return
-
-    const senderId = _e.sender.id
-    const subscriber = entry.subscribers.get(senderId)
-    if (subscriber) {
-      subscriber.refs -= 1
-      entry.totalRefs = Math.max(0, entry.totalRefs - 1)
-      if (subscriber.refs <= 0) {
-        entry.subscribers.delete(senderId)
-      }
-    } else {
-      entry.totalRefs = Math.max(0, entry.totalRefs - 1)
-    }
-
-    if (entry.totalRefs <= 0 || entry.subscribers.size === 0) {
-      if (entry.timer) clearTimeout(entry.timer)
-      entry.watcher.close()
-      fsWatchers.delete(dirPath)
-    }
+    entry.refs = Math.max(0, entry.refs - 1)
+    if (entry.refs > 0) return
+    if (entry.timer) clearTimeout(entry.timer)
+    entry.watcher.close()
+    fsWatchers.delete(dirPath)
   })
 
-  // ── App handlers ──
-  ipcMain.handle(IPC.APP_SELECT_DIRECTORY, async () => {
-    const result = await dialog.showOpenDialog({
-      properties: ['openDirectory'],
-      title: 'Select Repository',
+  registerInvoke(IPC.APP_SELECT_DIRECTORY, async () => {
+    const filePaths = await Utils.openFileDialog({
+      canChooseFiles: false,
+      canChooseDirectory: true,
+      allowsMultipleSelection: false,
     })
-    if (result.canceled || result.filePaths.length === 0) return null
-    return result.filePaths[0]
+    return filePaths.find(Boolean) || null
   })
 
-  // Accepts a path directly (for testing — avoids dialog.showOpenDialog)
-  ipcMain.handle(IPC.APP_ADD_PROJECT_PATH, async (_e, dirPath: string) => {
+  registerInvoke(IPC.APP_ADD_PROJECT_PATH, async (_sender, dirPath: string) => {
     const { stat } = await import('fs/promises')
     try {
       const s = await stat(dirPath)
@@ -447,27 +480,14 @@ export function registerIpcHandlers(): void {
     }
   })
 
-  // ── Claude Code trust ──
-  ipcMain.handle(IPC.CLAUDE_TRUST_PATH, async (_e, dirPath: string) => {
+  registerInvoke(IPC.APP_OPEN_EXTERNAL, async (_sender, url: string) => {
+    return Utils.openExternal(url)
+  })
+
+  registerInvoke(IPC.CLAUDE_TRUST_PATH, async (_sender, dirPath: string) => {
     await trustPathForClaude(dirPath)
   })
 
-  // ── Claude Code hooks ──
-  function getHookScriptPath(name: string): string {
-    if (app.isPackaged) {
-      return join(process.resourcesPath, 'claude-hooks', name)
-    }
-    return join(__dirname, '..', '..', 'claude-hooks', name)
-  }
-
-  function getCodexHookScriptPath(name: string): string {
-    if (app.isPackaged) {
-      return join(process.resourcesPath, 'codex-hooks', name)
-    }
-    return join(__dirname, '..', '..', 'codex-hooks', name)
-  }
-
-  // Stable identifiers to match our hook entries regardless of full path
   const HOOK_IDENTIFIERS = [
     'claude-hooks/notify.sh',
     'claude-hooks/activity.sh',
@@ -475,7 +495,6 @@ export function registerIpcHandlers(): void {
   ]
 
   function shellQuoteArg(value: string): string {
-    // Claude executes hook commands via /bin/sh; paths can contain spaces.
     return `'${value.replace(/'/g, `'\"'\"'`)}'`
   }
 
@@ -483,7 +502,7 @@ export function registerIpcHandlers(): void {
     return !!rule.hooks?.some((h) => HOOK_IDENTIFIERS.some((id) => h.command?.includes(id)))
   }
 
-  ipcMain.handle(IPC.CLAUDE_CHECK_HOOKS, async () => {
+  registerInvoke(IPC.CLAUDE_CHECK_HOOKS, async () => {
     const settings = await loadClaudeSettings()
     const hooks = settings.hooks as Record<string, unknown[]> | undefined
     if (!hooks) return { installed: false }
@@ -495,15 +514,13 @@ export function registerIpcHandlers(): void {
     return { installed: !!(hasStop && hasNotification && hasPromptSubmit && hasQuestionHook) }
   })
 
-  ipcMain.handle(IPC.CLAUDE_INSTALL_HOOKS, async () => {
+  registerInvoke(IPC.CLAUDE_INSTALL_HOOKS, async () => {
     const settings = await loadClaudeSettings()
     const notifyPath = getHookScriptPath('notify.sh')
     const activityPath = getHookScriptPath('activity.sh')
     const questionNotifyPath = getHookScriptPath('question-notify.sh')
-
     const hooks = (settings.hooks ?? {}) as Record<string, unknown[]>
 
-    // Helper: remove stale entries with old paths, then add current one
     function ensureHook(event: string, scriptPath: string, matcher = '') {
       const rules = (hooks[event] ?? []) as Array<Record<string, unknown>>
       const filtered = rules.filter((rule) => !isOurHook(rule as { hooks?: Array<{ command?: string }> }))
@@ -514,8 +531,6 @@ export function registerIpcHandlers(): void {
     ensureHook('Stop', notifyPath)
     ensureHook('Notification', notifyPath)
     ensureHook('UserPromptSubmit', activityPath)
-    // Claude question dialogs are surfaced through AskUserQuestion tool calls.
-    // Run a filter script on PreToolUse to convert those into unread notifications.
     ensureHook('PreToolUse', questionNotifyPath)
     settings.hooks = hooks
 
@@ -523,15 +538,16 @@ export function registerIpcHandlers(): void {
     return { success: true }
   })
 
-  ipcMain.handle(IPC.CLAUDE_UNINSTALL_HOOKS, async () => {
+  registerInvoke(IPC.CLAUDE_UNINSTALL_HOOKS, async () => {
     const settings = await loadClaudeSettings()
     const hooks = settings.hooks as Record<string, unknown[]> | undefined
     if (!hooks) return { success: true }
+    const installedHooks = hooks
 
     function removeHook(event: string) {
-      const rules = (hooks![event] ?? []) as Array<{ hooks?: Array<{ command?: string }> }>
-      hooks![event] = rules.filter((rule) => !isOurHook(rule))
-      if ((hooks![event] as unknown[]).length === 0) delete hooks![event]
+      const rules = (installedHooks[event] ?? []) as Array<{ hooks?: Array<{ command?: string }> }>
+      installedHooks[event] = rules.filter((rule) => !isOurHook(rule))
+      if ((installedHooks[event] as unknown[]).length === 0) delete installedHooks[event]
     }
 
     removeHook('Stop')
@@ -539,12 +555,11 @@ export function registerIpcHandlers(): void {
     removeHook('UserPromptSubmit')
     removeHook('PreToolUse')
 
-    if (Object.keys(hooks).length === 0) delete settings.hooks
+    if (Object.keys(installedHooks).length === 0) delete settings.hooks
     await saveClaudeSettings(settings)
     return { success: true }
   })
 
-  // ── Codex notify hook ──
   const CODEX_NOTIFY_IDENTIFIER = 'codex-hooks/notify.sh'
   const TABLE_HEADER_RE = /^\s*\[[^\n]+\]\s*$/m
   const NOTIFY_ASSIGNMENT_RE = /^\s*notify\s*=/
@@ -621,18 +636,16 @@ export function registerIpcHandlers(): void {
     return `${rebuilt.replace(/\n{3,}/g, '\n\n').trimEnd()}\n`
   }
 
-  ipcMain.handle(IPC.CODEX_CHECK_NOTIFY, async () => {
+  registerInvoke(IPC.CODEX_CHECK_NOTIFY, async () => {
     const config = await loadCodexConfigText()
     return { installed: hasOurCodexNotify(config) }
   })
 
-  ipcMain.handle(IPC.CODEX_INSTALL_NOTIFY, async () => {
+  registerInvoke(IPC.CODEX_INSTALL_NOTIFY, async () => {
     const notifyPath = getCodexHookScriptPath('notify.sh')
     const notifyLine = `notify = ["${tomlEscape(notifyPath)}"]`
     let config = await loadCodexConfigText()
 
-    // `notify` must be at true top-level in TOML. Appending at EOF can accidentally
-    // nest it under the last table (for example `[projects."..."]`), which Codex ignores.
     config = stripNotifyAssignments(config)
     config = insertTopLevelNotify(config, notifyLine)
 
@@ -640,7 +653,7 @@ export function registerIpcHandlers(): void {
     return { success: true }
   })
 
-  ipcMain.handle(IPC.CODEX_UNINSTALL_NOTIFY, async () => {
+  registerInvoke(IPC.CODEX_UNINSTALL_NOTIFY, async () => {
     let config = await loadCodexConfigText()
     if (!config.includes(CODEX_NOTIFY_IDENTIFIER)) return { success: true }
 
@@ -652,74 +665,55 @@ export function registerIpcHandlers(): void {
     return { success: true }
   })
 
-  // ── Pi interactive activity extension ──
-  ipcMain.handle(IPC.PI_CHECK_ACTIVITY_EXTENSION, async () => {
+  registerInvoke(IPC.PI_CHECK_ACTIVITY_EXTENSION, async () => {
     const installed = await checkPiActivityExtensionInstalled()
     return { installed }
   })
 
-  ipcMain.handle(IPC.PI_INSTALL_ACTIVITY_EXTENSION, async () => {
+  registerInvoke(IPC.PI_INSTALL_ACTIVITY_EXTENSION, async () => {
     await installPiActivityExtension()
     return { success: true }
   })
 
-  ipcMain.handle(IPC.PI_UNINSTALL_ACTIVITY_EXTENSION, async () => {
+  registerInvoke(IPC.PI_UNINSTALL_ACTIVITY_EXTENSION, async () => {
     await uninstallPiActivityExtension()
     return { success: true }
   })
 
-  // ── Automation handlers ──
-  ipcMain.handle(IPC.AUTOMATION_CREATE, async (_e, automation: AutomationConfig) => {
+  registerInvoke(IPC.AUTOMATION_CREATE, async (_sender, automation: AutomationConfig) => {
     automationScheduler.schedule(automation)
   })
 
-  ipcMain.handle(IPC.AUTOMATION_UPDATE, async (_e, automation: AutomationConfig) => {
-    automationScheduler.schedule(automation) // reschedules
+  registerInvoke(IPC.AUTOMATION_UPDATE, async (_sender, automation: AutomationConfig) => {
+    automationScheduler.schedule(automation)
   })
 
-  ipcMain.handle(IPC.AUTOMATION_DELETE, async (_e, automationId: string) => {
+  registerInvoke(IPC.AUTOMATION_DELETE, async (_sender, automationId: string) => {
     automationScheduler.unschedule(automationId)
   })
 
-  ipcMain.handle(IPC.AUTOMATION_RUN_NOW, async (_e, automation: AutomationConfig) => {
+  registerInvoke(IPC.AUTOMATION_RUN_NOW, async (_sender, automation: AutomationConfig) => {
     automationScheduler.runNow(automation)
   })
 
-  ipcMain.handle(IPC.AUTOMATION_STOP, async (_e, automationId: string) => {
+  registerInvoke(IPC.AUTOMATION_STOP, async (_sender, automationId: string) => {
     automationScheduler.unschedule(automationId)
   })
 
-  // ── Clipboard handlers ──
-  ipcMain.handle(IPC.CLIPBOARD_SAVE_IMAGE, async () => {
-    const img = clipboard.readImage()
-    if (img.isEmpty()) return null
-    const buf = img.toPNG()
+  registerInvoke(IPC.CLIPBOARD_SAVE_IMAGE, async () => {
+    const img = Utils.clipboardReadImage()
+    if (!img || img.length === 0) return null
     const filePath = join(tmpdir(), `constellagent-paste-${Date.now()}.png`)
-    await writeFile(filePath, buf)
+    await writeFile(filePath, img)
     return filePath
   })
 
-  // ── State persistence handlers ──
-  const stateFilePath = () =>
-    join(app.getPath('userData'), 'constellagent-state.json')
-
-  ipcMain.handle(IPC.STATE_SAVE, async (_e, data: unknown) => {
-    await mkdir(app.getPath('userData'), { recursive: true })
+  registerInvoke(IPC.STATE_SAVE, async (_sender, data: unknown) => {
+    await mkdir(userDataDir(), { recursive: true })
     await saveJsonFile(stateFilePath(), data)
   })
 
-  // Synchronous save for beforeunload — guarantees state is written before window closes
-  ipcMain.on(IPC.STATE_SAVE_SYNC, (event, data: unknown) => {
-    try {
-      mkdirSync(app.getPath('userData'), { recursive: true })
-      writeFileSync(stateFilePath(), JSON.stringify(data, null, 2), 'utf-8')
-      event.returnValue = true
-    } catch {
-      event.returnValue = false
-    }
-  })
-
-  ipcMain.handle(IPC.STATE_LOAD, async () => {
+  registerInvoke(IPC.STATE_LOAD, async () => {
     const loaded = await loadJsonFile(stateFilePath(), null)
     const sanitized = sanitizeLoadedState(loaded)
     if (sanitized.changed) {

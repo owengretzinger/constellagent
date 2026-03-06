@@ -1,88 +1,30 @@
-import { app, BrowserWindow, Menu, shell, powerMonitor } from 'electron'
-import type { MenuItemConstructorOptions } from 'electron'
+import Electrobun, { ApplicationMenu, BrowserView, BrowserWindow } from 'electrobun/bun'
+import { mkdtempSync } from 'fs'
 import { join } from 'path'
-import { catchUpAutomationsOnWake, registerIpcHandlers } from './ipc'
+import { tmpdir } from 'os'
+import { handleInvoke, handleSend, registerIpcHandlers } from './ipc'
 import { NotificationWatcher } from './notification-watcher'
+import type { DesktopRuntimeRPC, RuntimeEventPayload } from '../shared/electrobun-rpc'
+import { registerRenderer, unregisterRenderer } from './runtime-bridge'
 
 let mainWindow: BrowserWindow | null = null
 let notificationWatcher: NotificationWatcher | null = null
-let lastWakeCatchUpAt = 0
+let rendererId: number | null = null
 
-function triggerAutomationWakeCatchUp(reason: 'resume' | 'unlock-screen'): void {
-  const now = Date.now()
-  if (now - lastWakeCatchUpAt < 2000) return
-  lastWakeCatchUpAt = now
-
-  catchUpAutomationsOnWake(new Date(now)).catch((err) => {
-    console.error(`[automation] wake catch-up failed (${reason}):`, err)
-  })
+async function getMainViewUrl(): Promise<string> {
+  return process.env.ELECTROBUN_RENDERER_URL || 'views://mainview/index.html'
 }
 
-function createWindow(): void {
-  mainWindow = new BrowserWindow({
-    width: 1400,
-    height: 900,
-    minWidth: 900,
-    minHeight: 600,
-    titleBarStyle: 'hiddenInset',
-    trafficLightPosition: { x: 12, y: 12 },
-    backgroundColor: '#13141b',
-    show: false,
-    webPreferences: {
-      preload: join(__dirname, '../preload/index.js'),
-      nodeIntegration: false,
-      contextIsolation: true,
-      sandbox: false, // needed for node-pty IPC
-    },
-  })
-
-  // Show window when ready to avoid white flash (skip in tests)
-  if (!process.env.CI_TEST) {
-    mainWindow.on('ready-to-show', () => {
-      mainWindow?.show()
-    })
-  }
-
-  // Open external links in browser
-  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    shell.openExternal(url)
-    return { action: 'deny' }
-  })
-
-  // Load renderer
-  if (process.env.ELECTRON_RENDERER_URL) {
-    mainWindow.loadURL(process.env.ELECTRON_RENDERER_URL)
-  } else {
-    mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
-  }
-}
-
-app.setName('Constellagent')
-
-// Isolate test data so e2e tests never touch real app state
-if (process.env.CI_TEST) {
-  const { mkdtempSync } = require('fs')
-  const { join } = require('path')
-  const testData = mkdtempSync(join(require('os').tmpdir(), 'constellagent-test-'))
-  app.setPath('userData', testData)
-  process.env.CONSTELLAGENT_AGENT_EVENT_DIR ||= join(testData, 'agent-events')
-}
-
-app.whenReady().then(() => {
-  const isDev = !!process.env.ELECTRON_RENDERER_URL
-
-  // Custom menu: keep standard Edit shortcuts (copy/paste/undo) but remove
-  // Cmd+W (close window) and Cmd+N (new window) so they reach the renderer
-  const menuTemplate: MenuItemConstructorOptions[] = [
+function setApplicationMenu(): void {
+  ApplicationMenu.setApplicationMenu([
     {
-      label: app.name,
+      label: 'Constellagent',
       submenu: [
         { role: 'about' },
-        { type: 'separator' },
+        { type: 'divider' },
         { role: 'hide' },
         { role: 'hideOthers' },
-        { role: 'unhide' },
-        { type: 'separator' },
+        { type: 'divider' },
         { role: 'quit' },
       ],
     },
@@ -91,52 +33,75 @@ app.whenReady().then(() => {
       submenu: [
         { role: 'undo' },
         { role: 'redo' },
-        { type: 'separator' },
+        { type: 'divider' },
         { role: 'cut' },
         { role: 'copy' },
         { role: 'paste' },
         { role: 'selectAll' },
       ],
     },
-    ...(isDev
-      ? [{
-          label: 'View',
-          submenu: [
-            { role: 'reload' as const },
-            { role: 'forceReload' as const },
-            { type: 'separator' as const },
-            { role: 'toggleDevTools' as const },
-          ],
-        }]
-      : []),
     {
       label: 'Window',
-      submenu: [{ role: 'minimize' as const }, { role: 'zoom' as const }],
+      submenu: [{ role: 'minimize' }, { role: 'zoom' }],
     },
-  ]
-  const menu = Menu.buildFromTemplate(menuTemplate)
-  Menu.setApplicationMenu(menu)
+  ])
+}
 
-  registerIpcHandlers()
-  powerMonitor.on('resume', () => triggerAutomationWakeCatchUp('resume'))
-  powerMonitor.on('unlock-screen', () => triggerAutomationWakeCatchUp('unlock-screen'))
-  notificationWatcher = new NotificationWatcher()
-  notificationWatcher.start()
-  createWindow()
-
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
-      createWindow()
-    }
+async function createWindow(): Promise<void> {
+  const rpc = BrowserView.defineRPC<DesktopRuntimeRPC>({
+    maxRequestTime: 120_000,
+    handlers: {
+      requests: {
+        invoke: async ({ channel, args }) => handleInvoke(channel, args),
+        send: async ({ channel, args }) => {
+          await handleSend(channel, args)
+        },
+      },
+      messages: {},
+    },
   })
-})
 
-app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') {
-    app.quit()
-  }
-})
+  const url = await getMainViewUrl()
+  mainWindow = new BrowserWindow({
+    title: 'Constellagent',
+    url,
+    frame: {
+      x: 100,
+      y: 80,
+      width: 1400,
+      height: 900,
+    },
+    titleBarStyle: 'hiddenInset',
+    rpc,
+  })
 
-app.on('before-quit', () => {
+  const renderer = registerRenderer((payload) => {
+    const rpc = mainWindow?.webview.rpc as { send?: (name: 'event', payload: RuntimeEventPayload) => void } | undefined
+    rpc?.send?.('event', payload)
+  })
+  rendererId = renderer.id
+
+  mainWindow.on('close', () => {
+    if (rendererId) unregisterRenderer(rendererId)
+    rendererId = null
+    mainWindow = null
+  })
+}
+
+process.env.CONSTELLAGENT_RESOURCE_ROOT ||= process.cwd()
+
+if (process.env.CI_TEST) {
+  const testData = mkdtempSync(join(tmpdir(), 'constellagent-test-'))
+  process.env.CONSTELLAGENT_USER_DATA_DIR ||= testData
+  process.env.CONSTELLAGENT_AGENT_EVENT_DIR ||= join(testData, 'agent-events')
+}
+
+registerIpcHandlers()
+setApplicationMenu()
+notificationWatcher = new NotificationWatcher()
+notificationWatcher.start()
+await createWindow()
+
+Electrobun.events.on('before-quit', () => {
   notificationWatcher?.stop()
 })

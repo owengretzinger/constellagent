@@ -1,5 +1,6 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
+import '../preload/index'
 import { App } from './App'
 import { useAppStore, hydrateFromDisk } from './store/app-store'
 import '@xterm/xterm/css/xterm.css'

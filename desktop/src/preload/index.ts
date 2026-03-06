@@ -1,8 +1,53 @@
-import { contextBridge, ipcRenderer } from 'electron'
+import { Electroview } from 'electrobun/view'
 import { IPC } from '../shared/ipc-channels'
 import type { AutomationConfig, AutomationRunStartedEvent } from '../shared/automation-types'
 import type { CreateWorktreeProgressEvent } from '../shared/workspace-creation'
 import type { PrLookupResult, ListOpenPrsResult } from '../shared/github-types'
+import type { DesktopRuntimeRPC } from '../shared/electrobun-rpc'
+
+type IpcRendererListener = (_event: unknown, ...args: any[]) => void
+
+const listeners = new Map<string, Set<IpcRendererListener>>()
+
+const rpc = Electroview.defineRPC<DesktopRuntimeRPC>({
+  maxRequestTime: 120_000,
+  handlers: {
+    requests: {},
+    messages: {
+      event: ({ channel, args }) => {
+        const channelListeners = listeners.get(channel)
+        if (!channelListeners) return
+        for (const listener of Array.from(channelListeners)) {
+          listener(undefined, ...args)
+        }
+      },
+    },
+  },
+})
+
+new Electroview({ rpc })
+
+const ipcRenderer = {
+  invoke: <T = any>(channel: string, ...args: unknown[]) =>
+    rpc.request.invoke({ channel, args }) as Promise<T>,
+  send: (channel: string, ...args: unknown[]) => {
+    void rpc.request.send({ channel, args })
+  },
+  on: (channel: string, listener: IpcRendererListener) => {
+    const channelListeners = listeners.get(channel) ?? new Set<IpcRendererListener>()
+    channelListeners.add(listener)
+    listeners.set(channel, channelListeners)
+  },
+  removeListener: (channel: string, listener: IpcRendererListener) => {
+    const channelListeners = listeners.get(channel)
+    if (!channelListeners) return
+    channelListeners.delete(listener)
+    if (channelListeners.size === 0) {
+      listeners.delete(channel)
+    }
+  },
+  sendSync: <T = any>(_channel: string, ..._args: unknown[]) => true as T,
+}
 
 const api = {
   git: {
@@ -13,7 +58,7 @@ const api = {
     createWorktreeFromPr: (repoPath: string, name: string, prNumber: number, localBranch: string, force?: boolean, requestId?: string) =>
       ipcRenderer.invoke(IPC.GIT_CREATE_WORKTREE_FROM_PR, repoPath, name, prNumber, localBranch, force, requestId) as Promise<{ worktreePath: string; branch: string }>,
     onCreateWorktreeProgress: (callback: (progress: CreateWorktreeProgressEvent) => void) => {
-      const listener = (_event: Electron.IpcRendererEvent, progress: CreateWorktreeProgressEvent) => callback(progress)
+      const listener = (_event: unknown, progress: CreateWorktreeProgressEvent) => callback(progress)
       ipcRenderer.on(IPC.GIT_CREATE_WORKTREE_PROGRESS, listener)
       return () => {
         ipcRenderer.removeListener(IPC.GIT_CREATE_WORKTREE_PROGRESS, listener)
@@ -58,7 +103,7 @@ const api = {
       ipcRenderer.invoke(IPC.PTY_REATTACH, ptyId, sinceSeq) as Promise<{ ok: boolean; replay?: string; baseSeq: number; endSeq: number; truncated: boolean; cols: number; rows: number }>,
     onData: (ptyId: string, callback: (data: string, startSeq?: number) => void) => {
       const channel = `${IPC.PTY_DATA}:${ptyId}`
-      const listener = (_event: Electron.IpcRendererEvent, ...args: unknown[]) => {
+      const listener = (_event: unknown, ...args: unknown[]) => {
         if (typeof args[0] === 'number' && typeof args[1] === 'string') {
           callback(args[1], args[0])
           return
@@ -88,7 +133,7 @@ const api = {
     unwatchDir: (dirPath: string) =>
       ipcRenderer.send(IPC.FS_WATCH_STOP, dirPath),
     onDirChanged: (callback: (dirPath: string) => void) => {
-      const listener = (_event: Electron.IpcRendererEvent, dirPath: string) => callback(dirPath)
+      const listener = (_event: unknown, dirPath: string) => callback(dirPath)
       ipcRenderer.on(IPC.FS_WATCH_CHANGED, listener)
       return () => {
         ipcRenderer.removeListener(IPC.FS_WATCH_CHANGED, listener)
@@ -101,18 +146,20 @@ const api = {
       ipcRenderer.invoke(IPC.APP_SELECT_DIRECTORY),
     addProjectPath: (dirPath: string) =>
       ipcRenderer.invoke(IPC.APP_ADD_PROJECT_PATH, dirPath),
+    openExternal: (url: string) =>
+      ipcRenderer.invoke(IPC.APP_OPEN_EXTERNAL, url),
   },
 
   agent: {
     onNotifyWorkspace: (callback: (workspaceId: string) => void) => {
-      const listener = (_event: Electron.IpcRendererEvent, wsId: string) => callback(wsId)
+      const listener = (_event: unknown, wsId: string) => callback(wsId)
       ipcRenderer.on(IPC.AGENT_NOTIFY_WORKSPACE, listener)
       return () => {
         ipcRenderer.removeListener(IPC.AGENT_NOTIFY_WORKSPACE, listener)
       }
     },
     onActivityUpdate: (callback: (workspaceIds: string[]) => void) => {
-      const listener = (_event: Electron.IpcRendererEvent, wsIds: string[]) => callback(wsIds)
+      const listener = (_event: unknown, wsIds: string[]) => callback(wsIds)
       ipcRenderer.on(IPC.AGENT_ACTIVITY_UPDATE, listener)
       return () => {
         ipcRenderer.removeListener(IPC.AGENT_ACTIVITY_UPDATE, listener)
@@ -161,7 +208,7 @@ const api = {
     stop: (automationId: string) =>
       ipcRenderer.invoke(IPC.AUTOMATION_STOP, automationId),
     onRunStarted: (callback: (data: AutomationRunStartedEvent) => void) => {
-      const listener = (_event: Electron.IpcRendererEvent, data: AutomationRunStartedEvent) => callback(data)
+      const listener = (_event: unknown, data: AutomationRunStartedEvent) => callback(data)
       ipcRenderer.on(IPC.AUTOMATION_RUN_STARTED, listener)
       return () => {
         ipcRenderer.removeListener(IPC.AUTOMATION_RUN_STARTED, listener)
@@ -184,13 +231,15 @@ const api = {
   state: {
     save: (data: unknown) =>
       ipcRenderer.invoke(IPC.STATE_SAVE, data),
-    saveSync: (data: unknown) =>
-      ipcRenderer.sendSync(IPC.STATE_SAVE_SYNC, data) as boolean,
+    saveSync: (data: unknown) => {
+      void ipcRenderer.invoke(IPC.STATE_SAVE, data)
+      return true
+    },
     load: () =>
       ipcRenderer.invoke(IPC.STATE_LOAD),
   },
 }
 
-contextBridge.exposeInMainWorld('api', api)
+;(window as Window & typeof globalThis & { api: typeof api }).api = api
 
 export type ElectronAPI = typeof api
