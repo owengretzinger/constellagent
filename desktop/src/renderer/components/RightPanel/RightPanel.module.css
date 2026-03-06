@@ -357,6 +357,64 @@
   cursor: not-allowed;
 }
 
+/* ── Context Menu ── */
+
+.contextMenu {
+  position: fixed;
+  z-index: 1000;
+  min-width: 180px;
+  background: var(--surface-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: var(--space-2) 0;
+  box-shadow: var(--shadow-lg);
+}
+
+.contextMenuItem {
+  display: block;
+  width: 100%;
+  padding: var(--space-2) var(--space-6);
+  border: none;
+  background: none;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  font-family: var(--font-ui);
+  text-align: left;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.contextMenuItem:hover {
+  background: var(--surface-4);
+  color: var(--text-primary);
+}
+
+.contextMenuDanger:hover {
+  color: var(--accent-red);
+}
+
+.contextMenuDivider {
+  height: 1px;
+  background: var(--border-subtle);
+  margin: var(--space-2) 0;
+}
+
+/* ── Inline Input (rename / new file) ── */
+
+.inlineInput {
+  flex: 1;
+  min-width: 0;
+  padding: 0 var(--space-2);
+  height: 20px;
+  background: var(--surface-2);
+  border: 1px solid var(--accent-blue);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  font-family: var(--font-mono);
+  outline: none;
+}
+
 /* ── Empty States ── */
 
 .emptyState {

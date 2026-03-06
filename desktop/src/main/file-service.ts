@@ -1,5 +1,5 @@
-import { readdir, readFile as fsReadFile, writeFile as fsWriteFile, stat } from 'fs/promises'
-import { join, relative } from 'path'
+import { readdir, readFile as fsReadFile, writeFile as fsWriteFile, stat, mkdir, rm, rename as fsRename } from 'fs/promises'
+import { join, relative, dirname } from 'path'
 import { execFile } from 'child_process'
 import { promisify } from 'util'
 
@@ -158,5 +158,23 @@ export class FileService {
 
   static async writeFile(filePath: string, content: string): Promise<void> {
     await fsWriteFile(filePath, content, 'utf-8')
+  }
+
+  static async createFile(filePath: string): Promise<void> {
+    await mkdir(dirname(filePath), { recursive: true })
+    await fsWriteFile(filePath, '', 'utf-8')
+  }
+
+  static async createDirectory(dirPath: string): Promise<void> {
+    await mkdir(dirPath, { recursive: true })
+  }
+
+  static async delete(targetPath: string): Promise<void> {
+    await rm(targetPath, { recursive: true })
+  }
+
+  static async rename(oldPath: string, newPath: string): Promise<void> {
+    await mkdir(dirname(newPath), { recursive: true })
+    await fsRename(oldPath, newPath)
   }
 }
