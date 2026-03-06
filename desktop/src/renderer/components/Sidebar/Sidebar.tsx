@@ -5,7 +5,6 @@ import type { CreateWorktreeProgressEvent } from "../../../shared/workspace-crea
 import type { OpenPrInfo, GithubLookupError } from "../../../shared/github-types";
 import { WorkspaceDialog } from "./WorkspaceDialog";
 import { ProjectSettingsDialog } from "./ProjectSettingsDialog";
-import { ConfirmDialog } from "./ConfirmDialog";
 import { Tooltip } from "../Tooltip/Tooltip";
 import styles from "./Sidebar.module.css";
 
@@ -272,11 +271,11 @@ export function Sidebar() {
   const deleteWorkspace = useAppStore((s) => s.deleteWorkspace);
   const updateProject = useAppStore((s) => s.updateProject);
   const deleteProject = useAppStore((s) => s.deleteProject);
-  const confirmDialog = useAppStore((s) => s.confirmDialog);
   const showConfirmDialog = useAppStore((s) => s.showConfirmDialog);
   const dismissConfirmDialog = useAppStore((s) => s.dismissConfirmDialog);
   const toggleSettings = useAppStore((s) => s.toggleSettings);
   const toggleAutomations = useAppStore((s) => s.toggleAutomations);
+  const toggleSkills = useAppStore((s) => s.toggleSkills);
   const unreadWorkspaceIds = useAppStore((s) => s.unreadWorkspaceIds);
   const activeAgentWorkspaceIds = useAppStore((s) => s.activeAgentWorkspaceIds);
   const renameWorkspace = useAppStore((s) => s.renameWorkspace);
@@ -939,6 +938,12 @@ export function Sidebar() {
             <span>Automations</span>
           </button>
         </Tooltip>
+        <Tooltip label="Skills">
+          <button className={styles.actionButton} onClick={toggleSkills}>
+            <span className={styles.actionIcon}>✦</span>
+            <span>Skills</span>
+          </button>
+        </Tooltip>
         <Tooltip label="Settings" shortcut="⌘,">
           <button className={styles.actionButton} onClick={toggleSettings}>
             <span className={styles.actionIcon}>⚙</span>
@@ -1179,16 +1184,6 @@ export function Sidebar() {
         />
       )}
 
-      {confirmDialog && (
-        <ConfirmDialog
-          title={confirmDialog.title}
-          message={confirmDialog.message}
-          confirmLabel={confirmDialog.confirmLabel}
-          destructive={confirmDialog.destructive}
-          onConfirm={confirmDialog.onConfirm}
-          onCancel={dismissConfirmDialog}
-        />
-      )}
     </div>
   );
 }

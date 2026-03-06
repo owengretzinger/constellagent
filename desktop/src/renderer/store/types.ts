@@ -99,6 +99,7 @@ export interface AppState {
   settings: Settings
   settingsOpen: boolean
   automationsOpen: boolean
+  skillsOpen: boolean
   confirmDialog: ConfirmDialogState | null
   toasts: Toast[]
   quickOpenVisible: boolean
@@ -144,6 +145,7 @@ export interface AppState {
   updateSettings: (partial: Partial<Settings>) => void
   toggleSettings: () => void
   toggleAutomations: () => void
+  toggleSkills: () => void
   showConfirmDialog: (dialog: ConfirmDialogState) => void
   dismissConfirmDialog: () => void
   addToast: (toast: Toast) => void

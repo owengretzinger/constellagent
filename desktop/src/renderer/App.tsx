@@ -10,7 +10,9 @@ import { DiffViewer } from './components/Editor/DiffEditor'
 import { RightPanel } from './components/RightPanel/RightPanel'
 import { SettingsPanel } from './components/Settings/SettingsPanel'
 import { AutomationsPanel } from './components/Automations/AutomationsPanel'
+import { SkillsPanel } from './components/Skills/SkillsPanel'
 import { QuickOpen } from './components/QuickOpen/QuickOpen'
+import { ConfirmDialog } from './components/Sidebar/ConfirmDialog'
 import { ToastContainer } from './components/Toast/Toast'
 import { useShortcuts } from './hooks/useShortcuts'
 import { usePrStatusPoller } from './hooks/usePrStatusPoller'
@@ -61,7 +63,10 @@ export function App() {
   const activeWorkspaceId = useAppStore((s) => s.activeWorkspaceId)
   const settingsOpen = useAppStore((s) => s.settingsOpen)
   const automationsOpen = useAppStore((s) => s.automationsOpen)
+  const skillsOpen = useAppStore((s) => s.skillsOpen)
   const quickOpenVisible = useAppStore((s) => s.quickOpenVisible)
+  const confirmDialog = useAppStore((s) => s.confirmDialog)
+  const dismissConfirmDialog = useAppStore((s) => s.dismissConfirmDialog)
 
   const wsTabs = activeWorkspaceTabs()
   const activeTab = wsTabs.find((t) => t.id === activeTabId)
@@ -77,6 +82,8 @@ export function App() {
           <SettingsPanel />
         ) : automationsOpen ? (
           <AutomationsPanel />
+        ) : skillsOpen ? (
+          <SkillsPanel />
         ) : (
           <Allotment>
             {/* Sidebar */}
@@ -147,6 +154,16 @@ export function App() {
       </div>
       {quickOpenVisible && workspace && (
         <QuickOpen worktreePath={workspace.worktreePath} />
+      )}
+      {confirmDialog && (
+        <ConfirmDialog
+          title={confirmDialog.title}
+          message={confirmDialog.message}
+          confirmLabel={confirmDialog.confirmLabel}
+          destructive={confirmDialog.destructive}
+          onConfirm={confirmDialog.onConfirm}
+          onCancel={dismissConfirmDialog}
+        />
       )}
       <ToastContainer />
     </div>

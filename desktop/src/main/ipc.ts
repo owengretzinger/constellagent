@@ -12,6 +12,8 @@ import { GithubService } from './github-service'
 import { FileService, type FileNode } from './file-service'
 import { AutomationScheduler } from './automation-scheduler'
 import type { AutomationConfig } from '../shared/automation-types'
+import { SkillService } from './skill-service'
+import type { Skill, UpdateSkillInput } from '../shared/skill-types'
 import { trustPathForClaude, loadClaudeSettings, saveClaudeSettings, loadJsonFile, saveJsonFile } from './claude-config'
 import { loadCodexConfigText, saveCodexConfigText } from './codex-config'
 import {
@@ -687,6 +689,23 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle(IPC.AUTOMATION_STOP, async (_e, automationId: string) => {
     automationScheduler.unschedule(automationId)
+  })
+
+  // ── Skill handlers ──
+  ipcMain.handle(IPC.SKILL_LIST, async () => {
+    return SkillService.list()
+  })
+
+  ipcMain.handle(IPC.SKILL_CREATE, async (_e, skill: Skill) => {
+    return SkillService.create(skill)
+  })
+
+  ipcMain.handle(IPC.SKILL_UPDATE, async (_e, skill: UpdateSkillInput) => {
+    return SkillService.update(skill)
+  })
+
+  ipcMain.handle(IPC.SKILL_DELETE, async (_e, skillName: string) => {
+    return SkillService.delete(skillName)
   })
 
   // ── Clipboard handlers ──

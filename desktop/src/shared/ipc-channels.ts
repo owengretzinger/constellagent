@@ -68,6 +68,12 @@ export const IPC = {
   AUTOMATION_STOP: 'automation:stop',
   AUTOMATION_RUN_STARTED: 'automation:run-started',
 
+  // Skill operations
+  SKILL_LIST: 'skill:list',
+  SKILL_CREATE: 'skill:create',
+  SKILL_UPDATE: 'skill:update',
+  SKILL_DELETE: 'skill:delete',
+
   // GitHub operations
   GITHUB_GET_PR_STATUSES: 'github:get-pr-statuses',
   GITHUB_LIST_OPEN_PRS: 'github:list-open-prs',
