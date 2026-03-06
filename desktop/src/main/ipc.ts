@@ -12,8 +12,10 @@ import { GithubService } from './github-service'
 import { FileService, type FileNode } from './file-service'
 import { AutomationScheduler } from './automation-scheduler'
 import type { AutomationConfig } from '../shared/automation-types'
+import type { CreateSkillInput, UpdateSkillInput } from '../shared/skill-types'
 import { trustPathForClaude, loadClaudeSettings, saveClaudeSettings, loadJsonFile, saveJsonFile } from './claude-config'
 import { loadCodexConfigText, saveCodexConfigText } from './codex-config'
+import { SkillsService } from './skills-service'
 import {
   checkPiActivityExtensionInstalled,
   installPiActivityExtension,
@@ -22,6 +24,7 @@ import {
 
 const ptyManager = new PtyManager()
 const automationScheduler = new AutomationScheduler(ptyManager)
+const skillsService = new SkillsService(join(app.getPath('userData'), 'messaging-skills.json'))
 
 export async function catchUpAutomationsOnWake(now = new Date()): Promise<void> {
   await automationScheduler.catchUpOnWake(now)
@@ -687,6 +690,24 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle(IPC.AUTOMATION_STOP, async (_e, automationId: string) => {
     automationScheduler.unschedule(automationId)
+  })
+
+  // ── Skills handlers ──
+  ipcMain.handle(IPC.SKILLS_LIST, async () => {
+    return skillsService.list()
+  })
+
+  ipcMain.handle(IPC.SKILLS_CREATE, async (_e, input: CreateSkillInput) => {
+    return skillsService.create(input)
+  })
+
+  ipcMain.handle(IPC.SKILLS_UPDATE, async (_e, skillId: string, input: UpdateSkillInput) => {
+    return skillsService.update(skillId, input)
+  })
+
+  ipcMain.handle(IPC.SKILLS_DELETE, async (_e, skillId: string) => {
+    await skillsService.delete(skillId)
+    return { success: true }
   })
 
   // ── Clipboard handlers ──

@@ -3,6 +3,7 @@ import { IPC } from '../shared/ipc-channels'
 import type { AutomationConfig, AutomationRunStartedEvent } from '../shared/automation-types'
 import type { CreateWorktreeProgressEvent } from '../shared/workspace-creation'
 import type { PrLookupResult, ListOpenPrsResult } from '../shared/github-types'
+import type { Skill, CreateSkillInput, UpdateSkillInput } from '../shared/skill-types'
 
 const api = {
   git: {
@@ -167,6 +168,17 @@ const api = {
         ipcRenderer.removeListener(IPC.AUTOMATION_RUN_STARTED, listener)
       }
     },
+  },
+
+  skills: {
+    list: () =>
+      ipcRenderer.invoke(IPC.SKILLS_LIST) as Promise<Skill[]>,
+    create: (input: CreateSkillInput) =>
+      ipcRenderer.invoke(IPC.SKILLS_CREATE, input) as Promise<Skill>,
+    update: (skillId: string, input: UpdateSkillInput) =>
+      ipcRenderer.invoke(IPC.SKILLS_UPDATE, skillId, input) as Promise<Skill>,
+    delete: (skillId: string) =>
+      ipcRenderer.invoke(IPC.SKILLS_DELETE, skillId) as Promise<{ success: boolean }>,
   },
 
   github: {
