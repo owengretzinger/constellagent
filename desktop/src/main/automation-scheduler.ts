@@ -1,11 +1,11 @@
 import * as cron from 'node-cron'
-import { BrowserWindow } from 'electron'
 import { IPC } from '../shared/ipc-channels'
 import type { AutomationConfig, AutomationRunStartedEvent } from '../shared/automation-types'
 import { PtyManager } from './pty-manager'
 import { GitService } from './git-service'
 import { trustPathForClaude } from './claude-config'
 import { shouldCatchUpOnWake } from './automation-catchup'
+import { broadcastToRenderer, getRendererConnection } from './runtime-bridge'
 
 interface AutomationRuntime {
   task: cron.ScheduledTask
@@ -115,8 +115,8 @@ export class AutomationScheduler {
 
     let ptyId: string | null = null
     try {
-      const win = BrowserWindow.getAllWindows()[0]
-      if (!win) return false
+      const renderer = getRendererConnection()
+      if (!renderer) return false
 
       const sanitized = config.name
         .toLowerCase()
@@ -148,9 +148,9 @@ export class AutomationScheduler {
       // the shell emits its first output (ready), no manual timeout needed.
       const shell = process.env.SHELL || '/bin/zsh'
       const escapedPrompt = config.prompt.replace(/'/g, "'\\''")
-      const createdPtyId = this.ptyManager.create(
+      const createdPtyId = await this.ptyManager.create(
         worktreePath,
-        win.webContents,
+        renderer,
         shell,
         undefined,
         `claude '${escapedPrompt}'\r`
@@ -165,7 +165,7 @@ export class AutomationScheduler {
       })
 
       // Notify renderer to create workspace + terminal tab
-      if (!win.isDestroyed()) {
+      if (!renderer.isDestroyed()) {
         const event: AutomationRunStartedEvent = {
           automationId: config.id,
           automationName: config.name,
@@ -174,7 +174,7 @@ export class AutomationScheduler {
           worktreePath,
           branch,
         }
-        win.webContents.send(IPC.AUTOMATION_RUN_STARTED, event)
+        broadcastToRenderer(IPC.AUTOMATION_RUN_STARTED, event)
       }
       return true
     } finally {

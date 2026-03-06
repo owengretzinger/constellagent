@@ -1,13 +1,12 @@
-import * as pty from 'node-pty'
-import { execFileSync } from 'child_process'
-import { WebContents } from 'electron'
+import { execFileSync, spawn, type ChildProcessWithoutNullStreams } from 'child_process'
 import { IPC } from '../shared/ipc-channels'
 import type { AgentTurnEventType, AgentTurnOutcome } from '../shared/agent-events'
 import { emitAgentTurnEvent } from './agent-events'
+import type { RendererConnection } from './runtime-bridge'
 
 interface PtyInstance {
-  process: pty.IPty
-  webContents: WebContents
+  process: ChildProcessWithoutNullStreams
+  renderer: RendererConnection
   onExitCallbacks: Array<(exitCode: number) => void>
   cols: number
   rows: number
@@ -117,6 +116,7 @@ const CRUSH_SILENCE_MS = 5_000
 const CRUSH_REARM_GRACE_MS = 3_000
 const CRUSH_REARM_CHECK_INTERVAL_MS = 3_000
 const CRUSH_REARM_MIN_DATA_LEN = 8
+let scriptPathCache: string | null = null
 
 function stripAnsiSequences(data: string): string {
   return data
@@ -145,11 +145,44 @@ function appendReplayChunk(instance: PtyInstance, chunk: string): void {
   }
 }
 
+function shellQuoteArg(value: string): string {
+  return `'${value.replace(/'/g, `'\"'\"'`)}'`
+}
+
+function resolveScriptPath(): string {
+  if (scriptPathCache) return scriptPathCache
+  try {
+    const resolved = execFileSync('which', ['script'], { encoding: 'utf-8' }).trim()
+    if (resolved) {
+      scriptPathCache = resolved
+      return resolved
+    }
+  } catch {
+    // Fall back to the standard util-linux/macOS path.
+  }
+  scriptPathCache = '/usr/bin/script'
+  return scriptPathCache
+}
+
+function buildScriptCommand(file: string, args: string[]): string {
+  if (args.length > 0) {
+    return [file, ...args].map(shellQuoteArg).join(' ')
+  }
+  return `${shellQuoteArg(file)} -i`
+}
+
 export class PtyManager {
   private ptys = new Map<string, PtyInstance>()
   private nextId = 0
 
-  create(workingDir: string, webContents: WebContents, shell?: string, command?: string[], initialWrite?: string, extraEnv?: Record<string, string>): string {
+  async create(
+    workingDir: string,
+    renderer: RendererConnection,
+    shell?: string,
+    command?: string[],
+    initialWrite?: string,
+    extraEnv?: Record<string, string>
+  ): Promise<string> {
     const id = `pty-${++this.nextId}`
 
     let file: string
@@ -164,24 +197,30 @@ export class PtyManager {
 
     const agentSessionId = extraEnv?.AGENT_ORCH_SESSION_ID || id
 
-    const proc = pty.spawn(file, args, {
-      name: 'xterm-256color',
-      cols: 80,
-      rows: 24,
-      cwd: workingDir,
-      env: {
-        ...process.env,
-        TERM: 'xterm-256color',
-        COLORTERM: 'truecolor',
-        ...extraEnv,
-        AGENT_ORCH_SESSION_ID: agentSessionId,
-        AGENT_ORCH_PTY_ID: id,
-      } as Record<string, string>,
-    })
+    const scriptPath = resolveScriptPath()
+    const scriptCommand = buildScriptCommand(file, args)
+    const proc = spawn(
+      scriptPath,
+      ['-qefc', scriptCommand, '/dev/null'],
+      {
+        stdio: 'pipe',
+        cwd: workingDir,
+        env: {
+          ...process.env,
+          TERM: 'xterm-256color',
+          COLORTERM: 'truecolor',
+          ...extraEnv,
+          AGENT_ORCH_SESSION_ID: agentSessionId,
+          AGENT_ORCH_PTY_ID: id,
+        } as Record<string, string>,
+      },
+    )
+    proc.stdout.setEncoding('utf8')
+    proc.stderr.setEncoding('utf8')
 
     const instance: PtyInstance = {
       process: proc,
-      webContents,
+      renderer,
       onExitCallbacks: [],
       cols: 80,
       rows: 24,
@@ -204,12 +243,12 @@ export class PtyManager {
     }
 
     let pendingWrite = initialWrite
-    proc.onData((data) => {
+    const handleOutput = (data: string) => {
       const startSeq = instance.outputSeq
       instance.outputSeq += data.length
       appendReplayChunk(instance, data)
-      if (!instance.webContents.isDestroyed()) {
-        instance.webContents.send(`${IPC.PTY_DATA}:${id}`, startSeq, data)
+      if (!instance.renderer.isDestroyed()) {
+        instance.renderer.send(`${IPC.PTY_DATA}:${id}`, startSeq, data)
       }
       this.handlePiMonoJsonOutput(instance, data)
       this.handleCodexQuestionPrompt(instance, data)
@@ -219,11 +258,18 @@ export class PtyManager {
       if (pendingWrite) {
         const toWrite = pendingWrite
         pendingWrite = undefined
-        proc.write(toWrite)
+        try {
+          proc.stdin.write(toWrite)
+        } catch {
+          // Ignore writes racing an exited shell.
+        }
       }
-    })
+    }
+    proc.stdout.on('data', handleOutput)
+    proc.stderr.on('data', handleOutput)
 
-    proc.onExit(({ exitCode }) => {
+    proc.on('exit', (exitCode) => {
+      const normalizedExitCode = exitCode ?? 0
       if (instance.codexTurnActive) {
         instance.codexTurnActive = false
         this.emitTurnEvent(
@@ -231,7 +277,7 @@ export class PtyManager {
           'codex',
           'awaiting_user',
           instance.agentSessionId,
-          exitCode === 0 ? 'success' : 'failed',
+          normalizedExitCode === 0 ? 'success' : 'failed',
         )
       }
 
@@ -246,11 +292,11 @@ export class PtyManager {
           'crush',
           'awaiting_user',
           instance.agentSessionId,
-          exitCode === 0 ? 'success' : 'failed',
+          normalizedExitCode === 0 ? 'success' : 'failed',
         )
       }
 
-      for (const cb of instance.onExitCallbacks) cb(exitCode)
+      for (const cb of instance.onExitCallbacks) cb(normalizedExitCode)
       this.ptys.delete(id)
     })
 
@@ -272,20 +318,24 @@ export class PtyManager {
     // Crush (by Charm) is a TUI agent with no hook system — use the same
     // process-tree detection approach.
     if (instance.workspaceId && /[\r\n]/.test(data)) {
-      if (this.isCodexRunningUnder(instance.process.pid)) {
+      if ((instance.process.pid ?? -1) > 0 && this.isCodexRunningUnder(instance.process.pid!)) {
         instance.codexPromptBuffer = ''
         instance.codexAwaitingAnswer = false
         if (!instance.codexTurnActive) {
           instance.codexTurnActive = true
           this.emitTurnEvent(instance.workspaceId, 'codex', 'turn_started', instance.agentSessionId)
         }
-      } else if (!instance.crushTurnActive && this.isCrushRunningUnder(instance.process.pid)) {
+      } else if (!instance.crushTurnActive && (instance.process.pid ?? -1) > 0 && this.isCrushRunningUnder(instance.process.pid!)) {
         instance.crushTurnActive = true
         this.emitTurnEvent(instance.workspaceId, 'crush', 'turn_started', instance.agentSessionId)
       }
     }
 
-    instance.process.write(data)
+    try {
+      instance.process.stdin.write(data)
+    } catch {
+      // Ignore writes to shells that have already exited.
+    }
   }
 
   resize(ptyId: string, cols: number, rows: number): void {
@@ -294,7 +344,8 @@ export class PtyManager {
       if (instance.cols === cols && instance.rows === rows) return
       instance.cols = cols
       instance.rows = rows
-      instance.process.resize(cols, rows)
+      // `script` provides a stable PTY under Bun, but it does not expose a direct
+      // resize API through stdio. Keep the logical size in sync for reattach.
     }
   }
 
@@ -460,7 +511,8 @@ export class PtyManager {
   private handleCodexProcessCompletion(instance: PtyInstance): void {
     if (!instance.workspaceId) return
     if (!instance.codexTurnActive) return
-    if (this.isCodexRunningUnder(instance.process.pid)) return
+    const rootPid = instance.process.pid
+    if (typeof rootPid === 'number' && this.isCodexRunningUnder(rootPid)) return
 
     instance.codexTurnActive = false
     this.emitTurnEvent(instance.workspaceId, 'codex', 'awaiting_user', instance.agentSessionId, 'success')
@@ -513,7 +565,8 @@ export class PtyManager {
     if (now - instance.crushLastRearmCheck < CRUSH_REARM_CHECK_INTERVAL_MS) return
     instance.crushLastRearmCheck = now
 
-    if (!this.isCrushRunningUnder(instance.process.pid)) return
+    const rootPid = instance.process.pid
+    if (typeof rootPid !== 'number' || !this.isCrushRunningUnder(rootPid)) return
 
     instance.crushTurnActive = true
     this.emitTurnEvent(instance.workspaceId, 'crush', 'turn_started', instance.agentSessionId)
@@ -522,12 +575,12 @@ export class PtyManager {
   /** Update the webContents reference for an existing PTY (e.g. after renderer reload) */
   reattach(
     ptyId: string,
-    webContents: WebContents,
+    renderer: RendererConnection,
     sinceSeq?: number
   ): { ok: boolean; replay?: string; baseSeq: number; endSeq: number; truncated: boolean; cols: number; rows: number } {
     const instance = this.ptys.get(ptyId)
     if (!instance) return { ok: false, baseSeq: 0, endSeq: 0, truncated: false, cols: 0, rows: 0 }
-    instance.webContents = webContents
+    instance.renderer = renderer
 
     const endSeq = instance.outputSeq
     const baseSeq = Math.max(0, endSeq - instance.replayChars)
