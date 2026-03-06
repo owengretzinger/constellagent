@@ -15,7 +15,6 @@ export default {
       'dist/index.html': 'views/mainview/index.html',
       'dist/assets': 'views/mainview/assets',
       'node_modules/node-pty': 'bun/node_modules/node-pty',
-      'node_modules/node-pty/build/Release': 'bun/build/Release',
       'src/main/pty-worker.cjs': 'bun/pty-worker.cjs',
     },
     watchIgnore: ['dist/**'],
