@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef, memo } from 'react'
+import { useEffect, useState, useCallback, useRef, memo, Component, type ErrorInfo, type ReactNode } from 'react'
 import { PatchDiff } from '@pierre/diffs/react'
 import { useAppStore } from '../../store/app-store'
 import styles from './Editor.module.css'
@@ -14,6 +14,43 @@ interface DiffFileData {
   patch: string
   status: string
   isBinary: boolean
+  message?: string
+}
+
+interface PatchDiffBoundaryProps {
+  children: ReactNode
+}
+
+interface PatchDiffBoundaryState {
+  hasError: boolean
+}
+
+class PatchDiffBoundary extends Component<PatchDiffBoundaryProps, PatchDiffBoundaryState> {
+  constructor(props: PatchDiffBoundaryProps) {
+    super(props)
+    this.state = { hasError: false }
+  }
+
+  static getDerivedStateFromError(): PatchDiffBoundaryState {
+    return { hasError: true }
+  }
+
+  componentDidCatch(error: unknown, info: ErrorInfo): void {
+    console.error('PatchDiff render failed:', error, info)
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className={styles.binaryDiffNotice}>
+          <span className={styles.binaryDiffNoticeText}>
+            Diff renderer could not parse this patch.
+          </span>
+        </div>
+      )
+    }
+    return this.props.children
+  }
 }
 
 interface Props {
@@ -55,19 +92,10 @@ function pathIndicatesBinary(filePath: string): boolean {
   return BINARY_EXTENSIONS.has(ext)
 }
 
-function contentIndicatesBinary(text: string): boolean {
-  // Heuristic: NUL bytes or lots of control/replacement characters usually mean "not text".
-  const sample = text.slice(0, 8000)
-  if (sample.includes('\u0000')) return true
-
-  let suspicious = 0
-  for (let i = 0; i < sample.length; i++) {
-    const code = sample.charCodeAt(i)
-    if (code === 9 || code === 10 || code === 13) continue // tab/newline/carriage return
-    if (code === 0xfffd || code < 32) suspicious++
-  }
-
-  return sample.length > 0 && suspicious / sample.length > 0.1
+function patchFileDiffCount(patch: string): number {
+  if (!patch) return 0
+  const matches = patch.match(/^diff --git /gm)
+  return matches ? matches.length : 0
 }
 
 // ── Per-file diff section ──
@@ -113,20 +141,28 @@ const DiffFileSection = memo(function DiffFileSection({
             Non-text file. Diff not shown.
           </span>
         </div>
+      ) : data.message ? (
+        <div className={styles.binaryDiffNotice}>
+          <span className={styles.binaryDiffNoticeText}>
+            {data.message}
+          </span>
+        </div>
       ) : (
-        <PatchDiff
-          patch={data.patch}
-          options={{
-            theme: 'tokyo-night',
-            themeType: 'dark',
-            diffStyle: inline ? 'unified' : 'split',
-            diffIndicators: 'bars',
-            lineDiffType: 'word-alt',
-            overflow: 'scroll',
-            expandUnchanged: false,
-            disableFileHeader: true,
-          }}
-        />
+        <PatchDiffBoundary key={`${data.filePath}:${data.patch.length}`}>
+          <PatchDiff
+            patch={data.patch}
+            options={{
+              theme: 'tokyo-night',
+              themeType: 'dark',
+              diffStyle: inline ? 'unified' : 'split',
+              diffIndicators: 'bars',
+              lineDiffType: 'word-alt',
+              overflow: 'scroll',
+              expandUnchanged: false,
+              disableFileHeader: true,
+            }}
+          />
+        </PatchDiffBoundary>
       )}
     </div>
   )
@@ -179,36 +215,62 @@ export function DiffViewer({ worktreePath, active }: Props) {
       const statuses: FileStatus[] = await window.api.git.getStatus(worktreePath)
       const results = await Promise.all(
         statuses.map(async (file) => {
-          let patch = await window.api.git.getFileDiff(worktreePath, file.path)
-          let isBinary =
-            patchIndicatesBinary(patch) ||
-            (pathIndicatesBinary(file.path) && (file.status === 'added' || file.status === 'untracked' || file.status === 'renamed'))
-
-          // For added/untracked files, git diff returns empty — build synthetic patch
-          if (!patch && !isBinary && (file.status === 'added' || file.status === 'untracked')) {
-            const fullPath = file.path.startsWith('/')
-              ? file.path
-              : `${worktreePath}/${file.path}`
-            const content = await window.api.fs.readFile(fullPath)
-            if (contentIndicatesBinary(content)) {
-              isBinary = true
-              return { filePath: file.path, patch: '', status: file.status, isBinary }
+          try {
+            let patch = await window.api.git.getFileDiff(worktreePath, file.path)
+            if (patch && patchFileDiffCount(patch) !== 1) {
+              return {
+                filePath: file.path,
+                patch: '',
+                status: file.status,
+                isBinary: false,
+                message: 'Directory or multi-file diff. Open files individually to inspect changes.',
+              }
             }
-            const lines = content.split('\n')
-            patch = [
-              `--- /dev/null`,
-              `+++ b/${file.path}`,
-              `@@ -0,0 +1,${lines.length} @@`,
-              ...lines.map((l: string) => `+${l}`),
-            ].join('\n')
-          }
+            let isBinary =
+              patchIndicatesBinary(patch) ||
+              (pathIndicatesBinary(file.path) && (file.status === 'added' || file.status === 'untracked' || file.status === 'renamed'))
 
-          // For deleted files with no diff, build synthetic removal patch
-          if (!patch && file.status === 'deleted') {
-            patch = `--- a/${file.path}\n+++ /dev/null\n@@ -1,0 +0,0 @@\n`
-          }
+            // For added/untracked files without git patch data, show a safe fallback.
+            if (!patch && !isBinary && (file.status === 'added' || file.status === 'untracked')) {
+              if (file.path.endsWith('/')) {
+                return {
+                  filePath: file.path,
+                  patch: '',
+                  status: file.status,
+                  isBinary: false,
+                  message: 'Directory entry. Diff is not available for folders.',
+                }
+              }
+              return {
+                filePath: file.path,
+                patch: '',
+                status: file.status,
+                isBinary,
+                message: 'Untracked file. Stage it to view a full patch.',
+              }
+            }
 
-          return { filePath: file.path, patch: patch || '', status: file.status, isBinary }
+            // For deleted files with no diff, build synthetic removal patch
+            if (!patch && file.status === 'deleted') {
+              return {
+                filePath: file.path,
+                patch: '',
+                status: file.status,
+                isBinary: false,
+                message: 'Deleted file preview unavailable.',
+              }
+            }
+
+            return { filePath: file.path, patch: patch || '', status: file.status, isBinary }
+          } catch {
+            return {
+              filePath: file.path,
+              patch: '',
+              status: file.status,
+              isBinary: false,
+              message: 'Failed to load diff for this path.',
+            }
+          }
         }),
       )
       setFiles(results)
