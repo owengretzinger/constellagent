@@ -10,6 +10,7 @@ import { DiffViewer } from './components/Editor/DiffEditor'
 import { RightPanel } from './components/RightPanel/RightPanel'
 import { SettingsPanel } from './components/Settings/SettingsPanel'
 import { AutomationsPanel } from './components/Automations/AutomationsPanel'
+import { SkillsPanel } from './components/Skills/SkillsPanel'
 import { QuickOpen } from './components/QuickOpen/QuickOpen'
 import { ToastContainer } from './components/Toast/Toast'
 import { useShortcuts } from './hooks/useShortcuts'
@@ -61,6 +62,7 @@ export function App() {
   const activeWorkspaceId = useAppStore((s) => s.activeWorkspaceId)
   const settingsOpen = useAppStore((s) => s.settingsOpen)
   const automationsOpen = useAppStore((s) => s.automationsOpen)
+  const skillsOpen = useAppStore((s) => s.skillsOpen)
   const quickOpenVisible = useAppStore((s) => s.quickOpenVisible)
 
   const wsTabs = activeWorkspaceTabs()
@@ -77,6 +79,8 @@ export function App() {
           <SettingsPanel />
         ) : automationsOpen ? (
           <AutomationsPanel />
+        ) : skillsOpen ? (
+          <SkillsPanel />
         ) : (
           <Allotment>
             {/* Sidebar */}

@@ -10,6 +10,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   workspaces: [],
   tabs: [],
   automations: [],
+  skills: [],
   activeWorkspaceId: null,
   activeTabId: null,
   lastActiveTabByWorkspace: {},
@@ -21,6 +22,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   settings: { ...DEFAULT_SETTINGS },
   settingsOpen: false,
   automationsOpen: false,
+  skillsOpen: false,
   confirmDialog: null,
   toasts: [],
   quickOpenVisible: false,
@@ -512,8 +514,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   updateSettings: (partial) =>
     set((s) => ({ settings: { ...s.settings, ...partial } })),
 
-  toggleSettings: () => set((s) => ({ settingsOpen: !s.settingsOpen, automationsOpen: false })),
-  toggleAutomations: () => set((s) => ({ automationsOpen: !s.automationsOpen, settingsOpen: false })),
+  toggleSettings: () => set((s) => ({ settingsOpen: !s.settingsOpen, automationsOpen: false, skillsOpen: false })),
+  toggleAutomations: () => set((s) => ({ automationsOpen: !s.automationsOpen, settingsOpen: false, skillsOpen: false })),
 
   showConfirmDialog: (dialog) => set({ confirmDialog: dialog }),
 
@@ -573,6 +575,21 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   removeAutomation: (id) =>
     set((s) => ({ automations: s.automations.filter((a) => a.id !== id) })),
+
+  setSkills: (skills) => set({ skills }),
+
+  addSkill: (skill) =>
+    set((s) => ({ skills: [...s.skills, skill] })),
+
+  updateSkill: (id, partial) =>
+    set((s) => ({
+      skills: s.skills.map((sk) => (sk.id === id ? { ...sk, ...partial } : sk)),
+    })),
+
+  removeSkill: (id) =>
+    set((s) => ({ skills: s.skills.filter((sk) => sk.id !== id) })),
+
+  toggleSkills: () => set((s) => ({ skillsOpen: !s.skillsOpen, settingsOpen: false, automationsOpen: false })),
 
   openDiffTab: (workspaceId) => {
     const s = get()

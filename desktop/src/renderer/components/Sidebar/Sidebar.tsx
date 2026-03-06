@@ -277,6 +277,7 @@ export function Sidebar() {
   const dismissConfirmDialog = useAppStore((s) => s.dismissConfirmDialog);
   const toggleSettings = useAppStore((s) => s.toggleSettings);
   const toggleAutomations = useAppStore((s) => s.toggleAutomations);
+  const toggleSkills = useAppStore((s) => s.toggleSkills);
   const unreadWorkspaceIds = useAppStore((s) => s.unreadWorkspaceIds);
   const activeAgentWorkspaceIds = useAppStore((s) => s.activeAgentWorkspaceIds);
   const renameWorkspace = useAppStore((s) => s.renameWorkspace);
@@ -937,6 +938,12 @@ export function Sidebar() {
           <button className={styles.actionButton} onClick={toggleAutomations}>
             <span className={styles.actionIcon}>⏱</span>
             <span>Automations</span>
+          </button>
+        </Tooltip>
+        <Tooltip label="Skills">
+          <button className={styles.actionButton} onClick={toggleSkills}>
+            <span className={styles.actionIcon}>✦</span>
+            <span>Skills</span>
           </button>
         </Tooltip>
         <Tooltip label="Settings" shortcut="⌘,">

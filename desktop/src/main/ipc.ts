@@ -12,6 +12,7 @@ import { GithubService } from './github-service'
 import { FileService, type FileNode } from './file-service'
 import { AutomationScheduler } from './automation-scheduler'
 import type { AutomationConfig } from '../shared/automation-types'
+import type { Skill } from '../shared/skill-types'
 import { trustPathForClaude, loadClaudeSettings, saveClaudeSettings, loadJsonFile, saveJsonFile } from './claude-config'
 import { loadCodexConfigText, saveCodexConfigText } from './codex-config'
 import {
@@ -687,6 +688,46 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle(IPC.AUTOMATION_STOP, async (_e, automationId: string) => {
     automationScheduler.unschedule(automationId)
+  })
+
+  // ── Skill CRUD handlers ──
+  const skillsFilePath = () =>
+    join(app.getPath('userData'), 'constellagent-skills.json')
+
+  const loadSkills = async (): Promise<Skill[]> => {
+    const data = await loadJsonFile(skillsFilePath(), [])
+    return Array.isArray(data) ? data : []
+  }
+
+  const saveSkills = async (skills: Skill[]): Promise<void> => {
+    await mkdir(app.getPath('userData'), { recursive: true })
+    await saveJsonFile(skillsFilePath(), skills)
+  }
+
+  ipcMain.handle(IPC.SKILL_LIST, async () => {
+    return await loadSkills()
+  })
+
+  ipcMain.handle(IPC.SKILL_CREATE, async (_e, skill: Skill) => {
+    const skills = await loadSkills()
+    skills.push(skill)
+    await saveSkills(skills)
+    return skill
+  })
+
+  ipcMain.handle(IPC.SKILL_UPDATE, async (_e, updated: Skill) => {
+    const skills = await loadSkills()
+    const idx = skills.findIndex((s) => s.id === updated.id)
+    if (idx >= 0) {
+      skills[idx] = updated
+      await saveSkills(skills)
+    }
+    return updated
+  })
+
+  ipcMain.handle(IPC.SKILL_DELETE, async (_e, skillId: string) => {
+    const skills = await loadSkills()
+    await saveSkills(skills.filter((s) => s.id !== skillId))
   })
 
   // ── Clipboard handlers ──

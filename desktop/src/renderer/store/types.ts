@@ -1,4 +1,5 @@
 import type { PrInfo } from '@shared/github-types'
+import type { Skill } from '@shared/skill-types'
 
 export interface StartupCommand {
   name: string
@@ -88,6 +89,7 @@ export interface AppState {
   workspaces: Workspace[]
   tabs: Tab[]
   automations: Automation[]
+  skills: Skill[]
   activeWorkspaceId: string | null
   activeTabId: string | null
   lastActiveTabByWorkspace: Record<string, string>
@@ -99,6 +101,7 @@ export interface AppState {
   settings: Settings
   settingsOpen: boolean
   automationsOpen: boolean
+  skillsOpen: boolean
   confirmDialog: ConfirmDialogState | null
   toasts: Toast[]
   quickOpenVisible: boolean
@@ -166,6 +169,13 @@ export interface AppState {
   addAutomation: (automation: Automation) => void
   updateAutomation: (id: string, partial: Partial<Omit<Automation, 'id'>>) => void
   removeAutomation: (id: string) => void
+
+  // Skill actions
+  setSkills: (skills: Skill[]) => void
+  addSkill: (skill: Skill) => void
+  updateSkill: (id: string, partial: Partial<Omit<Skill, 'id'>>) => void
+  removeSkill: (id: string) => void
+  toggleSkills: () => void
 
   // Hydration
   hydrateState: (data: PersistedState) => void

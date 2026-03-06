@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { IPC } from '../shared/ipc-channels'
 import type { AutomationConfig, AutomationRunStartedEvent } from '../shared/automation-types'
+import type { Skill } from '../shared/skill-types'
 import type { CreateWorktreeProgressEvent } from '../shared/workspace-creation'
 import type { PrLookupResult, ListOpenPrsResult } from '../shared/github-types'
 
@@ -167,6 +168,17 @@ const api = {
         ipcRenderer.removeListener(IPC.AUTOMATION_RUN_STARTED, listener)
       }
     },
+  },
+
+  skills: {
+    list: () =>
+      ipcRenderer.invoke(IPC.SKILL_LIST) as Promise<Skill[]>,
+    create: (skill: Skill) =>
+      ipcRenderer.invoke(IPC.SKILL_CREATE, skill) as Promise<Skill>,
+    update: (skill: Skill) =>
+      ipcRenderer.invoke(IPC.SKILL_UPDATE, skill) as Promise<Skill>,
+    delete: (skillId: string) =>
+      ipcRenderer.invoke(IPC.SKILL_DELETE, skillId) as Promise<void>,
   },
 
   github: {
