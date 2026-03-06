@@ -1,6 +1,7 @@
 node_modules/
 out/
 dist/
+build/
 .env
 test-results/
 e2e/screenshots/
