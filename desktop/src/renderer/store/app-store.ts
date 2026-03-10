@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import type { AppState, PersistedState, Tab } from './types'
 import { DEFAULT_SETTINGS } from './types'
+import { normalizeAutomationHarness } from '../../shared/automation-types'
 import { titleFromTerminalCommand } from './terminal-tab-title'
 
 const DEFAULT_PR_LINK_PROVIDER = 'github' as const
@@ -595,6 +596,10 @@ export const useAppStore = create<AppState>((set, get) => ({
       ...project,
       prLinkProvider: project.prLinkProvider ?? DEFAULT_PR_LINK_PROVIDER,
     }))
+    const automations = (data.automations ?? []).map((automation) => ({
+      ...automation,
+      harness: normalizeAutomationHarness((automation as { harness?: unknown }).harness),
+    }))
     const workspaces = data.workspaces ?? []
     const saved = data.activeWorkspaceId
     const settings = data.settings ? { ...DEFAULT_SETTINGS, ...data.settings } : { ...DEFAULT_SETTINGS }
@@ -608,7 +613,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       projects,
       workspaces,
       tabs,
-      automations: data.automations ?? [],
+      automations,
       activeWorkspaceId,
       activeTabId,
       lastActiveTabByWorkspace: data.lastActiveTabByWorkspace ?? {},

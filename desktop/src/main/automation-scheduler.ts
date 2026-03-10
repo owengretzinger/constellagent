@@ -1,7 +1,11 @@
 import * as cron from 'node-cron'
 import { BrowserWindow } from 'electron'
 import { IPC } from '../shared/ipc-channels'
-import type { AutomationConfig, AutomationRunStartedEvent } from '../shared/automation-types'
+import {
+  normalizeAutomationHarness,
+  type AutomationConfig,
+  type AutomationRunStartedEvent,
+} from '../shared/automation-types'
 import { PtyManager } from './pty-manager'
 import { GitService } from './git-service'
 import { trustPathForClaude } from './claude-config'
@@ -12,6 +16,26 @@ interface AutomationRuntime {
   config: AutomationConfig
   lastCheckedAt: number
   nextRunAt: number | null
+}
+
+function shellEscapeArg(value: string): string {
+  return `'${value.replace(/'/g, `'\\''`)}'`
+}
+
+export function buildAutomationCommand(
+  config: Pick<AutomationConfig, 'prompt'> & Partial<Pick<AutomationConfig, 'harness'>>,
+): string {
+  const prompt = shellEscapeArg(config.prompt)
+
+  switch (normalizeAutomationHarness(config.harness)) {
+    case 'codex':
+      return `codex exec ${prompt}`
+    case 'pi':
+      return `pi --print --mode json ${prompt}`
+    case 'claude':
+    default:
+      return `claude -p ${prompt}`
+  }
 }
 
 export class AutomationScheduler {
@@ -117,6 +141,7 @@ export class AutomationScheduler {
     try {
       const win = BrowserWindow.getAllWindows()[0]
       if (!win) return false
+      const harness = normalizeAutomationHarness(config.harness)
 
       const sanitized = config.name
         .toLowerCase()
@@ -132,28 +157,29 @@ export class AutomationScheduler {
 
       let worktreePath: string
       try {
-        worktreePath = await GitService.createWorktree(config.repoPath, wtName, branch, true)
+        worktreePath = await GitService.createWorktree(config.repoPath, wtName, branch, true, undefined, false, undefined, '/tmp')
       } catch (err) {
         console.error(`Failed to create worktree for automation ${config.id}:`, err)
         return false
       }
 
-      try {
-        await trustPathForClaude(worktreePath)
-      } catch {
-        // non-fatal
+      if (harness === 'claude') {
+        try {
+          await trustPathForClaude(worktreePath)
+        } catch {
+          // non-fatal
+        }
       }
 
-      // Spawn a shell with initialWrite — writes the claude command as soon as
+      // Spawn a shell with initialWrite — writes the harness command as soon as
       // the shell emits its first output (ready), no manual timeout needed.
       const shell = process.env.SHELL || '/bin/zsh'
-      const escapedPrompt = config.prompt.replace(/'/g, "'\\''")
       const createdPtyId = this.ptyManager.create(
         worktreePath,
         win.webContents,
         shell,
         undefined,
-        `claude '${escapedPrompt}'\r`
+        `${buildAutomationCommand(config)}\r`
       )
       ptyId = createdPtyId
       this.activeRuns.set(config.id, createdPtyId)
