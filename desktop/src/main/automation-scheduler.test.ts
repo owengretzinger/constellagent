@@ -49,17 +49,17 @@ function createAutomation(id: string): AutomationConfig {
 
 describe('buildAutomationCommand', () => {
   it('builds a Claude command by default', () => {
-    expect(buildAutomationCommand({ prompt: 'do thing' })).toBe("claude -p 'do thing'")
+    expect(buildAutomationCommand({ prompt: 'do thing' })).toBe("claude 'do thing'")
   })
 
   it('builds the right command for each harness', () => {
-    expect(buildAutomationCommand({ prompt: 'review repo', harness: 'claude' })).toBe("claude -p 'review repo'")
-    expect(buildAutomationCommand({ prompt: 'review repo', harness: 'codex' })).toBe("codex exec 'review repo'")
-    expect(buildAutomationCommand({ prompt: 'review repo', harness: 'pi' })).toBe("pi --print --mode json 'review repo'")
+    expect(buildAutomationCommand({ prompt: 'review repo', harness: 'claude' })).toBe("claude 'review repo'")
+    expect(buildAutomationCommand({ prompt: 'review repo', harness: 'codex' })).toBe("codex 'review repo'")
+    expect(buildAutomationCommand({ prompt: 'review repo', harness: 'pi' })).toBe("pi 'review repo'")
   })
 
   it('escapes single quotes in prompts', () => {
-    expect(buildAutomationCommand({ prompt: "review O'Reilly", harness: 'codex' })).toBe("codex exec 'review O'\\''Reilly'")
+    expect(buildAutomationCommand({ prompt: "review O'Reilly", harness: 'codex' })).toBe("codex 'review O'\\''Reilly'")
   })
 })
 

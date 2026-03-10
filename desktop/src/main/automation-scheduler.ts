@@ -29,12 +29,12 @@ export function buildAutomationCommand(
 
   switch (normalizeAutomationHarness(config.harness)) {
     case 'codex':
-      return `codex exec ${prompt}`
+      return `codex ${prompt}`
     case 'pi':
-      return `pi --print --mode json ${prompt}`
+      return `pi ${prompt}`
     case 'claude':
     default:
-      return `claude -p ${prompt}`
+      return `claude ${prompt}`
   }
 }
 
