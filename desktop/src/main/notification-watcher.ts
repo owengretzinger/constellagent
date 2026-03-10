@@ -7,6 +7,10 @@ import { AGENT_EVENT_DEFAULT_DIR } from './agent-events'
 
 const POLL_INTERVAL = 500
 const FILE_SETTLE_MS = 100
+const TURN_EVENT_ORDER: Record<AgentTurnEventType, number> = {
+  turn_started: 0,
+  awaiting_user: 1,
+}
 
 const TURN_EVENT_TYPES: AgentTurnEventType[] = ['turn_started', 'awaiting_user']
 const TURN_OUTCOMES: AgentTurnOutcome[] = ['success', 'failed']
@@ -50,6 +54,8 @@ export class NotificationWatcher {
     try {
       const files = readdirSync(this.eventDir)
       const now = Date.now()
+      const pendingEvents: Array<{ filePath: string; event: AgentTurnEvent }> = []
+      const processedPaths: string[] = []
       for (const f of files) {
         if (f.endsWith('.tmp')) continue
         const filePath = join(this.eventDir, f)
@@ -59,33 +65,44 @@ export class NotificationWatcher {
         } catch {
           continue
         }
-        this.processAgentEventFile(filePath)
+        processedPaths.push(filePath)
+        const event = this.readAgentEventFile(filePath)
+        if (event) pendingEvents.push({ filePath, event })
+      }
+
+      pendingEvents.sort((a, b) => {
+        const atDiff = (a.event.at ?? 0) - (b.event.at ?? 0)
+        if (atDiff !== 0) return atDiff
+        const typeDiff = TURN_EVENT_ORDER[a.event.type] - TURN_EVENT_ORDER[b.event.type]
+        if (typeDiff !== 0) return typeDiff
+        return a.filePath.localeCompare(b.filePath)
+      })
+
+      for (const entry of pendingEvents) {
+        this.applyEvent(entry.event)
+      }
+
+      for (const filePath of processedPaths) {
+        try {
+          unlinkSync(filePath)
+        } catch {
+          // Ignore unlink failures.
+        }
       }
     } catch {
       // Directory may not exist yet
     }
   }
 
-  private processAgentEventFile(filePath: string): void {
+  private readAgentEventFile(filePath: string): AgentTurnEvent | null {
     try {
       const raw = readFileSync(filePath, 'utf-8').trim()
-      if (!raw) {
-        unlinkSync(filePath)
-        return
-      }
+      if (!raw) return null
 
       const parsed = JSON.parse(raw) as Partial<AgentTurnEvent>
-      const event = this.normalizeEvent(parsed)
-      if (event) {
-        this.applyEvent(event)
-      }
-      unlinkSync(filePath)
+      return this.normalizeEvent(parsed)
     } catch {
-      try {
-        unlinkSync(filePath)
-      } catch {
-        // Ignore unlink failures.
-      }
+      return null
     }
   }
 
@@ -124,10 +141,12 @@ export class NotificationWatcher {
 
     if (type === 'turn_started') {
       this.addActiveSession(workspaceId, this.sessionKey(agent, sessionId))
+      this.publishActivity()
       return
     }
 
     this.removeActiveSession(workspaceId, agent, sessionId)
+    this.publishActivity()
     this.notifyRenderer(workspaceId)
   }
 
@@ -170,12 +189,12 @@ export class NotificationWatcher {
       if (sessions.size > 0) nextActive.add(workspaceId)
     }
 
-    if (this.equalSets(nextActive, this.lastPublishedActiveIds)) return
-
     const becameInactive: string[] = []
     for (const wsId of this.lastPublishedActiveIds) {
       if (!nextActive.has(wsId)) becameInactive.push(wsId)
     }
+
+    if (this.equalSets(nextActive, this.lastPublishedActiveIds)) return
 
     this.lastPublishedActiveIds = nextActive
     this.sendActivity(Array.from(nextActive).sort())
