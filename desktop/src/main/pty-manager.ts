@@ -125,6 +125,54 @@ function stripAnsiSequences(data: string): string {
     .replace(/\x1bP.*?\x1b\\/g, '')
 }
 
+function extractLeadingJsonObject(buffer: string): { json: string; remainder: string } | null {
+  let start = 0
+  while (start < buffer.length && /\s/.test(buffer[start])) start += 1
+  if (start >= buffer.length || buffer[start] !== '{') return null
+
+  let depth = 0
+  let inString = false
+  let isEscaped = false
+
+  for (let i = start; i < buffer.length; i += 1) {
+    const char = buffer[i]
+    if (inString) {
+      if (isEscaped) {
+        isEscaped = false
+        continue
+      }
+      if (char === '\\') {
+        isEscaped = true
+        continue
+      }
+      if (char === '"') {
+        inString = false
+      }
+      continue
+    }
+
+    if (char === '"') {
+      inString = true
+      continue
+    }
+    if (char === '{') {
+      depth += 1
+      continue
+    }
+    if (char === '}') {
+      depth -= 1
+      if (depth === 0) {
+        return {
+          json: buffer.slice(start, i + 1),
+          remainder: buffer.slice(i + 1),
+        }
+      }
+    }
+  }
+
+  return null
+}
+
 function appendReplayChunk(instance: PtyInstance, chunk: string): void {
   if (!chunk) return
 
@@ -387,6 +435,12 @@ export class PtyManager {
 
     const lines = instance.agentEventLineBuffer.split(/\r?\n|\r/)
     instance.agentEventLineBuffer = lines.pop() ?? ''
+    let bufferedJson = extractLeadingJsonObject(instance.agentEventLineBuffer)
+    while (bufferedJson) {
+      lines.push(bufferedJson.json)
+      instance.agentEventLineBuffer = bufferedJson.remainder
+      bufferedJson = extractLeadingJsonObject(instance.agentEventLineBuffer)
+    }
 
     for (const rawLine of lines) {
       const line = rawLine.trim()
