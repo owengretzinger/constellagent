@@ -1,3 +1,4 @@
+import type { AutomationHarness } from '@shared/automation-types'
 import type { PrInfo } from '@shared/github-types'
 
 export interface StartupCommand {
@@ -12,6 +13,7 @@ export interface Automation {
   prompt: string
   cronExpression: string
   enabled: boolean
+  harness: AutomationHarness
   createdAt: number
   lastRunAt?: number
   lastRunStatus?: 'success' | 'failed' | 'timeout'
