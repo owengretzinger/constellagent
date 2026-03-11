@@ -1,5 +1,6 @@
 import * as cron from 'node-cron'
 import { BrowserWindow } from 'electron'
+import { randomUUID } from 'crypto'
 import { IPC } from '../shared/ipc-channels'
 import {
   normalizeAutomationHarness,
@@ -8,7 +9,9 @@ import {
 } from '../shared/automation-types'
 import { PtyManager } from './pty-manager'
 import { GitService } from './git-service'
-import { trustPathForClaude } from './claude-config'
+import { prepareClaudeForAutomation } from './claude-config'
+import { ensureCodexProjectTrusted } from './codex-config'
+import { ensurePiAutomationSettings } from './pi-config'
 import { shouldCatchUpOnWake } from './automation-catchup'
 
 interface AutomationRuntime {
@@ -18,23 +21,19 @@ interface AutomationRuntime {
   nextRunAt: number | null
 }
 
-function shellEscapeArg(value: string): string {
-  return `'${value.replace(/'/g, `'\\''`)}'`
-}
-
 export function buildAutomationCommand(
   config: Pick<AutomationConfig, 'prompt'> & Partial<Pick<AutomationConfig, 'harness'>>,
-): string {
-  const prompt = shellEscapeArg(config.prompt)
+): string[] {
+  const prompt = config.prompt
 
   switch (normalizeAutomationHarness(config.harness)) {
     case 'codex':
-      return `codex ${prompt}`
+      return ['codex', prompt]
     case 'pi':
-      return `pi ${prompt}`
+      return ['pi', prompt]
     case 'claude':
     default:
-      return `claude ${prompt}`
+      return ['claude', prompt]
   }
 }
 
@@ -142,6 +141,8 @@ export class AutomationScheduler {
       const win = BrowserWindow.getAllWindows()[0]
       if (!win) return false
       const harness = normalizeAutomationHarness(config.harness)
+      const workspaceId = randomUUID()
+      const sessionId = randomUUID()
 
       const sanitized = config.name
         .toLowerCase()
@@ -163,23 +164,31 @@ export class AutomationScheduler {
         return false
       }
 
-      if (harness === 'claude') {
-        try {
-          await trustPathForClaude(worktreePath)
-        } catch {
-          // non-fatal
+      try {
+        if (harness === 'claude') {
+          await prepareClaudeForAutomation(worktreePath)
         }
+        if (harness === 'codex') {
+          await ensureCodexProjectTrusted(worktreePath)
+        }
+        if (harness === 'pi') {
+          await ensurePiAutomationSettings()
+        }
+      } catch {
+        // non-fatal
       }
 
-      // Spawn a shell with initialWrite — writes the harness command as soon as
-      // the shell emits its first output (ready), no manual timeout needed.
-      const shell = process.env.SHELL || '/bin/zsh'
       const createdPtyId = this.ptyManager.create(
         worktreePath,
         win.webContents,
-        shell,
         undefined,
-        `${buildAutomationCommand(config)}\r`
+        buildAutomationCommand(config),
+        undefined,
+        {
+          AGENT_ORCH_WS_ID: workspaceId,
+          AGENT_ORCH_SESSION_ID: sessionId,
+          ANTHROPIC_API_KEY: harness === 'claude' ? null : process.env.ANTHROPIC_API_KEY ?? null,
+        }
       )
       ptyId = createdPtyId
       this.activeRuns.set(config.id, createdPtyId)
@@ -196,6 +205,7 @@ export class AutomationScheduler {
           automationId: config.id,
           automationName: config.name,
           projectId: config.projectId,
+          workspaceId,
           ptyId: createdPtyId,
           worktreePath,
           branch,

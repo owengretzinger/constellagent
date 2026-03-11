@@ -35,6 +35,7 @@ export interface AutomationRunStartedEvent {
   automationId: string
   automationName: string
   projectId: string
+  workspaceId: string
   ptyId: string
   worktreePath: string
   branch: string

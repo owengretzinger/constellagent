@@ -807,7 +807,7 @@ export async function hydrateFromDisk(): Promise<void> {
   // Listen for automation run-started events from main process
   window.api.automations.onRunStarted((data) => {
     const store = useAppStore.getState()
-    const { automationId, automationName, projectId, ptyId, worktreePath, branch } = data
+    const { automationId, automationName, projectId, workspaceId, ptyId, worktreePath, branch } = data
     const project = store.projects.find((p) => p.id === projectId)
     if (!project) return
 
@@ -818,9 +818,8 @@ export async function hydrateFromDisk(): Promise<void> {
     }) + ' ' + now.toLocaleTimeString('en-US', {
       hour: 'numeric', minute: '2-digit',
     })
-    const wsId = crypto.randomUUID()
     store.addWorkspace({
-      id: wsId,
+      id: workspaceId,
       name: `${automationName} · ${timestamp}`,
       branch: branch || '',
       worktreePath: worktreePath || project.repoPath,
@@ -831,7 +830,7 @@ export async function hydrateFromDisk(): Promise<void> {
     // Create terminal tab for the run
     store.addTab({
       id: crypto.randomUUID(),
-      workspaceId: wsId,
+      workspaceId,
       type: 'terminal',
       title: automationName,
       ptyId,
