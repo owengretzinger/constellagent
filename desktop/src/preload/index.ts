@@ -113,6 +113,12 @@ const api = {
       ipcRenderer.invoke(IPC.SKILLS_SYNC, skillPath, projectPath),
     remove: (skillName: string, projectPath: string) =>
       ipcRenderer.invoke(IPC.SKILLS_REMOVE, skillName, projectPath),
+    kvSave: (projectPath: string, skill: { name: string; description: string; sourcePath: string; enabled: boolean }) =>
+      ipcRenderer.invoke(IPC.SKILLS_KV_SAVE, projectPath, skill),
+    kvRemove: (projectPath: string, skillName: string) =>
+      ipcRenderer.invoke(IPC.SKILLS_KV_REMOVE, projectPath, skillName),
+    kvList: (projectPath: string) =>
+      ipcRenderer.invoke(IPC.SKILLS_KV_LIST, projectPath) as Promise<Array<{ name: string; description: string; sourcePath: string; enabled: boolean }>>,
   },
 
   subagents: {
@@ -122,6 +128,12 @@ const api = {
       ipcRenderer.invoke(IPC.SUBAGENTS_SYNC, subagentPath, projectPath),
     remove: (subagentName: string, projectPath: string) =>
       ipcRenderer.invoke(IPC.SUBAGENTS_REMOVE, subagentName, projectPath),
+    kvSave: (projectPath: string, subagent: { name: string; description: string; sourcePath: string; tools?: string; enabled: boolean }) =>
+      ipcRenderer.invoke(IPC.SUBAGENTS_KV_SAVE, projectPath, subagent),
+    kvRemove: (projectPath: string, subagentName: string) =>
+      ipcRenderer.invoke(IPC.SUBAGENTS_KV_REMOVE, projectPath, subagentName),
+    kvList: (projectPath: string) =>
+      ipcRenderer.invoke(IPC.SUBAGENTS_KV_LIST, projectPath) as Promise<Array<{ name: string; description: string; sourcePath: string; tools?: string; enabled: boolean }>>,
   },
 
   claude: {
@@ -218,6 +230,16 @@ const api = {
     }) => ipcRenderer.invoke(IPC.CONTEXT_INSERT, projectDir, entry),
     restoreCheckpoint: (projectDir: string, commitHash: string) =>
       ipcRenderer.invoke(IPC.CONTEXT_RESTORE_CHECKPOINT, projectDir, commitHash) as Promise<{ success: boolean }>,
+    buildSummary: (projectDir: string, workspaceId: string) =>
+      ipcRenderer.invoke(IPC.CONTEXT_BUILD_SUMMARY, projectDir, workspaceId) as Promise<{ success: boolean; wsContext: string; globalContext: string }>,
+    walCheckpoint: (projectDir?: string) =>
+      ipcRenderer.invoke(IPC.CONTEXT_WAL_CHECKPOINT, projectDir) as Promise<{ success: boolean }>,
+    getSessionContext: (projectDir: string, sessionId: string, limit?: number) =>
+      ipcRenderer.invoke(IPC.CONTEXT_SESSION_CONTEXT, projectDir, sessionId, limit),
+    saveSessionMeta: (projectDir: string, wsId: string, meta: { sessionId: string; agentType: string; startedAt: string; summary?: string }) =>
+      ipcRenderer.invoke(IPC.CONTEXT_SESSION_META_SAVE, projectDir, wsId, meta) as Promise<{ success: boolean }>,
+    getSessionMeta: (projectDir: string, wsId: string, agentType?: string) =>
+      ipcRenderer.invoke(IPC.CONTEXT_SESSION_META_GET, projectDir, wsId, agentType) as Promise<{ sessionId: string; agentType: string; startedAt: string; summary?: string } | null>,
   },
 
   session: {

@@ -24,8 +24,21 @@ Main Process (Node.js)          Preload (contextBridge)       Renderer (React)
 ├── pty-manager.ts              └── index.ts                  ├── App.tsx (Allotment layout)
 ├── git-service.ts                  exposes window.api        ├── store/app-store.ts (Zustand)
 ├── file-service.ts                 namespaces:               └── components/
-└── ipc.ts (handler registry)      git, pty, fs, app, state      Terminal, Editor, Sidebar...
+├── agentfs-service.ts             git, pty, fs, app, state      Terminal, Editor, Sidebar...
+├── context-db.ts (AgentFS)
+└── ipc.ts (handler registry)
 ```
+
+## Context & Storage (AgentFS + Cachebro)
+
+Context history, tool tracking, and skill/subagent config persistence use **AgentFS** (`agentfs-sdk`) backed by libSQL/Turso:
+
+- **`agentfs-service.ts`** — Per-project AgentFS instance manager. Creates `.constellagent/{id}.db` with LIKE-based context search (libSQL doesn't ship FTS5).
+- **`context-db.ts`** — Async `ContextDb` class wrapping AgentFS `tools.record()`, KV store, and raw SQL queries. All methods are `async`.
+- **`skills-service.ts`** — Skills/subagents persist to AgentFS KV (`skill:{name}`, `subagent:{name}`) as source of truth, with symlinks for external agent discovery.
+- **Cachebro** — CLI-only MCP server (`cachebro serve`) auto-configured in `.claude.json` and `.cursor/mcp.json`. Provides `read_file`, `read_files`, `cache_status`, `cache_clear` tools that return diffs instead of full re-reads (~26% token savings).
+
+No `better-sqlite3` — all SQLite access goes through AgentFS/libSQL.
 
 **IPC pattern**: Renderer calls `window.api.*` methods → preload uses `ipcRenderer.invoke()` / `.send()` → main process handlers in `ipc.ts` delegate to service classes. PTY data flows back via `ipc:data:{ptyId}` events.
 

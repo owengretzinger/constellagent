@@ -90,6 +90,11 @@ export const IPC = {
   CONTEXT_GET_RECENT: 'context:get-recent',
   CONTEXT_INSERT: 'context:insert',
   CONTEXT_RESTORE_CHECKPOINT: 'context:restore-checkpoint',
+  CONTEXT_BUILD_SUMMARY: 'context:build-summary',
+  CONTEXT_WAL_CHECKPOINT: 'context:wal-checkpoint',
+  CONTEXT_SESSION_CONTEXT: 'context:session-context',
+  CONTEXT_SESSION_META_SAVE: 'context:session-meta-save',
+  CONTEXT_SESSION_META_GET: 'context:session-meta-get',
 
   // Session
   SESSION_GET_LAST: 'session:get-last',
@@ -101,6 +106,14 @@ export const IPC = {
   SUBAGENTS_SCAN: 'subagents:scan',
   SUBAGENTS_SYNC: 'subagents:sync',
   SUBAGENTS_REMOVE: 'subagents:remove',
+
+  // Skills & Subagents KV persistence (AgentFS-backed)
+  SKILLS_KV_SAVE: 'skills:kv-save',
+  SKILLS_KV_REMOVE: 'skills:kv-remove',
+  SKILLS_KV_LIST: 'skills:kv-list',
+  SUBAGENTS_KV_SAVE: 'subagents:kv-save',
+  SUBAGENTS_KV_REMOVE: 'subagents:kv-remove',
+  SUBAGENTS_KV_LIST: 'subagents:kv-list',
 
   // App file picker
   APP_SELECT_FILE: 'app:select-file',

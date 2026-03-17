@@ -159,12 +159,14 @@ function SkillsSubagentsSection() {
     addSkill(skill)
     if (activeProject) {
       await window.api.skills.sync(dirPath, activeProject.repoPath)
+      await window.api.skills.kvSave(activeProject.repoPath, skill).catch(() => {})
     }
   }
 
   const handleRemoveSkill = async (skill: SkillEntry) => {
     if (activeProject) {
       await window.api.skills.remove(skill.name, activeProject.repoPath)
+      await window.api.skills.kvRemove(activeProject.repoPath, skill.name).catch(() => {})
     }
     removeSkill(skill.id)
   }
@@ -178,6 +180,7 @@ function SkillsSubagentsSection() {
       } else {
         await window.api.skills.remove(skill.name, activeProject.repoPath)
       }
+      await window.api.skills.kvSave(activeProject.repoPath, { ...skill, enabled: newEnabled }).catch(() => {})
     }
   }
 
@@ -200,12 +203,14 @@ function SkillsSubagentsSection() {
     addSubagent(subagent)
     if (activeProject) {
       await window.api.subagents.sync(filePath, activeProject.repoPath)
+      await window.api.subagents.kvSave(activeProject.repoPath, subagent).catch(() => {})
     }
   }
 
   const handleRemoveSubagent = async (subagent: SubagentEntry) => {
     if (activeProject) {
       await window.api.subagents.remove(subagent.name, activeProject.repoPath)
+      await window.api.subagents.kvRemove(activeProject.repoPath, subagent.name).catch(() => {})
     }
     removeSubagent(subagent.id)
   }
@@ -219,6 +224,7 @@ function SkillsSubagentsSection() {
       } else {
         await window.api.subagents.remove(subagent.name, activeProject.repoPath)
       }
+      await window.api.subagents.kvSave(activeProject.repoPath, { ...subagent, enabled: newEnabled }).catch(() => {})
     }
   }
 

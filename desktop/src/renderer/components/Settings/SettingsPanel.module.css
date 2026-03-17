@@ -252,7 +252,7 @@
 /* Action button (e.g. Install Hooks) */
 .actionBtn {
   padding: var(--space-2) var(--space-4);
-  background: var(--accent-blue-dim, rgba(122, 162, 247, 0.15));
+  background: var(--accent-blue-dim);
   border: 1px solid var(--accent-blue);
   border-radius: var(--radius-md);
   color: var(--accent-blue);
@@ -266,7 +266,7 @@
 }
 
 .actionBtn:hover {
-  background: rgba(122, 162, 247, 0.25);
+  background: rgba(123, 147, 189, 0.22);
 }
 
 .actionBtn:disabled {
@@ -276,7 +276,7 @@
 
 .actionBtnSuccess {
   padding: var(--space-2) var(--space-4);
-  background: rgba(115, 218, 202, 0.15);
+  background: var(--accent-green-dim);
   border: 1px solid var(--accent-green);
   border-radius: var(--radius-md);
   color: var(--accent-green);
@@ -291,10 +291,10 @@
 
 .actionBtnDanger {
   padding: var(--space-2) var(--space-4);
-  background: var(--accent-red-dim, rgba(247, 118, 142, 0.15));
-  border: 1px solid var(--accent-red, #f7768e);
+  background: var(--accent-red-dim);
+  border: 1px solid var(--accent-red);
   border-radius: var(--radius-md);
-  color: var(--accent-red, #f7768e);
+  color: var(--accent-red);
   font-size: var(--text-xs);
   font-family: var(--font-ui);
   font-weight: var(--weight-medium);
@@ -305,7 +305,7 @@
 }
 
 .actionBtnDanger:hover {
-  background: rgba(247, 118, 142, 0.25);
+  background: rgba(191, 97, 106, 0.25);
 }
 
 .actionBtnDanger:disabled {
@@ -394,7 +394,7 @@
 }
 
 .mcpDot.mcpDotOn {
-  background: var(--accent-green, #73daca);
+  background: var(--accent-green);
 }
 
 .mcpCardActions {
@@ -527,8 +527,8 @@
 }
 
 .removeEntryBtn:hover {
-  color: var(--accent-red, #f7768e);
-  background: rgba(247, 118, 142, 0.1);
+  color: var(--accent-red);
+  background: var(--accent-red-dim);
 }
 
 .addEntryBtn {

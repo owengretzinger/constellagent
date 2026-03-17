@@ -51,10 +51,29 @@ read_sliding_window() {
   local activity_file="$repo/context/activity.md"
 
   if [ -n "$WS_ID" ] && [ -f "$ws_file" ]; then
-    cat "$ws_file" | head -c 4000
+    head -c 4000 "$ws_file"
   elif [ -f "$global_file" ]; then
-    cat "$global_file" | head -c 4000
+    head -c 4000 "$global_file"
   elif [ -f "$activity_file" ]; then
     tail -30 "$activity_file"
+  fi
+}
+
+# Read the rich agent context generated from the AgentFS database.
+# Prefers per-workspace agent-context, falls back to global, then sliding window.
+# Usage: CONTEXT=$(read_agent_context "$CWD")
+read_agent_context() {
+  local cwd="$1"
+  local repo="$cwd/.constellagent"
+  local ws_ctx="$repo/context/agent-context-${WS_ID}.md"
+  local global_ctx="$repo/context/agent-context.md"
+
+  if [ -n "$WS_ID" ] && [ -f "$ws_ctx" ]; then
+    head -c 6000 "$ws_ctx"
+  elif [ -f "$global_ctx" ]; then
+    head -c 6000 "$global_ctx"
+  else
+    # Fall back to sliding window
+    read_sliding_window "$cwd"
   fi
 }

@@ -1,12 +1,13 @@
 import { readFile, symlink, unlink, mkdir, lstat } from 'fs/promises'
 import { join, basename } from 'path'
+import { getAgentFS } from './agentfs-service'
 
-interface SkillInfo {
+export interface SkillInfo {
   name: string
   description: string
 }
 
-interface SubagentInfo {
+export interface SubagentInfo {
   name: string
   description: string
   tools?: string
@@ -92,6 +93,52 @@ export class SkillsService {
       const linkPath = join(projectPath, dir, fileName)
       await safeUnlink(linkPath)
     }
+  }
+
+  // ── AgentFS KV persistence ──
+
+  static async saveSkillToKV(projectPath: string, skill: { name: string; description: string; sourcePath: string; enabled: boolean }): Promise<void> {
+    try {
+      const agent = await getAgentFS(projectPath)
+      await agent.kv.set(`skill:${skill.name}`, skill)
+    } catch { /* best-effort */ }
+  }
+
+  static async removeSkillFromKV(projectPath: string, skillName: string): Promise<void> {
+    try {
+      const agent = await getAgentFS(projectPath)
+      await agent.kv.delete(`skill:${skillName}`)
+    } catch { /* best-effort */ }
+  }
+
+  static async listSkillsFromKV(projectPath: string): Promise<Array<{ name: string; description: string; sourcePath: string; enabled: boolean }>> {
+    try {
+      const agent = await getAgentFS(projectPath)
+      const entries = await agent.kv.list('skill:')
+      return entries.map((e) => e.value)
+    } catch { return [] }
+  }
+
+  static async saveSubagentToKV(projectPath: string, subagent: { name: string; description: string; sourcePath: string; tools?: string; enabled: boolean }): Promise<void> {
+    try {
+      const agent = await getAgentFS(projectPath)
+      await agent.kv.set(`subagent:${subagent.name}`, subagent)
+    } catch { /* best-effort */ }
+  }
+
+  static async removeSubagentFromKV(projectPath: string, subagentName: string): Promise<void> {
+    try {
+      const agent = await getAgentFS(projectPath)
+      await agent.kv.delete(`subagent:${subagentName}`)
+    } catch { /* best-effort */ }
+  }
+
+  static async listSubagentsFromKV(projectPath: string): Promise<Array<{ name: string; description: string; sourcePath: string; tools?: string; enabled: boolean }>> {
+    try {
+      const agent = await getAgentFS(projectPath)
+      const entries = await agent.kv.list('subagent:')
+      return entries.map((e) => e.value)
+    } catch { return [] }
   }
 }
 

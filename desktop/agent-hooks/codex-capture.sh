@@ -50,28 +50,28 @@ case "$EVENT" in
 
       # Write the user prompt as a separate entry if present
       if [ -n "$USER_MSG" ]; then
-        USER_INPUT=$(jq -nc --arg msg "$USER_MSG" '$msg' | head -c 500)
+        USER_INPUT=$(jq -nc --arg msg "$USER_MSG" '$msg | .[:500]')
         write_pending "$CWD" "$AGENT_TYPE" "$SESSION_ID" "UserPrompt" "$USER_INPUT" "" "$TIMESTAMP"
       fi
 
       # Write the assistant turn
-      TOOL_INPUT=$(jq -nc --arg msg "${ASST_MSG:-}" '{summary: (if $msg == "" then null else $msg end)}' | head -c 1000)
+      TOOL_INPUT=$(jq -nc --arg msg "${ASST_MSG:-}" '{summary: (if $msg == "" then null else ($msg | .[:800]) end)}')
     else
-      TOOL_INPUT=$(jq -nc --arg msg "$INPUT" '{summary: $msg}' | head -c 1000)
+      TOOL_INPUT=$(jq -nc --arg msg "$INPUT" '{summary: ($msg | .[:800])}')
     fi
     write_pending "$CWD" "$AGENT_TYPE" "$SESSION_ID" "AssistantTurn" "$TOOL_INPUT" "" "$TIMESTAMP"
 
-    # Output per-workspace sliding window context for Codex to pick up
-    SW_CONTENT=$(read_sliding_window "$CWD")
-    if [ -n "$SW_CONTENT" ]; then
-      echo "$SW_CONTENT" | jq -Rs '{context: .}' 2>/dev/null
+    # Output rich AgentFS context for Codex to pick up
+    CTX_CONTENT=$(read_agent_context "$CWD")
+    if [ -n "$CTX_CONTENT" ]; then
+      echo "$CTX_CONTENT" | jq -Rs '{context: .}' 2>/dev/null
     fi
     ;;
   *)
     if [ "$IS_JSON" = true ]; then
-      TOOL_INPUT=$(echo "$INPUT" | jq -c '.' | head -c 500)
+      TOOL_INPUT=$(echo "$INPUT" | jq -c '.')
     else
-      TOOL_INPUT=$(jq -nc --arg msg "$INPUT" '{message: $msg}' | head -c 500)
+      TOOL_INPUT=$(jq -nc --arg msg "$INPUT" '{message: ($msg | .[:500])}')
     fi
     write_pending "$CWD" "$AGENT_TYPE" "$SESSION_ID" "$EVENT" "$TOOL_INPUT" "" "$TIMESTAMP"
     ;;

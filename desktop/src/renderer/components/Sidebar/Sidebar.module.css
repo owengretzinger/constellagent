@@ -4,7 +4,7 @@
   display: flex;
   flex-direction: column;
   height: 100%;
-  background: var(--surface-0);
+  background: var(--surface-1);
   border-right: 1px solid var(--border-subtle);
   overflow: hidden;
 }
@@ -78,7 +78,7 @@
   height: 18px;
   border: none;
   border-radius: var(--radius-sm);
-  background: var(--surface-0);
+  background: var(--surface-1);
   color: var(--text-tertiary);
   font-size: 12px;
   cursor: pointer;
@@ -108,7 +108,7 @@
   height: 18px;
   border: none;
   border-radius: var(--radius-sm);
-  background: var(--surface-0);
+  background: var(--surface-1);
   color: var(--text-tertiary);
   font-size: 8px;
   font-family: var(--font-ui);
@@ -142,7 +142,7 @@
   height: 18px;
   border: none;
   border-radius: var(--radius-sm);
-  background: var(--surface-0);
+  background: var(--surface-1);
   color: var(--text-tertiary);
   font-size: 9px;
   cursor: pointer;
@@ -459,19 +459,19 @@
 .projectPrStatusChipSuccess {
   color: var(--accent-green);
   border-color: var(--accent-green-dim);
-  background: rgba(158, 206, 106, 0.08);
+  background: var(--accent-green-dim);
 }
 
 .projectPrStatusChipWarning {
   color: var(--accent-orange);
   border-color: var(--accent-orange-dim);
-  background: rgba(255, 158, 100, 0.08);
+  background: var(--accent-orange-dim);
 }
 
 .projectPrStatusChipDanger {
   color: var(--accent-red);
   border-color: var(--accent-red-dim);
-  background: rgba(247, 118, 142, 0.08);
+  background: var(--accent-red-dim);
 }
 
 .projectPrPullBtn {
@@ -774,13 +774,13 @@
 .prBlockedCi {
   color: var(--accent-red);
   border-color: var(--accent-red-dim);
-  background: rgba(247, 118, 142, 0.08);
+  background: var(--accent-red-dim);
 }
 
 .prCiPending {
   color: var(--accent-orange);
   border-color: var(--accent-orange-dim);
-  background: rgba(255, 158, 100, 0.08);
+  background: var(--accent-orange-dim);
   animation: ciPendingTint 1.9s ease-in-out infinite;
   will-change: color, border-color, text-shadow;
 }
@@ -792,14 +792,14 @@
 
 .prChangesRequested {
   color: var(--accent-orange);
-  background: rgba(255, 158, 100, 0.22);
-  box-shadow: inset 0 0 0 1px rgba(255, 158, 100, 0.38);
+  background: rgba(208, 135, 112, 0.22);
+  box-shadow: inset 0 0 0 1px rgba(208, 135, 112, 0.38);
 }
 
 .prCiPassing {
   color: var(--accent-green);
   border-color: var(--accent-green-dim);
-  background: rgba(158, 206, 106, 0.08);
+  background: var(--accent-green-dim);
 }
 
 /* PR state colors — applies to icon (currentColor) and number */
@@ -866,14 +866,14 @@
 @keyframes ciPendingTint {
   0%,
   100% {
-    color: #ff9e64;
-    border-color: rgba(255, 158, 100, 0.14);
+    color: var(--status-pending-1);
+    border-color: var(--status-pending-dim);
     text-shadow: none;
   }
   50% {
-    color: #ffd2ad;
-    border-color: rgba(255, 158, 100, 0.3);
-    text-shadow: 0 0 6px rgba(255, 158, 100, 0.2);
+    color: var(--accent-yellow);
+    border-color: rgba(235, 203, 139, 0.3);
+    text-shadow: 0 0 6px rgba(235, 203, 139, 0.2);
   }
 }
 

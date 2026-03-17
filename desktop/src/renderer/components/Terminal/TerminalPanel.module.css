@@ -42,7 +42,7 @@
 }
 
 .splitPane.focusedPane {
-  border-color: var(--accent, #7aa2f7);
+  border-color: var(--border-accent);
 }
 
 /* Inner div where xterm renders (outside React's control). */
