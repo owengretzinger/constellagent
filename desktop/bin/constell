@@ -33,6 +33,14 @@ else
     (cd "$DESKTOP_DIR" && bun install)
   fi
 
+  # In a worktree, .git is a file, not a directory — start a fresh dev instance
+  REPO_ROOT="$(cd "$DESKTOP_DIR/.." && pwd)"
+  if [ -f "$REPO_ROOT/.git" ]; then
+    echo "constell: worktree detected, starting isolated dev instance..."
+    export CONSTELL_PORT=5174
+    cd "$REPO_ROOT" && exec bun run dev
+  fi
+
   # Check if a dev server is already running (Electron renderer URL port 5173)
   if lsof -i :5173 -sTCP:LISTEN >/dev/null 2>&1; then
     # Dev server running — just launch electron pointing at existing build

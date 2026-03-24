@@ -1,6 +1,7 @@
 import { app, BrowserWindow, Menu, shell } from 'electron'
 import type { MenuItemConstructorOptions } from 'electron'
-import { join } from 'path'
+import { join, resolve } from 'path'
+import { statSync } from 'fs'
 import { symlink, unlink, stat, readlink } from 'fs/promises'
 import { execFile } from 'child_process'
 import { promisify } from 'util'
@@ -92,6 +93,25 @@ async function autoInstallCli(): Promise<void> {
 
 app.setName('Constellagent')
 
+// Detect if we're running from a git worktree of our own repo.
+// In a worktree, .git is a file (not a directory) containing "gitdir: ..."
+function isRunningFromWorktree(): boolean {
+  if (app.isPackaged) return false
+  try {
+    const repoRoot = resolve(__dirname, '..', '..', '..')
+    const dotGit = join(repoRoot, '.git')
+    return statSync(dotGit).isFile()
+  } catch {
+    return false
+  }
+}
+
+const _isWorktree = isRunningFromWorktree()
+
+if (_isWorktree) {
+  app.setPath('userData', app.getPath('userData') + '-worktree')
+}
+
 // Isolate test data so e2e tests never touch real app state
 if (process.env.CI_TEST) {
   const { mkdtempSync } = require('fs')
@@ -171,7 +191,8 @@ app.whenReady().then(() => {
   createWindow()
 
   // Auto-install CLI (fire-and-forget, don't block startup)
-  autoInstallCli()
+  // Skip in worktree mode to avoid overwriting the production symlink
+  if (!_isWorktree) autoInstallCli()
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {

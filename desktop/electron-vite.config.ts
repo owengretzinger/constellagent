@@ -18,6 +18,9 @@ export default defineConfig({
     }
   },
   renderer: {
+    server: {
+      port: process.env.CONSTELL_PORT ? Number(process.env.CONSTELL_PORT) : undefined,
+    },
     plugins: [tailwindcss()],
     resolve: {
       alias: {
