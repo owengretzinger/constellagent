@@ -1,8 +1,14 @@
 import type { PrInfo } from '@shared/github-types'
 
+export type WaitCondition =
+  | { type: 'delay'; seconds: number }
+  | { type: 'output'; pattern: string }
+
 export interface StartupCommand {
   name: string
   command: string
+  waitFor?: string          // name of another StartupCommand to wait on
+  waitCondition?: WaitCondition
 }
 
 export interface Automation {

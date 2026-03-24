@@ -439,7 +439,10 @@ export function Sidebar() {
           ptyId,
         });
       } else {
+        // Create all PTYs upfront
         let firstTabId: string | null = null;
+        const ptyMap = new Map<string, string>(); // command name -> ptyId
+
         for (const cmd of commands) {
           const agentType = cmd.command.startsWith("codex")
             ? "codex"
@@ -452,6 +455,7 @@ export function Sidebar() {
             AGENT_ORCH_WS_ID: wsId,
             AGENT_ORCH_AGENT_TYPE: agentType,
           });
+          if (cmd.name) ptyMap.set(cmd.name, ptyId);
           const tabId = crypto.randomUUID();
           if (!firstTabId) firstTabId = tabId;
           addTab({
@@ -464,26 +468,88 @@ export function Sidebar() {
               ? { agentType: agentType as AgentType }
               : {}),
           });
-          // Delay to let shell initialize before writing command
-          setTimeout(async () => {
-            let finalCmd = cmd.command;
+        }
 
-            if (settings.sessionResumeEnabled) {
-              if (finalCmd.startsWith('claude')) {
-                const sessionId = await window.api.session.getLast(wsId, 'claude-code');
-                if (sessionId) {
-                  finalCmd = finalCmd.replace(/^claude\b/, `claude --resume ${sessionId}`);
-                }
-              } else if (finalCmd.startsWith('codex')) {
-                finalCmd = finalCmd.replace(/^codex\b/, 'codex resume --last');
-              } else if (finalCmd.startsWith('gemini')) {
-                finalCmd = finalCmd.replace(/^gemini\b/, 'gemini --resume');
+        // Helper to resolve final command with session resume
+        const resolveFinalCmd = async (cmd: { command: string }) => {
+          let finalCmd = cmd.command;
+          if (settings.sessionResumeEnabled) {
+            if (finalCmd.startsWith('claude')) {
+              const sessionId = await window.api.session.getLast(wsId, 'claude-code');
+              if (sessionId) {
+                finalCmd = finalCmd.replace(/^claude\b/, `claude --resume ${sessionId}`);
               }
+            } else if (finalCmd.startsWith('codex')) {
+              finalCmd = finalCmd.replace(/^codex\b/, 'codex resume --last');
+            } else if (finalCmd.startsWith('gemini')) {
+              finalCmd = finalCmd.replace(/^gemini\b/, 'gemini --resume');
+            }
+          }
+          return finalCmd;
+        };
+
+        // Launch commands with dependency awareness
+        const launched = new Set<string>();
+        const launchPromises = new Map<string, Promise<void>>();
+
+        const launchCmd = (cmd: typeof commands[0]): Promise<void> => {
+          const name = cmd.name;
+          if (name && launchPromises.has(name)) return launchPromises.get(name)!;
+
+          const promise = (async () => {
+            const ptyId = name ? ptyMap.get(name) : undefined;
+            if (!ptyId) return;
+
+            // Wait for dependency if any
+            if (cmd.waitFor && cmd.waitCondition) {
+              const depPtyId = ptyMap.get(cmd.waitFor);
+              const depCmd = commands.find((c) => c.name === cmd.waitFor);
+
+              // Ensure dependency launches first
+              if (depCmd) {
+                await launchCmd(depCmd);
+              }
+
+              if (depPtyId && cmd.waitCondition.type === 'delay') {
+                await new Promise<void>((resolve) =>
+                  setTimeout(resolve, cmd.waitCondition!.type === 'delay'
+                    ? (cmd.waitCondition as { type: 'delay'; seconds: number }).seconds * 1000
+                    : 0)
+                );
+              } else if (depPtyId && cmd.waitCondition.type === 'output') {
+                const pattern = (cmd.waitCondition as { type: 'output'; pattern: string }).pattern;
+                await new Promise<void>((resolve) => {
+                  const timeout = setTimeout(resolve, 60000); // 60s safety timeout
+                  const cleanup = window.api.pty.onData(depPtyId, (data: string) => {
+                    if (data.includes(pattern)) {
+                      clearTimeout(timeout);
+                      cleanup();
+                      resolve();
+                    }
+                  });
+                });
+              }
+            } else {
+              // No dependency — just wait for shell init
+              await new Promise<void>((resolve) => setTimeout(resolve, 500));
             }
 
-            window.api.pty.write(ptyId, finalCmd + "\n");
-          }, 500);
+            if (!launched.has(name)) {
+              launched.add(name);
+              const finalCmd = await resolveFinalCmd(cmd);
+              window.api.pty.write(ptyId, finalCmd + "\n");
+            }
+          })();
+
+          if (name) launchPromises.set(name, promise);
+          return promise;
+        };
+
+        // Launch all commands (dependency resolution happens internally)
+        for (const cmd of commands) {
+          launchCmd(cmd);
         }
+
         // Activate the first terminal tab
         if (firstTabId) setActiveTab(firstTabId);
       }

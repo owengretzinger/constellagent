@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react'
 import { useAppStore } from '../../store/app-store'
-import type { Project, PrLinkProvider, StartupCommand } from '../../store/types'
+import type { Project, PrLinkProvider, StartupCommand, WaitCondition } from '../../store/types'
 import styles from './ProjectSettingsDialog.module.css'
 
 interface Props {
@@ -33,14 +33,67 @@ export function ProjectSettingsDialog({ project, onSave, onCancel }: Props) {
     )
   }, [])
 
+  const handleWaitForChange = useCallback((index: number, waitFor: string) => {
+    setCommands((prev) =>
+      prev.map((cmd, i) => {
+        if (i !== index) return cmd
+        if (!waitFor) {
+          const { waitFor: _wf, waitCondition: _wc, ...rest } = cmd
+          return rest
+        }
+        return { ...cmd, waitFor, waitCondition: cmd.waitCondition ?? { type: 'delay', seconds: 3 } }
+      })
+    )
+  }, [])
+
+  const handleConditionChange = useCallback((index: number, condition: WaitCondition) => {
+    setCommands((prev) =>
+      prev.map((cmd, i) => (i === index ? { ...cmd, waitCondition: condition } : cmd))
+    )
+  }, [])
+
   const handleSave = useCallback(() => {
     // Filter out entries with no command
     const filtered = commands.filter((c) => c.command.trim())
+
+    // Clean stale waitFor references
+    const names = new Set(filtered.map((c) => c.name).filter(Boolean))
+    const cleaned: StartupCommand[] = filtered.map((cmd) => {
+      if (cmd.waitFor && !names.has(cmd.waitFor)) {
+        const { waitFor: _wf, waitCondition: _wc, ...rest } = cmd
+        return rest
+      }
+      return cmd
+    })
+
+    // Detect circular dependencies (DFS)
+    const hasCycle = (): boolean => {
+      const graph = new Map<string, string>()
+      for (const cmd of cleaned) {
+        if (cmd.name && cmd.waitFor) graph.set(cmd.name, cmd.waitFor)
+      }
+      for (const start of graph.keys()) {
+        const visited = new Set<string>()
+        let cur: string | undefined = start
+        while (cur && graph.has(cur)) {
+          if (visited.has(cur)) return true
+          visited.add(cur)
+          cur = graph.get(cur)
+        }
+      }
+      return false
+    }
+
+    if (hasCycle()) {
+      addToast({ id: crypto.randomUUID(), message: 'Circular dependency detected in startup commands', type: 'error' })
+      return
+    }
+
     onSave({
-      startupCommands: filtered.length > 0 ? filtered : [],
+      startupCommands: cleaned.length > 0 ? cleaned : [],
       prLinkProvider,
     })
-  }, [commands, onSave, prLinkProvider])
+  }, [commands, onSave, prLinkProvider, addToast])
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -60,30 +113,86 @@ export function ProjectSettingsDialog({ project, onSave, onCancel }: Props) {
         </div>
 
         <div className={styles.commandList}>
-          {commands.map((cmd, i) => (
-            <div key={i} className={styles.commandRow}>
-              <input
-                className={`${styles.input} ${styles.nameInput}`}
-                value={cmd.name}
-                onChange={(e) => handleChange(i, 'name', e.target.value)}
-                placeholder="Tab name"
-              />
-              <input
-                className={styles.input}
-                value={cmd.command}
-                onChange={(e) => handleChange(i, 'command', e.target.value)}
-                placeholder="command"
-                autoFocus={i === commands.length - 1}
-              />
-              <button
-                className={styles.removeBtn}
-                onClick={() => handleRemove(i)}
-                title="Remove"
-              >
-                ✕
-              </button>
-            </div>
-          ))}
+          {commands.map((cmd, i) => {
+            const otherNames = commands
+              .filter((_, j) => j !== i)
+              .map((c) => c.name)
+              .filter(Boolean)
+            return (
+              <div key={i} className={styles.commandBlock}>
+                <div className={styles.commandRow}>
+                  <input
+                    className={`${styles.input} ${styles.nameInput}`}
+                    value={cmd.name}
+                    onChange={(e) => handleChange(i, 'name', e.target.value)}
+                    placeholder="Tab name"
+                  />
+                  <input
+                    className={styles.input}
+                    value={cmd.command}
+                    onChange={(e) => handleChange(i, 'command', e.target.value)}
+                    placeholder="command"
+                    autoFocus={i === commands.length - 1}
+                  />
+                  <button
+                    className={styles.removeBtn}
+                    onClick={() => handleRemove(i)}
+                    title="Remove"
+                  >
+                    ✕
+                  </button>
+                </div>
+                {otherNames.length > 0 && (
+                  <div className={styles.waitRow}>
+                    <span className={styles.waitLabel}>Wait for</span>
+                    <select
+                      className={styles.waitSelect}
+                      value={cmd.waitFor ?? ''}
+                      onChange={(e) => handleWaitForChange(i, e.target.value)}
+                    >
+                      <option value="">None</option>
+                      {otherNames.map((n) => (
+                        <option key={n} value={n}>{n}</option>
+                      ))}
+                    </select>
+                    {cmd.waitFor && (
+                      <>
+                        <select
+                          className={styles.waitSelect}
+                          value={cmd.waitCondition?.type ?? 'delay'}
+                          onChange={(e) => {
+                            const t = e.target.value as 'delay' | 'output'
+                            handleConditionChange(i, t === 'delay' ? { type: 'delay', seconds: 3 } : { type: 'output', pattern: '' })
+                          }}
+                        >
+                          <option value="delay">Delay</option>
+                          <option value="output">Output match</option>
+                        </select>
+                        {cmd.waitCondition?.type === 'delay' && (
+                          <input
+                            className={styles.conditionInput}
+                            type="number"
+                            min={1}
+                            value={(cmd.waitCondition as { seconds: number }).seconds}
+                            onChange={(e) => handleConditionChange(i, { type: 'delay', seconds: Math.max(1, parseInt(e.target.value) || 1) })}
+                            title="Seconds to wait"
+                          />
+                        )}
+                        {cmd.waitCondition?.type === 'output' && (
+                          <input
+                            className={styles.conditionInput}
+                            value={(cmd.waitCondition as { pattern: string }).pattern}
+                            onChange={(e) => handleConditionChange(i, { type: 'output', pattern: e.target.value })}
+                            placeholder="pattern"
+                          />
+                        )}
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+            )
+          })}
 
           <button className={styles.addBtn} onClick={handleAdd}>
             <span>+</span>
