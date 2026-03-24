@@ -1,0 +1,158 @@
+/* Annotation bubble — inline review comment on diff lines */
+
+.annotationBubble {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  background: var(--surface-2);
+  border: 1px solid var(--border-subtle);
+  border-left: 3px solid var(--accent-blue);
+  border-radius: var(--radius-sm);
+  margin: var(--space-1) 0;
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+}
+
+.annotationBubble.resolved {
+  opacity: 0.5;
+  border-left-color: var(--accent-green);
+}
+
+.annotationHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.annotationAuthor {
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+  font-weight: var(--weight-semibold);
+}
+
+.annotationTime {
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+}
+
+.annotationBody {
+  color: var(--text-primary);
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.annotationActions {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.annotationBtn {
+  padding: var(--space-1) var(--space-3);
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: var(--text-xs);
+  font-family: var(--font-ui);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  background: var(--surface-3);
+  color: var(--text-secondary);
+}
+
+.annotationBtn:hover {
+  background: var(--surface-4, var(--surface-3));
+  color: var(--text-primary);
+}
+
+.resolveBtn {
+  background: rgba(163, 190, 140, 0.15);
+  color: var(--accent-green);
+}
+
+.resolveBtn:hover {
+  background: rgba(163, 190, 140, 0.3);
+}
+
+.deleteBtn {
+  color: var(--accent-red);
+}
+
+.deleteBtn:hover {
+  background: rgba(191, 97, 106, 0.15);
+}
+
+/* Inline annotation input */
+
+.annotationInput {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  background: var(--surface-2);
+  border: 1px solid var(--accent-blue);
+  border-radius: var(--radius-sm);
+  margin: var(--space-1) 0;
+}
+
+.annotationTextarea {
+  width: 100%;
+  min-height: 60px;
+  padding: var(--space-2) var(--space-3);
+  background: var(--surface-0);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+  resize: vertical;
+  outline: none;
+}
+
+.annotationTextarea:focus {
+  border-color: var(--accent-blue);
+}
+
+.annotationInputActions {
+  display: flex;
+  gap: var(--space-2);
+  justify-content: flex-end;
+}
+
+.submitBtn {
+  padding: var(--space-1) var(--space-4);
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: var(--text-xs);
+  font-family: var(--font-ui);
+  cursor: pointer;
+  background: var(--accent-blue);
+  color: #fff;
+  transition: opacity var(--transition-fast);
+}
+
+.submitBtn:hover {
+  opacity: 0.85;
+}
+
+.submitBtn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.cancelBtn {
+  padding: var(--space-1) var(--space-4);
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: var(--text-xs);
+  font-family: var(--font-ui);
+  cursor: pointer;
+  background: var(--surface-3);
+  color: var(--text-secondary);
+  transition: all var(--transition-fast);
+}
+
+.cancelBtn:hover {
+  color: var(--text-primary);
+}

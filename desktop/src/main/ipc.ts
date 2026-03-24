@@ -25,6 +25,8 @@ import { SkillsService } from './skills-service'
 
 import { ContextDb } from './context-db'
 import { getAgentFS, closeAllAgentFS, checkpoint, checkpointAll } from './agentfs-service'
+import { loadAnnotations, saveAnnotation, resolveAnnotation, deleteAnnotation, watchAnnotations, closeAllAnnotationWatchers } from './annotation-service'
+import type { Annotation } from '../shared/diff-annotation-types'
 
 const ptyManager = new PtyManager()
 
@@ -1755,6 +1757,38 @@ Cachebro is pre-configured via \`npx cachebro init\`. Use the cachebro MCP tools
     return filePath
   })
 
+  // ── Annotation handlers ──
+  const annotationWatcherCleanups = new Map<string, () => void>()
+
+  ipcMain.handle(IPC.ANNOTATION_LOAD, async (_e, worktreePath: string) => {
+    // Set up file watcher if not already watching
+    if (!annotationWatcherCleanups.has(worktreePath)) {
+      const cleanup = watchAnnotations(worktreePath, async () => {
+        // Notify all renderer windows of annotation changes
+        const annotations = await loadAnnotations(worktreePath)
+        for (const win of BrowserWindow.getAllWindows()) {
+          if (!win.isDestroyed()) {
+            win.webContents.send(IPC.ANNOTATION_CHANGED, { worktreePath, annotations })
+          }
+        }
+      })
+      annotationWatcherCleanups.set(worktreePath, cleanup)
+    }
+    return loadAnnotations(worktreePath)
+  })
+
+  ipcMain.handle(IPC.ANNOTATION_ADD, async (_e, worktreePath: string, annotation: Annotation) => {
+    return saveAnnotation(worktreePath, annotation)
+  })
+
+  ipcMain.handle(IPC.ANNOTATION_RESOLVE, async (_e, worktreePath: string, id: string) => {
+    return resolveAnnotation(worktreePath, id)
+  })
+
+  ipcMain.handle(IPC.ANNOTATION_DELETE, async (_e, worktreePath: string, id: string) => {
+    return deleteAnnotation(worktreePath, id)
+  })
+
   // ── State persistence handlers ──
   const stateFilePath = () =>
     join(app.getPath('userData'), 'constellagent-state.json')
@@ -1800,4 +1834,5 @@ export function cleanupAll(): void {
   for (const db of contextDbs.values()) db.close().catch(() => {})
   contextDbs.clear()
   closeAllAgentFS().catch(() => {})
+  closeAllAnnotationWatchers()
 }

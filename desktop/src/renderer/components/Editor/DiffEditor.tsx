@@ -1,8 +1,12 @@
-import { useEffect, useState, useCallback, useRef, memo } from 'react'
+import { useEffect, useState, useCallback, useRef, memo, useMemo } from 'react'
 import { PatchDiff } from '@pierre/diffs/react'
+import type { DiffLineAnnotation, AnnotationSide } from '@pierre/diffs'
 import { useAppStore } from '../../store/app-store'
 import { isMarkdownDocumentPath } from '../../utils/markdown-path'
 import { ErrorBoundary } from '../ErrorBoundary/ErrorBoundary'
+import { AnnotationBubble, AnnotationInput } from './AnnotationBubble'
+import type { Annotation } from '../../../shared/diff-annotation-types'
+import { generateAnnotationId } from '../../../shared/diff-annotation-types'
 import styles from './Editor.module.css'
 
 interface FileStatus {
@@ -34,11 +38,20 @@ const STATUS_LABELS: Record<string, string> = {
 
 // ── Per-file diff section ──
 
+interface PendingAnnotation {
+  line: number
+  side: AnnotationSide
+}
+
 interface DiffFileSectionProps {
   data: DiffFileData
   inline: boolean
   worktreePath: string
   onOpenFile: (filePath: string) => void
+  annotations: Annotation[]
+  onAddAnnotation: (file: string, line: number, side: AnnotationSide, body: string) => void
+  onResolveAnnotation: (id: string) => void
+  onDeleteAnnotation: (id: string) => void
 }
 
 const DiffFileSection = memo(function DiffFileSection({
@@ -46,7 +59,12 @@ const DiffFileSection = memo(function DiffFileSection({
   inline,
   worktreePath,
   onOpenFile,
+  annotations,
+  onAddAnnotation,
+  onResolveAnnotation,
+  onDeleteAnnotation,
 }: DiffFileSectionProps) {
+  const [pending, setPending] = useState<PendingAnnotation | null>(null)
   const parts = data.filePath.split('/')
   const fileName = parts.pop()
   const dir = parts.length > 0 ? parts.join('/') + '/' : ''
@@ -54,6 +72,73 @@ const DiffFileSection = memo(function DiffFileSection({
   const fullPath = data.filePath.startsWith('/')
     ? data.filePath
     : `${worktreePath}/${data.filePath}`
+
+  // Filter annotations for this file and map to Pierre's format
+  const fileAnnotations = useMemo(() => {
+    return annotations
+      .filter((a) => a.file === data.filePath)
+      .map((a): DiffLineAnnotation<Annotation> => ({
+        side: a.side,
+        lineNumber: a.line,
+        metadata: a,
+      }))
+  }, [annotations, data.filePath])
+
+  // Include pending annotation as a temporary annotation for input rendering
+  const allAnnotations = useMemo(() => {
+    if (!pending) return fileAnnotations
+    // Add a placeholder for the pending input
+    const placeholder: DiffLineAnnotation<Annotation> = {
+      side: pending.side,
+      lineNumber: pending.line,
+      metadata: {
+        id: '__pending__',
+        file: data.filePath,
+        line: pending.line,
+        side: pending.side,
+        body: '',
+        author: 'human',
+        resolved: false,
+        createdAt: new Date().toISOString(),
+      },
+    }
+    return [...fileAnnotations, placeholder]
+  }, [fileAnnotations, pending, data.filePath])
+
+  const handleLineNumberClick = useCallback(
+    (props: { lineNumber: number; annotationSide: AnnotationSide }) => {
+      setPending({ line: props.lineNumber, side: props.annotationSide })
+    },
+    [],
+  )
+
+  const handleSubmit = useCallback(
+    (body: string) => {
+      if (!pending) return
+      onAddAnnotation(data.filePath, pending.line, pending.side, body)
+      setPending(null)
+    },
+    [pending, data.filePath, onAddAnnotation],
+  )
+
+  const handleCancel = useCallback(() => setPending(null), [])
+
+  const renderAnnotation = useCallback(
+    (annotation: DiffLineAnnotation<Annotation>) => {
+      const a = annotation.metadata
+      if (a.id === '__pending__') {
+        return <AnnotationInput onSubmit={handleSubmit} onCancel={handleCancel} />
+      }
+      return (
+        <AnnotationBubble
+          annotation={annotation}
+          onResolve={onResolveAnnotation}
+          onDelete={onDeleteAnnotation}
+        />
+      )
+    },
+    [handleSubmit, handleCancel, onResolveAnnotation, onDeleteAnnotation],
+  )
 
   return (
     <div className={styles.diffFileSection} id={`diff-${data.filePath}`}>
@@ -77,8 +162,10 @@ const DiffFileSection = memo(function DiffFileSection({
             </div>
           }
         >
-          <PatchDiff
+          <PatchDiff<Annotation>
             patch={data.patch}
+            lineAnnotations={allAnnotations}
+            renderAnnotation={renderAnnotation}
             options={{
               theme: 'tokyo-night',
               themeType: 'dark',
@@ -88,6 +175,7 @@ const DiffFileSection = memo(function DiffFileSection({
               overflow: 'scroll',
               expandUnchanged: false,
               disableFileHeader: true,
+              onLineNumberClick: handleLineNumberClick,
             }}
           />
         </ErrorBoundary>
@@ -133,6 +221,7 @@ export function DiffViewer({ worktreePath, active, commitHash, commitMessage }: 
   const [files, setFiles] = useState<DiffFileData[]>([])
   const [loading, setLoading] = useState(true)
   const [activeFile, setActiveFile] = useState<string | null>(null)
+  const [annotations, setAnnotations] = useState<Annotation[]>([])
   const scrollAreaRef = useRef<HTMLDivElement>(null)
   const settings = useAppStore((s) => s.settings)
   const updateSettings = useAppStore((s) => s.updateSettings)
@@ -146,6 +235,78 @@ export function DiffViewer({ worktreePath, active, commitHash, commitMessage }: 
       else openFileTab(fullPath)
     },
     [openFileTab, openMarkdownPreview],
+  )
+
+  // ── Annotations ──
+
+  const loadAnnotations = useCallback(async () => {
+    try {
+      const loaded = await window.api.annotations.load(worktreePath)
+      setAnnotations(loaded)
+    } catch (err) {
+      console.error('Failed to load annotations:', err)
+    }
+  }, [worktreePath])
+
+  // Load annotations on mount and when worktree changes
+  useEffect(() => {
+    loadAnnotations()
+  }, [loadAnnotations])
+
+  // Listen for annotation changes from the main process (file watcher)
+  useEffect(() => {
+    const unsub = window.api.annotations.onChanged((data) => {
+      if (data.worktreePath === worktreePath) {
+        setAnnotations(data.annotations)
+      }
+    })
+    return unsub
+  }, [worktreePath])
+
+  const handleAddAnnotation = useCallback(
+    async (file: string, line: number, side: AnnotationSide, body: string) => {
+      const annotation: Annotation = {
+        id: generateAnnotationId(),
+        file,
+        line,
+        side,
+        body,
+        author: 'human',
+        resolved: false,
+        createdAt: new Date().toISOString(),
+      }
+      try {
+        const updated = await window.api.annotations.add(worktreePath, annotation)
+        setAnnotations(updated)
+      } catch (err) {
+        console.error('Failed to save annotation:', err)
+      }
+    },
+    [worktreePath],
+  )
+
+  const handleResolveAnnotation = useCallback(
+    async (id: string) => {
+      try {
+        const updated = await window.api.annotations.resolve(worktreePath, id)
+        setAnnotations(updated)
+      } catch (err) {
+        console.error('Failed to resolve annotation:', err)
+      }
+    },
+    [worktreePath],
+  )
+
+  const handleDeleteAnnotation = useCallback(
+    async (id: string) => {
+      try {
+        const updated = await window.api.annotations.delete(worktreePath, id)
+        setAnnotations(updated)
+      } catch (err) {
+        console.error('Failed to delete annotation:', err)
+      }
+    },
+    [worktreePath],
   )
 
   // Load commit-specific diff
@@ -339,6 +500,10 @@ export function DiffViewer({ worktreePath, active, commitHash, commitMessage }: 
             inline={inline}
             worktreePath={worktreePath}
             onOpenFile={openFileFromDiff}
+            annotations={annotations}
+            onAddAnnotation={handleAddAnnotation}
+            onResolveAnnotation={handleResolveAnnotation}
+            onDeleteAnnotation={handleDeleteAnnotation}
           />
         ))}
       </div>

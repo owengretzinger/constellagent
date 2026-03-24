@@ -140,6 +140,13 @@ export const IPC = {
   // App file picker
   APP_SELECT_FILE: 'app:select-file',
 
+  // Annotations (human review comments on diffs)
+  ANNOTATION_LOAD: 'annotation:load',
+  ANNOTATION_ADD: 'annotation:add',
+  ANNOTATION_RESOLVE: 'annotation:resolve',
+  ANNOTATION_DELETE: 'annotation:delete',
+  ANNOTATION_CHANGED: 'annotation:changed',
+
   // State persistence
   STATE_SAVE: 'state:save',
   STATE_SAVE_SYNC: 'state:save-sync',
