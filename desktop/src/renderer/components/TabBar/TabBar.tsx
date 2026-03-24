@@ -1,4 +1,4 @@
-import { useCallback, useId, useMemo } from 'react'
+import { useCallback, useId, useMemo, useState } from 'react'
 import { useAppStore } from '../../store/app-store'
 import type { Tab, AgentType } from '../../store/types'
 import { resolveEditor } from '../../store/types'
@@ -132,6 +132,7 @@ const STATUS_LETTER_MAP: Record<string, string> = {
 }
 
 export function TabBar() {
+  const [dragOverTabId, setDragOverTabId] = useState<string | null>(null)
   const activeTabId = useAppStore((s) => s.activeTabId)
   const setActiveTab = useAppStore((s) => s.setActiveTab)
   const removeTab = useAppStore((s) => s.removeTab)
@@ -213,7 +214,24 @@ export function TabBar() {
             <div
               key={tab.id}
               className={`${styles.tab} ${tab.id === activeTabId ? styles.active : ''} ${isDeleted ? styles.deleted : ''}`}
+              style={dragOverTabId === tab.id ? { outline: '1px solid var(--accent-primary, #7aa2f7)' } : undefined}
               onClick={() => setActiveTab(tab.id)}
+              onDragOver={tab.type === 'terminal' ? (e) => {
+                e.preventDefault()
+                e.dataTransfer.dropEffect = 'copy'
+                setDragOverTabId(tab.id)
+              } : undefined}
+              onDragLeave={tab.type === 'terminal' ? () => setDragOverTabId(null) : undefined}
+              onDrop={tab.type === 'terminal' ? (e) => {
+                e.preventDefault()
+                setDragOverTabId(null)
+                const filePath = e.dataTransfer.getData('application/x-constellagent-file')
+                  || e.dataTransfer.getData('text/plain')
+                if (filePath && tab.type === 'terminal') {
+                  const text = `@${filePath}`
+                  window.api.pty.write(tab.ptyId, `\x1b[200~${text}\x1b[201~`)
+                }
+              } : undefined}
             >
               {agentType === 'cursor' ? (
                 <CursorIcon className={styles.agentIcon} />

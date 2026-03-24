@@ -1,4 +1,5 @@
 import type { PrInfo } from '@shared/github-types'
+import type { editor } from 'monaco-editor'
 
 export type WaitCondition =
   | { type: 'delay'; seconds: number }
@@ -164,6 +165,13 @@ export interface ConfirmDialogState {
   onSecondaryConfirm?: () => void
 }
 
+export interface ChatSnippet {
+  text: string
+  filePath?: string
+  startLine?: number
+  endLine?: number
+}
+
 export interface AppState {
   // Data
   projects: Project[]
@@ -193,6 +201,7 @@ export interface AppState {
   gitFileStatuses: Map<string, Map<string, string>>
   syncStates: Record<string, { syncing: boolean; lastSyncedAt: number | null; lastError: string | null }>
   lastKnownRemoteHead: Record<string, string>
+  activeMonacoEditor: editor.IStandaloneCodeEditor | null
 
   // Actions
   addProject: (project: Project) => void
@@ -258,6 +267,11 @@ export interface AppState {
   closeQuickOpen: () => void
   togglePlanPalette: () => void
   closePlanPalette: () => void
+
+  // Add to Chat actions
+  setActiveMonacoEditor: (editor: editor.IStandaloneCodeEditor | null) => void
+  getFirstAgentTerminalPtyId: () => string | undefined
+  sendContextToAgent: (snippets: ChatSnippet[]) => void
 
   // Unread indicator actions
   markWorkspaceUnread: (workspaceId: string) => void

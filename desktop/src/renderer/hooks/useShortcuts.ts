@@ -274,6 +274,34 @@ export function useShortcuts() {
         return
       }
 
+      // ── Add to Chat: Cmd+L ──
+      if (!shift && !alt && e.key === 'l') {
+        consume()
+        const ed = store.activeMonacoEditor
+        if (ed) {
+          const sel = ed.getSelection()
+          const text = sel ? ed.getModel()?.getValueInRange(sel) : ''
+          if (text) {
+            const uri = ed.getModel()?.uri.path
+            store.sendContextToAgent([{
+              text,
+              filePath: uri || undefined,
+              startLine: sel!.startLineNumber,
+              endLine: sel!.endLineNumber,
+            }])
+          }
+        } else {
+          // Fallback: window selection (markdown preview, etc.)
+          const text = window.getSelection()?.toString()
+          if (text) {
+            const activeTab = store.tabs.find((t) => t.id === store.activeTabId)
+            const filePath = activeTab && ('filePath' in activeTab) ? (activeTab as { filePath: string }).filePath : undefined
+            store.sendContextToAgent([{ text, filePath }])
+          }
+        }
+        return
+      }
+
       // ── Settings ──
       // Cmd+, — toggle settings
       if (!shift && !alt && e.key === ',') {

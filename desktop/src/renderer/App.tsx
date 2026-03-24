@@ -16,6 +16,7 @@ import { QuickOpen } from './components/QuickOpen/QuickOpen'
 import { PlanPalette } from './components/PlanPalette/PlanPalette'
 import { ConfirmDialog } from './components/Sidebar/ConfirmDialog'
 import { ToastContainer } from './components/Toast/Toast'
+import { AddToChatButton } from './components/AddToChatButton/AddToChatButton'
 import { useShortcuts } from './hooks/useShortcuts'
 import { usePrStatusPoller } from './hooks/usePrStatusPoller'
 import { useWorktreeSyncPoller } from './hooks/useWorktreeSyncPoller'
@@ -231,6 +232,7 @@ export function App() {
           onSecondaryConfirm={confirmDialog.onSecondaryConfirm}
         />
       )}
+      <AddToChatButton />
       <ToastContainer />
     </div>
   )

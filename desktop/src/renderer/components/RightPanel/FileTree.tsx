@@ -250,12 +250,21 @@ function Node({ node, style }: NodeRendererProps<FileNode>) {
     })
   }
 
+  const handleDragStart = useCallback((e: React.DragEvent) => {
+    if (node.isInternal) return
+    e.dataTransfer.setData('application/x-constellagent-file', node.data.path)
+    e.dataTransfer.setData('text/plain', node.data.path)
+    e.dataTransfer.effectAllowed = 'copy'
+  }, [node])
+
   return (
     <div
       style={style}
       className={`${styles.treeNode} ${isActiveFile ? styles.treeNodeActive : ''}`}
       onClick={handleClick}
       onContextMenu={handleContextMenu}
+      draggable={node.isLeaf}
+      onDragStart={handleDragStart}
     >
       <span className={styles.treeChevron}>
         {node.isInternal ? (node.isOpen ? '▾' : '▸') : ''}

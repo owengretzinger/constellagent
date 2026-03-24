@@ -6,6 +6,7 @@ import { useGitGutter } from '../../hooks/useGitGutter'
 import { MarkdownRenderer } from '../MarkdownRenderer/MarkdownRenderer'
 import styles from './Editor.module.css'
 
+import { getLanguage } from '../../utils/language-map'
 import { isLspLanguage, getOrCreateClient, notifyDidOpen, notifyDidClose } from '../../services/lsp-client-manager'
 
 // Configure TS/JS built-in language features
@@ -42,30 +43,6 @@ interface Props {
   filePath: string
   active: boolean
   worktreePath?: string
-}
-
-// Map file extensions to Monaco language IDs
-function getLanguage(path: string): string {
-  const ext = path.split('.').pop()?.toLowerCase()
-  const map: Record<string, string> = {
-    ts: 'typescript',
-    tsx: 'typescriptreact',
-    js: 'javascript',
-    jsx: 'javascriptreact',
-    json: 'json',
-    md: 'markdown',
-    css: 'css',
-    html: 'html',
-    py: 'python',
-    rs: 'rust',
-    go: 'go',
-    yml: 'yaml',
-    yaml: 'yaml',
-    sh: 'shell',
-    bash: 'shell',
-    toml: 'ini',
-  }
-  return map[ext || ''] || 'plaintext'
 }
 
 export interface FileEditorHandle {
@@ -227,6 +204,29 @@ export const FileEditor = forwardRef<FileEditorHandle, Props>(function FileEdito
       }
     }
   }, [filePath, worktreePath]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Track active Monaco editor for Cmd+L context sharing
+  const setActiveMonacoEditor = useAppStore((s) => s.setActiveMonacoEditor)
+
+  useEffect(() => {
+    if (active && editorInstance) {
+      setActiveMonacoEditor(editorInstance)
+    }
+    if (!active && editorInstance) {
+      // Only clear if we are the current active editor
+      const current = useAppStore.getState().activeMonacoEditor
+      if (current === editorInstance) setActiveMonacoEditor(null)
+    }
+  }, [active, editorInstance, setActiveMonacoEditor])
+
+  useEffect(() => {
+    return () => {
+      const current = useAppStore.getState().activeMonacoEditor
+      if (current === editorRef.current) {
+        useAppStore.getState().setActiveMonacoEditor(null)
+      }
+    }
+  }, [])
 
   // Cmd+S handler
   const handleEditorMount = useCallback((ed: editor.IStandaloneCodeEditor) => {
