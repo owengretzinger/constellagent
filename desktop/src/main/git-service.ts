@@ -5,6 +5,7 @@ import { promisify } from 'util'
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'path'
 import type { CreateWorktreeProgress } from '../shared/workspace-creation'
 import type { GitLogEntry } from '../shared/git-types'
+import type { SyncProgress, SyncResult } from '../shared/sync-types'
 
 const execFileAsync = promisify(execFile)
 
@@ -613,6 +614,100 @@ export class GitService {
       })
     }
     return entries
+  }
+
+  static async getRemoteHeadHash(repoPath: string, branch: string): Promise<string> {
+    const output = await git(['ls-remote', '--heads', 'origin', branch], repoPath)
+    if (!output) return ''
+    return output.split(/\s/)[0] || ''
+  }
+
+  static async syncWorktree(
+    worktreePath: string,
+    defaultBranch: string,
+    onProgress?: (progress: SyncProgress) => void,
+  ): Promise<SyncResult> {
+    const report = (stage: SyncProgress['stage'], message: string) =>
+      onProgress?.({ worktreePath, stage, message })
+
+    let didStash = false
+    try {
+      // Check if dirty
+      report('stash', 'Checking for uncommitted changes...')
+      const status = await git(['status', '--porcelain'], worktreePath)
+      if (status.trim()) {
+        await git(['stash', 'push', '-m', 'constellagent-sync'], worktreePath)
+        didStash = true
+      }
+
+      // Fetch
+      report('fetch', 'Fetching from origin...')
+      await git(['fetch', 'origin'], worktreePath)
+
+      // Rebase
+      report('rebase', `Rebasing onto ${defaultBranch}...`)
+      try {
+        await git(['rebase', defaultBranch], worktreePath)
+      } catch (rebaseErr) {
+        // Abort rebase and restore stash
+        await git(['rebase', '--abort'], worktreePath).catch(() => {})
+        if (didStash) {
+          await git(['stash', 'pop'], worktreePath).catch(() => {})
+        }
+        report('error', 'Rebase failed — aborted and restored')
+        return {
+          worktreePath,
+          success: false,
+          error: friendlyGitError(rebaseErr, 'Rebase failed'),
+        }
+      }
+
+      // Stash pop
+      if (didStash) {
+        report('stash-pop', 'Restoring stashed changes...')
+        try {
+          await git(['stash', 'pop'], worktreePath)
+        } catch {
+          report('error', 'Stash pop had conflicts')
+          return {
+            worktreePath,
+            success: true,
+            stashPopConflict: true,
+          }
+        }
+      }
+
+      report('done', 'Sync complete')
+      return { worktreePath, success: true }
+    } catch (err) {
+      report('error', friendlyGitError(err, 'Sync failed'))
+      return {
+        worktreePath,
+        success: false,
+        error: friendlyGitError(err, 'Sync failed'),
+      }
+    }
+  }
+
+  static async syncAllWorktrees(
+    repoPath: string,
+    onProgress?: (progress: SyncProgress) => void,
+  ): Promise<SyncResult[]> {
+    const defaultBranch = await GitService.getDefaultBranch(repoPath)
+    const worktrees = await GitService.listWorktrees(repoPath)
+
+    // Filter out bare worktrees and the one on the default branch
+    const defaultBranchShort = defaultBranch.replace(/^origin\//, '')
+    const toSync = worktrees.filter(
+      (wt) => !wt.isBare && wt.branch !== defaultBranchShort,
+    )
+
+    const results: SyncResult[] = []
+    for (const wt of toSync) {
+      const result = await GitService.syncWorktree(wt.path, defaultBranch, onProgress)
+      results.push(result)
+    }
+    return results
   }
 
   static async getCommitDiff(worktreePath: string, hash: string): Promise<string> {

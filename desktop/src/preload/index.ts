@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer } from 'electron'
 import { IPC } from '../shared/ipc-channels'
 import type { AutomationConfig, AutomationRunStartedEvent } from '../shared/automation-types'
 import type { CreateWorktreeProgressEvent } from '../shared/workspace-creation'
+import type { SyncProgress, SyncResult } from '../shared/sync-types'
 import type { PlanAgent } from '../shared/agent-plan-path'
 
 const api = {
@@ -47,6 +48,17 @@ const api = {
       ipcRenderer.invoke(IPC.GIT_GET_LOG, worktreePath, maxCount) as Promise<import('../shared/git-types').GitLogEntry[]>,
     getCommitDiff: (worktreePath: string, hash: string) =>
       ipcRenderer.invoke(IPC.GIT_GET_COMMIT_DIFF, worktreePath, hash) as Promise<string>,
+    syncAllWorktrees: (repoPath: string) =>
+      ipcRenderer.invoke(IPC.GIT_SYNC_ALL_WORKTREES, repoPath) as Promise<SyncResult[]>,
+    checkRemoteHead: (repoPath: string, branch: string) =>
+      ipcRenderer.invoke(IPC.GIT_CHECK_REMOTE_HEAD, repoPath, branch) as Promise<string>,
+    onSyncProgress: (callback: (progress: SyncProgress) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, progress: SyncProgress) => callback(progress)
+      ipcRenderer.on(IPC.GIT_SYNC_PROGRESS, listener)
+      return () => {
+        ipcRenderer.removeListener(IPC.GIT_SYNC_PROGRESS, listener)
+      }
+    },
   },
 
   pty: {

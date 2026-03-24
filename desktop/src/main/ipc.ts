@@ -622,6 +622,16 @@ export function registerIpcHandlers(): void {
     return GitService.getCommitDiff(worktreePath, hash)
   })
 
+  ipcMain.handle(IPC.GIT_SYNC_ALL_WORKTREES, async (e, repoPath: string) => {
+    return GitService.syncAllWorktrees(repoPath, (progress) => {
+      e.sender.send(IPC.GIT_SYNC_PROGRESS, progress)
+    })
+  })
+
+  ipcMain.handle(IPC.GIT_CHECK_REMOTE_HEAD, async (_e, repoPath: string, branch: string) => {
+    return GitService.getRemoteHeadHash(repoPath, branch)
+  })
+
   // ── GitHub handlers ──
   ipcMain.handle(IPC.GITHUB_GET_PR_STATUSES, async (_e, repoPath: string, branches: string[]) => {
     return GithubService.getPrStatuses(repoPath, branches)

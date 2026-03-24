@@ -20,6 +20,9 @@ export const IPC = {
   GIT_SHOW_FILE_AT_HEAD: 'git:show-file-at-head',
   GIT_GET_LOG: 'git:get-log',
   GIT_GET_COMMIT_DIFF: 'git:get-commit-diff',
+  GIT_SYNC_ALL_WORKTREES: 'git:sync-all-worktrees',
+  GIT_SYNC_PROGRESS: 'git:sync-progress',
+  GIT_CHECK_REMOTE_HEAD: 'git:check-remote-head',
 
   // PTY operations
   PTY_CREATE: 'pty:create',

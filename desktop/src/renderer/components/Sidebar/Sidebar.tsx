@@ -285,6 +285,7 @@ export function Sidebar() {
   const setPrStatuses = useAppStore((s) => s.setPrStatuses);
   const settings = useAppStore((s) => s.settings);
   const setGhAvailability = useAppStore((s) => s.setGhAvailability);
+  const syncStates = useAppStore((s) => s.syncStates);
 
   const [manualCollapsed, setManualCollapsed] = useState<Set<string>>(
     new Set(),
@@ -880,6 +881,18 @@ export function Sidebar() {
                     PR
                   </button>
                 </Tooltip>
+                <Tooltip label="Sync all worktrees">
+                  <button
+                    className={styles.settingsBtn}
+                    disabled={projectWorkspaces.some((w) => syncStates[w.id]?.syncing)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      window.api.git.syncAllWorktrees(project.repoPath);
+                    }}
+                  >
+                    {projectWorkspaces.some((w) => syncStates[w.id]?.syncing) ? "⟳" : "↻"}
+                  </button>
+                </Tooltip>
                 <Tooltip label="Delete project">
                   <button
                     className={styles.deleteBtn}
@@ -918,7 +931,7 @@ export function Sidebar() {
                         }}
                       >
                         <span className={styles.workspaceIcon}>
-                          {ws.automationId ? "⏱" : "⌥"}
+                          {syncStates[ws.id]?.syncing ? "⟳" : syncStates[ws.id]?.lastError ? "⚠" : ws.automationId ? "⏱" : "⌥"}
                         </span>
                         <div className={styles.workspaceNameCol}>
                           {isEditing ? (

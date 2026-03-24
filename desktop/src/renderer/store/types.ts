@@ -185,6 +185,8 @@ export interface AppState {
   prStatusMap: Map<string, PrInfo | null>
   ghAvailability: Map<string, boolean>
   gitFileStatuses: Map<string, Map<string, string>>
+  syncStates: Record<string, { syncing: boolean; lastSyncedAt: number | null; lastError: string | null }>
+  lastKnownRemoteHead: Record<string, string>
 
   // Actions
   addProject: (project: Project) => void
@@ -265,6 +267,10 @@ export interface AppState {
   // Git file status actions
   setGitFileStatuses: (worktreePath: string, statuses: Map<string, string>) => void
   setTabDeleted: (tabId: string, deleted: boolean) => void
+
+  // Sync actions
+  setSyncState: (workspaceId: string, partial: Partial<{ syncing: boolean; lastSyncedAt: number | null; lastError: string | null }>) => void
+  setLastKnownRemoteHead: (projectId: string, hash: string) => void
 
   // PR status actions
   setPrStatuses: (projectId: string, statuses: Record<string, PrInfo | null>) => void

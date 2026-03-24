@@ -56,6 +56,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   prStatusMap: new Map(),
   ghAvailability: new Map(),
   gitFileStatuses: new Map(),
+  syncStates: {},
+  lastKnownRemoteHead: {},
 
   addProject: (project) =>
     set((s) => ({
@@ -901,6 +903,19 @@ export const useAppStore = create<AppState>((set, get) => ({
       tabs: s.tabs.map((t) =>
         t.id === tabId && t.type === 'file' ? { ...t, deleted } : t
       ),
+    })),
+
+  setSyncState: (workspaceId, partial) =>
+    set((s) => ({
+      syncStates: {
+        ...s.syncStates,
+        [workspaceId]: { ...(s.syncStates[workspaceId] || { syncing: false, lastSyncedAt: null, lastError: null }), ...partial },
+      },
+    })),
+
+  setLastKnownRemoteHead: (projectId, hash) =>
+    set((s) => ({
+      lastKnownRemoteHead: { ...s.lastKnownRemoteHead, [projectId]: hash },
     })),
 
   setPrStatuses: (projectId, statuses) =>
