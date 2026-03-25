@@ -1144,6 +1144,18 @@ export function registerIpcHandlers(): void {
   // ── Context repository handlers ──
   const execFileAsyncCtx = promisify(execFile)
 
+  /** Serialize `.constellagent/` git bootstrap — concurrent `context:repo-init` races `git init` ("exclude: File exists"). */
+  const contextRepoBootstrapQueues = new Map<string, Promise<unknown>>()
+  async function enqueueContextRepoBootstrap<T>(key: string, task: () => Promise<T>): Promise<T> {
+    const prev = contextRepoBootstrapQueues.get(key) ?? Promise.resolve()
+    const next = prev.then(task, task) as Promise<T>
+    contextRepoBootstrapQueues.set(key, next)
+    next.finally(() => {
+      if (contextRepoBootstrapQueues.get(key) === next) contextRepoBootstrapQueues.delete(key)
+    })
+    return next
+  }
+
   /** Remove refs/constellagent-cp/* older than 7 days (ref name starts with unix ts). */
   async function pruneCheckpointRefs(projectDir: string): Promise<void> {
     const cutoff = Math.floor(Date.now() / 1000) - 7 * 24 * 60 * 60
@@ -1167,25 +1179,41 @@ export function registerIpcHandlers(): void {
     const gitExists = existsSync(join(repoDir, '.git'))
 
     if (!gitExists) {
-      await mkdir(join(repoDir, 'context'), { recursive: true })
-      await mkdir(join(repoDir, 'sessions'), { recursive: true })
-      await mkdir(join(repoDir, 'meta'), { recursive: true })
+      const lockKey = (() => {
+        try {
+          return realpathSync(projectDir)
+        } catch {
+          return resolve(projectDir)
+        }
+      })()
+      await enqueueContextRepoBootstrap(lockKey, async () => {
+        if (existsSync(join(repoDir, '.git'))) return
 
-      await writeFile(join(repoDir, 'README.md'), '# Agent Context Repository\n\nAuto-managed by Constellagent.\n')
-      await writeFile(join(repoDir, 'context', 'activity.md'), '# Recent Activity\n')
-      await writeFile(join(repoDir, 'context', 'files-touched.md'), '# Files Touched\n')
-      await writeFile(join(repoDir, 'meta', 'workspace.json'), JSON.stringify({ wsId, createdAt: new Date().toISOString() }, null, 2))
+        await mkdir(join(repoDir, 'context'), { recursive: true })
+        await mkdir(join(repoDir, 'sessions'), { recursive: true })
+        await mkdir(join(repoDir, 'meta'), { recursive: true })
 
-      await execFileAsyncCtx('git', ['init'], { cwd: repoDir })
-      await execFileAsyncCtx('git', ['add', '-A'], { cwd: repoDir })
-      await execFileAsyncCtx('git', ['-c', 'user.name=Constellagent', '-c', 'user.email=noreply@constellagent', 'commit', '--no-gpg-sign', '-m', 'init: context repository'], { cwd: repoDir })
+        await writeFile(join(repoDir, 'README.md'), '# Agent Context Repository\n\nAuto-managed by Constellagent.\n')
+        await writeFile(join(repoDir, 'context', 'activity.md'), '# Recent Activity\n')
+        await writeFile(join(repoDir, 'context', 'files-touched.md'), '# Files Touched\n')
+        await writeFile(join(repoDir, 'meta', 'workspace.json'), JSON.stringify({ wsId, createdAt: new Date().toISOString() }, null, 2))
 
-      // Add .constellagent/ to project .gitignore
-      const gitignorePath = join(projectDir, '.gitignore')
-      const gitignore = existsSync(gitignorePath) ? await readFile(gitignorePath, 'utf-8') : ''
-      if (!gitignore.includes('.constellagent')) {
-        await writeFile(gitignorePath, gitignore.trimEnd() + '\n.constellagent/\n')
-      }
+        await execFileAsyncCtx('git', ['init'], { cwd: repoDir })
+        await execFileAsyncCtx('git', ['add', '-A'], { cwd: repoDir })
+        try {
+          await execFileAsyncCtx('git', ['-c', 'user.name=Constellagent', '-c', 'user.email=noreply@constellagent', 'commit', '--no-gpg-sign', '-m', 'init: context repository'], { cwd: repoDir })
+        } catch (e) {
+          const stderr = String((e as ExecFileException).stderr ?? '')
+          if (!stderr.includes('nothing to commit')) throw e
+        }
+
+        // Add .constellagent/ to project .gitignore
+        const gitignorePath = join(projectDir, '.gitignore')
+        const gitignore = existsSync(gitignorePath) ? await readFile(gitignorePath, 'utf-8') : ''
+        if (!gitignore.includes('.constellagent')) {
+          await writeFile(gitignorePath, gitignore.trimEnd() + '\n.constellagent/\n')
+        }
+      })
     }
 
     // Initialize context database for this project (lazy AgentFS init via ContextDb)

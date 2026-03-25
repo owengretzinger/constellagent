@@ -306,6 +306,21 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   setActiveTab: (id) => set({ activeTabId: id }),
 
+  reorderTabsInWorkspace: (workspaceId, orderedIds) => {
+    set((s) => {
+      const wsTabs = s.tabs.filter((t) => t.workspaceId === workspaceId)
+      if (orderedIds.length !== wsTabs.length) return s
+      const byId = new Map(wsTabs.map((t) => [t.id, t]))
+      if (!orderedIds.every((id) => byId.has(id))) return s
+      const ordered = orderedIds.map((id) => byId.get(id)!)
+      let oi = 0
+      const newTabs = s.tabs.map((t) =>
+        t.workspaceId === workspaceId ? ordered[oi++]! : t
+      )
+      return { tabs: newTabs }
+    })
+  },
+
   setRightPanelMode: (mode) => set({ rightPanelMode: mode }),
 
   toggleRightPanel: () => set((s) => ({ rightPanelOpen: !s.rightPanelOpen })),
@@ -587,18 +602,19 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
 
-  splitTerminalPane: async (direction) => {
+  splitTerminalPaneForTab: async (tabId, direction) => {
     const s = get()
-    if (!s.activeTabId) return
-    const tab = s.tabs.find((t) => t.id === s.activeTabId)
+    const tab = s.tabs.find((t) => t.id === tabId)
     if (!tab) return
+
+    set({ activeTabId: tabId })
 
     const ws = s.workspaces.find((w) => w.id === tab.workspaceId)
     if (!ws) return
 
     const shell = s.settings.defaultShell || undefined
 
-    // Active tab is a file tab — convert to a split container with file + terminal panes
+    // File tab — convert to a split container with file + terminal panes
     if (tab.type === 'file') {
       if (tab.splitRoot) {
         // File-only split (e.g. from tab drag): cannot embed a live PTY in a file tab without breaking keep-alive.
@@ -621,12 +637,12 @@ export const useAppStore = create<AppState>((set, get) => ({
       }
 
       const fileName = tab.filePath.split('/').pop() || 'Split'
-      const tabId = tab.id
+      const id = tab.id
       set((state) => ({
         tabs: state.tabs.map((t) =>
-          t.id === tabId
+          t.id === id
             ? {
-                id: tabId,
+                id,
                 workspaceId: t.workspaceId,
                 type: 'terminal' as const,
                 title: fileName,
@@ -636,7 +652,7 @@ export const useAppStore = create<AppState>((set, get) => ({
               }
             : t
         ),
-        activeTabId: tabId,
+        activeTabId: id,
       }))
       return
     }
@@ -652,13 +668,20 @@ export const useAppStore = create<AppState>((set, get) => ({
     const newLeaf = { type: 'leaf' as const, id: newLeafId, contentType: 'terminal' as const, ptyId: newPtyId }
     const newRoot = splitLeaf(currentRoot, targetPaneId, direction, newLeaf)
 
+    // Keep keyboard/focus on the pane that was split (existing session), not the new empty PTY.
     set((state) => ({
       tabs: state.tabs.map((t) =>
         t.id === tab.id && t.type === 'terminal'
-          ? { ...t, splitRoot: newRoot, focusedPaneId: newLeafId }
+          ? { ...t, splitRoot: newRoot, focusedPaneId: targetPaneId }
           : t
       ),
     }))
+  },
+
+  splitTerminalPane: async (direction) => {
+    const id = get().activeTabId
+    if (!id) return
+    await get().splitTerminalPaneForTab(id, direction)
   },
 
   openFileInSplit: async (filePath, direction = 'horizontal') => {

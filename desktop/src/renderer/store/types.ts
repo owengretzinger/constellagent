@@ -218,6 +218,8 @@ export interface AppState {
   addTab: (tab: Tab) => void
   removeTab: (id: string) => void
   setActiveTab: (id: string | null) => void
+  /** Reorder tabs for a workspace; `orderedIds` must be a permutation of that workspace's tab ids. */
+  reorderTabsInWorkspace: (workspaceId: string, orderedIds: string[]) => void
   setRightPanelMode: (mode: RightPanelMode) => void
   toggleRightPanel: () => void
   toggleSidebar: () => void
@@ -250,6 +252,7 @@ export interface AppState {
   switchToTabByIndex: (index: number) => void
   closeAllWorkspaceTabs: () => void
   focusOrCreateTerminal: () => Promise<void>
+  splitTerminalPaneForTab: (tabId: string, direction: 'horizontal' | 'vertical') => Promise<void>
   splitTerminalPane: (direction: 'horizontal' | 'vertical') => Promise<void>
   openFileInSplit: (filePath: string, direction?: 'horizontal' | 'vertical') => Promise<void>
   cycleFocusedPane: () => void

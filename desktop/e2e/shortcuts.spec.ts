@@ -122,6 +122,41 @@ test.describe('Keyboard shortcuts', () => {
     }
   })
 
+  test('Cmd+click inactive terminal tab splits like Cmd+D', async () => {
+    const repoPath = createTestRepo('shortcut-cmd-click-split')
+    const { app, window } = await launchApp()
+
+    try {
+      await setupWorkspaceWithTerminal(window, repoPath)
+      await window.waitForTimeout(2000)
+
+      await window.keyboard.press('Meta+t')
+      await window.waitForTimeout(2000)
+
+      expect(await window.locator('[class*="tabTitle"]').count()).toBe(2)
+
+      const tab1Title = window.locator('[class*="tabTitle"]', { hasText: 'Terminal 1' })
+      await tab1Title.click({ modifiers: ['Meta'] })
+      await window.waitForTimeout(2500)
+
+      const hasSplit = await window.evaluate(() => {
+        const s = (window as any).__store.getState()
+        const tab = s.tabs.find((t: any) => t.type === 'terminal' && t.title === 'Terminal 1')
+        return !!(tab && tab.splitRoot)
+      })
+      expect(hasSplit).toBe(true)
+
+      const activeIsTab1 = await window.evaluate(() => {
+        const s = (window as any).__store.getState()
+        const tab = s.tabs.find((t: any) => t.id === s.activeTabId)
+        return tab?.type === 'terminal' && tab?.title === 'Terminal 1'
+      })
+      expect(activeIsTab1).toBe(true)
+    } finally {
+      await app.close()
+    }
+  })
+
   test('Cmd+W closes active tab', async () => {
     const repoPath = createTestRepo('shortcut-w')
     const { app, window } = await launchApp()

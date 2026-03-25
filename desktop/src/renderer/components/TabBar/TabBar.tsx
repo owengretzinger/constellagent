@@ -85,9 +85,10 @@ const STATUS_LETTER_MAP: Record<string, string> = {
 
 export function TabBar() {
   const [dragOverTabId, setDragOverTabId] = useState<string | null>(null)
+  const [reorderDropIndex, setReorderDropIndex] = useState<number | null>(null)
   const [draggingTabId, setDraggingTabId] = useState<string | null>(null)
-  /** Synchronous source id for drag-over/dropEffect; React state can lag the first dragover frame. */
-  const draggingSourceRef = useRef<string | null>(null)
+  /** Same pattern as Sidebar `draggingWorkspaceIdRef` — Electron needs sync ref for dragOver. */
+  const draggingTabIdRef = useRef<string | null>(null)
   const activeTabId = useAppStore((s) => s.activeTabId)
   const setActiveTab = useAppStore((s) => s.setActiveTab)
   const removeTab = useAppStore((s) => s.removeTab)
@@ -100,8 +101,11 @@ export function TabBar() {
   const workspaces = useAppStore((s) => s.workspaces)
   const addToast = useAppStore((s) => s.addToast)
   const mergeTabIntoSplit = useAppStore((s) => s.mergeTabIntoSplit)
+  const reorderTabsInWorkspace = useAppStore((s) => s.reorderTabsInWorkspace)
+  const splitTerminalPaneForTab = useAppStore((s) => s.splitTerminalPaneForTab)
   const tabs = allTabs.filter((t) => t.workspaceId === activeWorkspaceId)
   const workspace = workspaces.find((w) => w.id === activeWorkspaceId)
+  const endDropIndex = tabs.length
 
   const getFileGitStatus = useCallback((tab: Tab): string | null => {
     if (tab.type !== 'file') return null
@@ -127,10 +131,98 @@ export function TabBar() {
     if (!sourceTab) return false
     const mergeable = (t: Tab) => t.type === 'terminal' || t.type === 'file'
     if (!mergeable(targetTab) || !mergeable(sourceTab)) return false
-    // Dropping a terminal onto a file tab would embed a PTY in a tab that unmounts when inactive.
     if (sourceTab.type === 'terminal' && targetTab.type === 'file') return false
     return true
   }, [tabs])
+
+  const reorderTabToIndex = useCallback(
+    (movedId: string, targetIndex: number) => {
+      if (!activeWorkspaceId) return
+      const ids = tabs.map((t) => t.id)
+      const fromIdx = ids.indexOf(movedId)
+      if (fromIdx === -1) return
+      const next = [...ids]
+      next.splice(fromIdx, 1)
+      let insertAt = targetIndex
+      if (fromIdx < targetIndex) insertAt--
+      next.splice(insertAt, 0, movedId)
+      reorderTabsInWorkspace(activeWorkspaceId, next)
+    },
+    [activeWorkspaceId, tabs, reorderTabsInWorkspace],
+  )
+
+  const endTabDrag = useCallback(() => {
+    draggingTabIdRef.current = null
+    setDraggingTabId(null)
+    setDragOverTabId(null)
+    setReorderDropIndex(null)
+  }, [])
+
+  const readDraggedTabId = useCallback((e: React.DragEvent) => {
+    return (
+      e.dataTransfer.getData(CONSTELLAGENT_TAB_MIME)
+      || e.dataTransfer.getData('text/plain')
+      || draggingTabIdRef.current
+    )
+  }, [])
+
+  const handleTabDragOver = useCallback(
+    (tab: Tab, e: React.DragEvent) => {
+      if (draggingTabIdRef.current) {
+        if (draggingTabIdRef.current === tab.id) return
+        e.preventDefault()
+        e.dataTransfer.dropEffect = 'move'
+        setDragOverTabId(tab.id)
+        setReorderDropIndex(null)
+        return
+      }
+      if (
+        tab.type === 'terminal'
+        && (
+          e.dataTransfer.types.includes(CONSTELLAGENT_PATH_MIME)
+          || e.dataTransfer.types.includes('text/plain')
+        )
+      ) {
+        e.preventDefault()
+        e.dataTransfer.dropEffect = 'copy'
+        setDragOverTabId(tab.id)
+      }
+    },
+    [],
+  )
+
+  const handleTabDragLeave = useCallback((tabId: string, e: React.DragEvent) => {
+    if (e.currentTarget.contains(e.relatedTarget as Node)) return
+    setDragOverTabId((prev) => (prev === tabId ? null : prev))
+  }, [])
+
+  const handleTabDrop = useCallback(
+    (tab: Tab, e: React.DragEvent) => {
+      e.preventDefault()
+      setDragOverTabId(null)
+      const sourceTabId = readDraggedTabId(e)
+      const sourceInBar = sourceTabId ? tabs.some((t) => t.id === sourceTabId) : false
+      if (sourceTabId && sourceTabId !== tab.id && sourceInBar) {
+        if (e.altKey && canAcceptTabMerge(tab, sourceTabId)) {
+          mergeTabIntoSplit(sourceTabId, tab.id)
+        } else {
+          const targetIdx = tabs.findIndex((t) => t.id === tab.id)
+          reorderTabToIndex(sourceTabId, targetIdx)
+        }
+        endTabDrag()
+        return
+      }
+      if (tab.type === 'terminal') {
+        const filePath = e.dataTransfer.getData(CONSTELLAGENT_PATH_MIME)
+          || e.dataTransfer.getData('text/plain')
+        if (filePath) {
+          const text = `@${filePath}`
+          window.api.pty.write(tab.ptyId, `\x1b[200~${text}\x1b[201~`)
+        }
+      }
+    },
+    [tabs, readDraggedTabId, canAcceptTabMerge, mergeTabIntoSplit, reorderTabToIndex, endTabDrag],
+  )
 
   const handleOpenInEditor = useCallback(async () => {
     if (!workspace) return
@@ -180,69 +272,31 @@ export function TabBar() {
           const showGeminiIcon =
             tab.type === 'terminal'
             && (agentType === 'gemini' || tab.title === GEMINI_TAB_LABEL)
-          const dragMergeTab = tab.type === 'terminal' || tab.type === 'file'
           return (
             <div
               key={tab.id}
-              className={`${styles.tab} ${tab.id === activeTabId ? styles.active : ''} ${isDeleted ? styles.deleted : ''} ${draggingTabId === tab.id ? styles.tabDragging : ''} ${dragOverTabId === tab.id && draggingSourceRef.current !== tab.id ? styles.tabDragOver : ''}`}
-              onClick={() => setActiveTab(tab.id)}
-              draggable={dragMergeTab}
-              onDragStart={dragMergeTab ? (e) => {
-                draggingSourceRef.current = tab.id
-                e.dataTransfer.setData(CONSTELLAGENT_TAB_MIME, tab.id)
-                e.dataTransfer.effectAllowed = 'move'
+              className={`${styles.tab} ${tab.id === activeTabId ? styles.active : ''} ${isDeleted ? styles.deleted : ''} ${draggingTabId === tab.id ? styles.tabDragging : ''} ${dragOverTabId === tab.id && draggingTabIdRef.current !== tab.id ? styles.tabDragOver : ''}`}
+              onClick={(e) => {
+                if (tab.type === 'terminal' && (e.metaKey || e.ctrlKey)) {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  void splitTerminalPaneForTab(tab.id, 'horizontal')
+                  return
+                }
+                setActiveTab(tab.id)
+              }}
+              draggable
+              onDragStart={(e) => {
+                draggingTabIdRef.current = tab.id
                 setDraggingTabId(tab.id)
-              } : undefined}
-              onDragEnd={dragMergeTab ? () => {
-                draggingSourceRef.current = null
-                setDraggingTabId(null)
-                setDragOverTabId(null)
-              } : undefined}
-              onDragOver={dragMergeTab ? (e) => {
-                if (draggingSourceRef.current === tab.id) return
-                const sid = draggingSourceRef.current
-                if (sid) {
-                  if (!canAcceptTabMerge(tab, sid)) return
-                  e.preventDefault()
-                  e.dataTransfer.dropEffect = 'move'
-                  setDragOverTabId(tab.id)
-                  return
-                }
-                if (
-                  tab.type === 'terminal'
-                  && (
-                    e.dataTransfer.types.includes(CONSTELLAGENT_PATH_MIME)
-                    || e.dataTransfer.types.includes('text/plain')
-                  )
-                ) {
-                  e.preventDefault()
-                  e.dataTransfer.dropEffect = 'copy'
-                  setDragOverTabId(tab.id)
-                }
-              } : undefined}
-              onDragLeave={dragMergeTab ? (e) => {
-                const related = e.relatedTarget as Node | null
-                if (related && e.currentTarget.contains(related)) return
-                setDragOverTabId(null)
-              } : undefined}
-              onDrop={dragMergeTab ? (e) => {
-                e.preventDefault()
-                setDragOverTabId(null)
-                const sourceTabId =
-                  e.dataTransfer.getData(CONSTELLAGENT_TAB_MIME) || draggingSourceRef.current
-                if (sourceTabId) {
-                  mergeTabIntoSplit(sourceTabId, tab.id)
-                  return
-                }
-                if (tab.type === 'terminal') {
-                  const filePath = e.dataTransfer.getData(CONSTELLAGENT_PATH_MIME)
-                    || e.dataTransfer.getData('text/plain')
-                  if (filePath) {
-                    const text = `@${filePath}`
-                    window.api.pty.write(tab.ptyId, `\x1b[200~${text}\x1b[201~`)
-                  }
-                }
-              } : undefined}
+                e.dataTransfer.setData(CONSTELLAGENT_TAB_MIME, tab.id)
+                e.dataTransfer.setData('text/plain', tab.id)
+                e.dataTransfer.effectAllowed = 'move'
+              }}
+              onDragEnd={endTabDrag}
+              onDragOver={(e) => handleTabDragOver(tab, e)}
+              onDragLeave={(e) => handleTabDragLeave(tab.id, e)}
+              onDrop={(e) => handleTabDrop(tab, e)}
             >
               {agentType === 'cursor' ? (
                 <CursorIcon className={styles.agentIcon} />
@@ -266,6 +320,8 @@ export function TabBar() {
               ) : (
                 <Tooltip label="Close tab" shortcut="⌘W">
                   <button
+                    type="button"
+                    draggable={false}
                     className={styles.closeButton}
                     onClick={(e) => handleClose(e, tab.id)}
                   >
@@ -276,10 +332,34 @@ export function TabBar() {
             </div>
           )
         })}
+        {tabs.length > 0 ? (
+          <div
+            className={`${styles.tabReorderSlot} ${reorderDropIndex === endDropIndex ? styles.tabReorderSlotActive : ''}`}
+            onDragOver={(e) => {
+              if (!draggingTabIdRef.current) return
+              e.preventDefault()
+              e.dataTransfer.dropEffect = 'move'
+              setReorderDropIndex(endDropIndex)
+              setDragOverTabId(null)
+            }}
+            onDragLeave={(e) => {
+              if (e.currentTarget.contains(e.relatedTarget as Node)) return
+              setReorderDropIndex((prev) => (prev === endDropIndex ? null : prev))
+            }}
+            onDrop={(e) => {
+              e.preventDefault()
+              const sourceTabId = readDraggedTabId(e)
+              if (sourceTabId && tabs.some((t) => t.id === sourceTabId)) {
+                reorderTabToIndex(sourceTabId, endDropIndex)
+              }
+              endTabDrag()
+            }}
+          />
+        ) : null}
       </div>
 
       <Tooltip label="New terminal" shortcut="⌘T">
-        <button className={styles.newTabButton} onClick={createTerminalForActiveWorkspace}>
+        <button type="button" className={styles.newTabButton} onClick={createTerminalForActiveWorkspace}>
           +
         </button>
       </Tooltip>
@@ -288,7 +368,7 @@ export function TabBar() {
 
       {workspace && (
         <Tooltip label={`Open in ${editor.name}`} shortcut="⇧⌘O">
-          <button className={styles.cursorButton} onClick={handleOpenInEditor}>
+          <button type="button" className={styles.cursorButton} onClick={handleOpenInEditor}>
             <EditorIcon editor={settings.favoriteEditor} className={styles.cursorIcon} />
           </button>
         </Tooltip>
