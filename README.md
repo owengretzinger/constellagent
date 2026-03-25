@@ -23,6 +23,22 @@ bun run setup
 bun run dev
 ```
 
+### `constell` CLI
+
+The app installs a `constell` command globally on first launch (symlinks `desktop/bin/constell` → `/usr/local/bin/constell`). Use it to open Constellagent from any terminal:
+
+```bash
+constell .          # Open the current directory
+constell ~/project  # Open a specific directory
+```
+
+In dev mode, `constell` attaches to an already-running Vite dev server (ports 5173–5190) and launches Electron against it. If no dev server is running, it starts one. You can override the renderer URL:
+
+```bash
+CONSTELLAGENT_RENDERER_PORT=5174 constell .
+CONSTELLAGENT_RENDERER_URL=http://127.0.0.1:5174 constell .
+```
+
 ### Build and package
 
 ```bash
