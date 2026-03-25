@@ -73,7 +73,7 @@ export type Tab = {
   workspaceId: string
 } & (
   | { type: 'terminal'; title: string; ptyId: string; agentType?: AgentType; splitRoot?: SplitNode; focusedPaneId?: string }
-  | { type: 'file'; filePath: string; unsaved?: boolean; deleted?: boolean }
+  | { type: 'file'; filePath: string; unsaved?: boolean; deleted?: boolean; splitRoot?: SplitNode; focusedPaneId?: string }
   | { type: 'diff'; commitHash?: string; commitMessage?: string }
   | { type: 'markdownPreview'; filePath: string; title: string }
 )

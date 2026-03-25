@@ -7,6 +7,7 @@ import type { SplitNode, Tab } from '../../store/types'
 import styles from './TerminalSplitContainer.module.css'
 
 type TerminalTab = Extract<Tab, { type: 'terminal' }>
+type FileTab = Extract<Tab, { type: 'file' }>
 
 interface ContainerProps {
   tab: TerminalTab
@@ -36,6 +37,31 @@ export function TerminalSplitContainer({ tab, active, worktreePath }: ContainerP
   }
 
   // Render the split tree inside a visibility-toggling wrapper
+  return (
+    <div className={`${styles.splitWrapper} ${active ? styles.active : styles.hidden}`}>
+      <SplitTreeNode
+        node={tab.splitRoot}
+        focusedPaneId={tab.focusedPaneId}
+        onPaneFocus={handlePaneFocus}
+        worktreePath={worktreePath}
+      />
+    </div>
+  )
+}
+
+/** File tab with editor-only split (tab bar merge of file ↔ file or file → terminal lives on the terminal tab). */
+export function FileTabSplitContainer({ tab, active, worktreePath }: { tab: FileTab; active: boolean; worktreePath?: string }) {
+  const setFocusedPane = useAppStore((s) => s.setFocusedPane)
+
+  const handlePaneFocus = useCallback(
+    (paneId: string) => {
+      setFocusedPane(tab.id, paneId)
+    },
+    [tab.id, setFocusedPane],
+  )
+
+  if (!tab.splitRoot) return null
+
   return (
     <div className={`${styles.splitWrapper} ${active ? styles.active : styles.hidden}`}>
       <SplitTreeNode

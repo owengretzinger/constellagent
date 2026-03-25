@@ -4,7 +4,7 @@ import 'allotment/dist/style.css'
 import { useAppStore } from './store/app-store'
 import { Sidebar } from './components/Sidebar/Sidebar'
 import { TabBar } from './components/TabBar/TabBar'
-import { TerminalSplitContainer } from './components/Terminal/TerminalSplitContainer'
+import { FileTabSplitContainer, TerminalSplitContainer } from './components/Terminal/TerminalSplitContainer'
 import { FileEditor } from './components/Editor/FileEditor'
 import { DiffViewer } from './components/Editor/DiffEditor'
 import { MarkdownPreview } from './components/MarkdownPreview/MarkdownPreview'
@@ -180,7 +180,15 @@ export function App() {
                   ) : (
                     <>
                       {/* Render active file editor */}
-                      {activeTab?.type === 'file' && (
+                      {activeTab?.type === 'file' && activeTab.splitRoot && tabWorkspace && (
+                        <FileTabSplitContainer
+                          key={activeTab.id}
+                          tab={activeTab}
+                          active={true}
+                          worktreePath={tabWorkspace.worktreePath}
+                        />
+                      )}
+                      {activeTab?.type === 'file' && !activeTab.splitRoot && (
                         <FileEditor
                           key={activeTab.id}
                           tabId={activeTab.id}

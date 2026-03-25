@@ -25,6 +25,7 @@ import {
   getFocusedPtyId,
   resolvePtyForPlanSourceFilePath,
   graftTree,
+  tabToSplitTree,
 } from './split-helpers'
 import { formatChatContext } from '../utils/chat-context-formatter'
 import { wrapBracketedPaste } from '../utils/bracketed-paste'
@@ -393,6 +394,9 @@ export const useAppStore = create<AppState>((set, get) => ({
       ptyIds.add(tab.ptyId)
       ptyIds.forEach((id) => window.api.pty.destroy(id))
     }
+    if (tab.type === 'file' && tab.splitRoot) {
+      getAllPtyIds(tab.splitRoot).forEach((id) => window.api.pty.destroy(id))
+    }
     get().removeTab(tab.id)
   },
 
@@ -596,6 +600,10 @@ export const useAppStore = create<AppState>((set, get) => ({
 
     // Active tab is a file tab — convert to a split container with file + terminal panes
     if (tab.type === 'file') {
+      if (tab.splitRoot) {
+        // File-only split (e.g. from tab drag): cannot embed a live PTY in a file tab without breaking keep-alive.
+        return
+      }
       const backingPtyId = await window.api.pty.create(ws.worktreePath, shell, { AGENT_ORCH_WS_ID: ws.id })
       const newPtyId = await window.api.pty.create(ws.worktreePath, shell, { AGENT_ORCH_WS_ID: ws.id })
 
@@ -659,10 +667,28 @@ export const useAppStore = create<AppState>((set, get) => ({
 
     let tab = s.tabs.find((t) => t.id === s.activeTabId)
 
-    // Active tab is a file tab — convert to a split container with two file panes
+    // Active tab is a file tab — add a pane (stay `file` when already split; else convert to terminal tab)
     if (tab && tab.type === 'file') {
       const ws = s.workspaces.find((w) => w.id === tab!.workspaceId)
       if (!ws) return
+
+      if (tab.splitRoot) {
+        const newLeafId = crypto.randomUUID()
+        const newLeaf = { type: 'leaf' as const, id: newLeafId, contentType: 'file' as const, filePath }
+        const currentRoot = tab.splitRoot
+        const targetPaneId = tab.focusedPaneId ?? (currentRoot.type === 'leaf' ? currentRoot.id : firstLeaf(currentRoot).id)
+        const newRoot = splitLeaf(currentRoot, targetPaneId, direction, newLeaf)
+        const tabId = tab.id
+        set((state) => ({
+          tabs: state.tabs.map((t) =>
+            t.id === tabId && t.type === 'file'
+              ? { ...t, splitRoot: newRoot, focusedPaneId: newLeafId }
+              : t
+          ),
+          activeTabId: tabId,
+        }))
+        return
+      }
 
       // Create a backing PTY (required by the terminal tab type)
       const shell = s.settings.defaultShell || undefined
@@ -739,7 +765,8 @@ export const useAppStore = create<AppState>((set, get) => ({
     const s = get()
     if (!s.activeTabId) return
     const tab = s.tabs.find((t) => t.id === s.activeTabId)
-    if (!tab || tab.type !== 'terminal' || !tab.splitRoot) return
+    if (!tab || !tab.splitRoot) return
+    if (tab.type !== 'terminal' && tab.type !== 'file') return
     const leaves = collectLeaves(tab.splitRoot)
     if (leaves.length <= 1) return
     const idx = leaves.findIndex((l) => l.id === tab.focusedPaneId)
@@ -749,18 +776,21 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   setFocusedPane: (tabId, paneId) =>
     set((s) => ({
-      tabs: s.tabs.map((t) =>
-        t.id === tabId && t.type === 'terminal' ? { ...t, focusedPaneId: paneId } : t
-      ),
+      tabs: s.tabs.map((t) => {
+        if (t.id !== tabId) return t
+        if (t.type === 'terminal') return { ...t, focusedPaneId: paneId }
+        if (t.type === 'file' && t.splitRoot) return { ...t, focusedPaneId: paneId }
+        return t
+      }),
     })),
 
   closeSplitPane: (paneId) => {
     const s = get()
     if (!s.activeTabId) return
     const tab = s.tabs.find((t) => t.id === s.activeTabId)
-    if (!tab || tab.type !== 'terminal' || !tab.splitRoot) return
+    if (!tab || !tab.splitRoot) return
+    if (tab.type !== 'terminal' && tab.type !== 'file') return
 
-    // Find the pane — only destroy PTY for terminal leaves
     const leaf = findLeaf(tab.splitRoot, paneId)
     if (!leaf) return
     if (leaf.contentType === 'terminal') {
@@ -769,13 +799,36 @@ export const useAppStore = create<AppState>((set, get) => ({
 
     const newRoot = removeLeaf(tab.splitRoot, paneId)
     if (!newRoot) {
-      // All panes removed — close the whole tab (destroy any remaining PTYs)
-      window.api.pty.destroy(tab.ptyId)
+      if (tab.type === 'terminal') {
+        window.api.pty.destroy(tab.ptyId)
+      }
       get().removeTab(tab.id)
       return
     }
 
     const isSingleLeaf = newRoot.type === 'leaf'
+
+    if (tab.type === 'file') {
+      if (isSingleLeaf && newRoot.type === 'leaf' && newRoot.contentType === 'file') {
+        set((state) => ({
+          tabs: state.tabs.map((t) =>
+            t.id === tab.id && t.type === 'file'
+              ? { ...t, filePath: newRoot.filePath, splitRoot: undefined, focusedPaneId: undefined }
+              : t
+          ),
+        }))
+        return
+      }
+      const newFocused = firstLeaf(newRoot).id
+      set((state) => ({
+        tabs: state.tabs.map((t) =>
+          t.id === tab.id && t.type === 'file'
+            ? { ...t, splitRoot: newRoot, focusedPaneId: newFocused }
+            : t
+        ),
+      }))
+      return
+    }
 
     // Collapsed to a single file leaf → open file as standalone tab, close terminal tab
     if (isSingleLeaf && newRoot.type === 'leaf' && newRoot.contentType === 'file') {
@@ -849,45 +902,41 @@ export const useAppStore = create<AppState>((set, get) => ({
     const sourceTab = s.tabs.find((t) => t.id === sourceTabId)
     const targetTab = s.tabs.find((t) => t.id === targetTabId)
     if (!sourceTab || !targetTab) return
-    if (sourceTab.type !== 'terminal' || targetTab.type !== 'terminal') return
     if (sourceTab.workspaceId !== targetTab.workspaceId) return
 
-    // Build source subtree: use existing splitRoot or synthesize a single leaf
-    const sourceTree: SplitNode = sourceTab.splitRoot ?? {
-      type: 'leaf' as const,
-      id: crypto.randomUUID(),
-      contentType: 'terminal' as const,
-      ptyId: sourceTab.ptyId,
-    }
+    const mergeable = (t: Tab) => t.type === 'terminal' || t.type === 'file'
+    if (!mergeable(sourceTab) || !mergeable(targetTab)) return
 
-    // Build target tree: use existing splitRoot or synthesize a single leaf
-    const targetTree: SplitNode = targetTab.splitRoot ?? {
-      type: 'leaf' as const,
-      id: crypto.randomUUID(),
-      contentType: 'terminal' as const,
-      ptyId: targetTab.ptyId,
-    }
+    // Terminal-in-file would unmount PTYs when switching away from the file tab (only terminal tabs stay mounted).
+    if (sourceTab.type === 'terminal' && targetTab.type === 'file') return
 
-    // Graft source into target
+    const sourceTree = tabToSplitTree(sourceTab)
+    const targetTree = tabToSplitTree(targetTab)
+    if (!sourceTree || !targetTree) return
+
     const newRoot = graftTree(targetTree, sourceTree, direction)
-
-    // Find first leaf of source tree for focus
     const focusedPaneId = firstLeaf(sourceTree).id
 
-    // Remap planBuildTerminalByPlanPath entries pointing to source → target
     const newPlanMap = { ...s.planBuildTerminalByPlanPath }
-    for (const [path, tabId] of Object.entries(newPlanMap)) {
-      if (tabId === sourceTabId) newPlanMap[path] = targetTabId
+    if (sourceTab.type === 'terminal') {
+      for (const [path, tabId] of Object.entries(newPlanMap)) {
+        if (tabId === sourceTabId) newPlanMap[path] = targetTabId
+      }
     }
 
     set((state) => ({
       tabs: state.tabs
-        .filter((t) => t.id !== sourceTabId) // remove source tab (no PTY destruction)
-        .map((t) =>
-          t.id === targetTabId && t.type === 'terminal'
-            ? { ...t, splitRoot: newRoot, focusedPaneId }
-            : t
-        ),
+        .filter((t) => t.id !== sourceTabId)
+        .map((t) => {
+          if (t.id !== targetTabId) return t
+          if (t.type === 'terminal') {
+            return { ...t, splitRoot: newRoot, focusedPaneId }
+          }
+          if (t.type === 'file') {
+            return { ...t, splitRoot: newRoot, focusedPaneId, filePath: t.filePath }
+          }
+          return t
+        }),
       activeTabId: state.activeTabId === sourceTabId ? targetTabId : state.activeTabId,
       planBuildTerminalByPlanPath: newPlanMap,
     }))
@@ -1281,6 +1330,9 @@ export const useAppStore = create<AppState>((set, get) => ({
     const rawTabs = data.tabs ?? []
     const tabs = rawTabs.map((tab) => {
       if (tab.type === 'terminal' && tab.splitRoot) {
+        return { ...tab, splitRoot: normalizeSplitTree(tab.splitRoot) }
+      }
+      if (tab.type === 'file' && tab.splitRoot) {
         return { ...tab, splitRoot: normalizeSplitTree(tab.splitRoot) }
       }
       return tab

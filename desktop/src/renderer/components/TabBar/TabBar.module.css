@@ -9,7 +9,6 @@
   overflow-x: auto;
   overflow-y: hidden;
   flex-shrink: 0;
-  -webkit-app-region: drag;
 }
 
 /* Scrollbar hidden but functional */

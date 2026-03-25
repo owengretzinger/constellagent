@@ -201,7 +201,12 @@ export function useShortcuts() {
         consume()
         // If the active terminal tab has splits, close just the focused pane
         const wTab = store.tabs.find((t) => t.id === store.activeTabId)
-        if (wTab?.type === 'terminal' && wTab.splitRoot && wTab.focusedPaneId) {
+        if (
+          wTab
+          && wTab.splitRoot
+          && wTab.focusedPaneId
+          && (wTab.type === 'terminal' || wTab.type === 'file')
+        ) {
           store.closeSplitPane(wTab.focusedPaneId)
         } else {
           store.closeActiveTab()

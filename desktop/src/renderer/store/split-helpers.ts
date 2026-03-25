@@ -85,6 +85,31 @@ export function findLeafByPtyId(root: SplitNode, ptyId: string): (SplitLeaf & { 
   return null
 }
 
+/** Build a split tree for a tab that can participate in tab-bar merges (terminal or file). */
+export function tabToSplitTree(tab: Tab): SplitNode | null {
+  if (tab.type === 'terminal') {
+    return (
+      tab.splitRoot ?? {
+        type: 'leaf' as const,
+        id: crypto.randomUUID(),
+        contentType: 'terminal' as const,
+        ptyId: tab.ptyId,
+      }
+    )
+  }
+  if (tab.type === 'file') {
+    return (
+      tab.splitRoot ?? {
+        type: 'leaf' as const,
+        id: tab.id,
+        contentType: 'file' as const,
+        filePath: tab.filePath,
+      }
+    )
+  }
+  return null
+}
+
 /**
  * Graft two split trees into a new split node at the root level.
  * Used when merging one terminal tab's tree into another.

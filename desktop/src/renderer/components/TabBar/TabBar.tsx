@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import { useAppStore } from '../../store/app-store'
 import type { Tab, AgentType } from '../../store/types'
 import { resolveEditor } from '../../store/types'
@@ -86,6 +86,8 @@ const STATUS_LETTER_MAP: Record<string, string> = {
 export function TabBar() {
   const [dragOverTabId, setDragOverTabId] = useState<string | null>(null)
   const [draggingTabId, setDraggingTabId] = useState<string | null>(null)
+  /** Synchronous source id for drag-over/dropEffect; React state can lag the first dragover frame. */
+  const draggingSourceRef = useRef<string | null>(null)
   const activeTabId = useAppStore((s) => s.activeTabId)
   const setActiveTab = useAppStore((s) => s.setActiveTab)
   const removeTab = useAppStore((s) => s.removeTab)
@@ -119,6 +121,17 @@ export function TabBar() {
 
   const editor = useMemo(() => resolveEditor(settings), [settings])
 
+  const canAcceptTabMerge = useCallback((targetTab: Tab, sourceId: string | null): boolean => {
+    if (!sourceId || sourceId === targetTab.id) return false
+    const sourceTab = tabs.find((t) => t.id === sourceId)
+    if (!sourceTab) return false
+    const mergeable = (t: Tab) => t.type === 'terminal' || t.type === 'file'
+    if (!mergeable(targetTab) || !mergeable(sourceTab)) return false
+    // Dropping a terminal onto a file tab would embed a PTY in a tab that unmounts when inactive.
+    if (sourceTab.type === 'terminal' && targetTab.type === 'file') return false
+    return true
+  }, [tabs])
+
   const handleOpenInEditor = useCallback(async () => {
     if (!workspace) return
     const result = await window.api.app.openInEditor(workspace.worktreePath, editor.cli)
@@ -146,9 +159,12 @@ export function TabBar() {
         ptyIds.add(tab.ptyId)
         ptyIds.forEach((id) => window.api.pty.destroy(id))
       }
+      if (tab.type === 'file' && tab.splitRoot) {
+        getAllPtyIds(tab.splitRoot).forEach((id) => window.api.pty.destroy(id))
+      }
       removeTab(tabId)
     },
-    [tabs, removeTab]
+    [tabs, removeTab, settings]
   )
 
   return (
@@ -164,45 +180,67 @@ export function TabBar() {
           const showGeminiIcon =
             tab.type === 'terminal'
             && (agentType === 'gemini' || tab.title === GEMINI_TAB_LABEL)
+          const dragMergeTab = tab.type === 'terminal' || tab.type === 'file'
           return (
             <div
               key={tab.id}
-              className={`${styles.tab} ${tab.id === activeTabId ? styles.active : ''} ${isDeleted ? styles.deleted : ''} ${draggingTabId === tab.id ? styles.tabDragging : ''} ${dragOverTabId === tab.id && draggingTabId !== tab.id ? styles.tabDragOver : ''}`}
+              className={`${styles.tab} ${tab.id === activeTabId ? styles.active : ''} ${isDeleted ? styles.deleted : ''} ${draggingTabId === tab.id ? styles.tabDragging : ''} ${dragOverTabId === tab.id && draggingSourceRef.current !== tab.id ? styles.tabDragOver : ''}`}
               onClick={() => setActiveTab(tab.id)}
-              draggable={tab.type === 'terminal'}
-              onDragStart={tab.type === 'terminal' ? (e) => {
+              draggable={dragMergeTab}
+              onDragStart={dragMergeTab ? (e) => {
+                draggingSourceRef.current = tab.id
                 e.dataTransfer.setData(CONSTELLAGENT_TAB_MIME, tab.id)
                 e.dataTransfer.effectAllowed = 'move'
                 setDraggingTabId(tab.id)
               } : undefined}
-              onDragEnd={() => {
+              onDragEnd={dragMergeTab ? () => {
+                draggingSourceRef.current = null
                 setDraggingTabId(null)
                 setDragOverTabId(null)
-              }}
-              onDragOver={tab.type === 'terminal' ? (e) => {
-                // Reject self-drop: don't preventDefault so browser shows no-drop cursor
-                if (draggingTabId === tab.id) return
-                e.preventDefault()
-                // Tab merge = move, file drop = copy
-                e.dataTransfer.dropEffect = draggingTabId ? 'move' : 'copy'
-                setDragOverTabId(tab.id)
               } : undefined}
-              onDragLeave={tab.type === 'terminal' ? () => setDragOverTabId(null) : undefined}
-              onDrop={tab.type === 'terminal' ? (e) => {
+              onDragOver={dragMergeTab ? (e) => {
+                if (draggingSourceRef.current === tab.id) return
+                const sid = draggingSourceRef.current
+                if (sid) {
+                  if (!canAcceptTabMerge(tab, sid)) return
+                  e.preventDefault()
+                  e.dataTransfer.dropEffect = 'move'
+                  setDragOverTabId(tab.id)
+                  return
+                }
+                if (
+                  tab.type === 'terminal'
+                  && (
+                    e.dataTransfer.types.includes(CONSTELLAGENT_PATH_MIME)
+                    || e.dataTransfer.types.includes('text/plain')
+                  )
+                ) {
+                  e.preventDefault()
+                  e.dataTransfer.dropEffect = 'copy'
+                  setDragOverTabId(tab.id)
+                }
+              } : undefined}
+              onDragLeave={dragMergeTab ? (e) => {
+                const related = e.relatedTarget as Node | null
+                if (related && e.currentTarget.contains(related)) return
+                setDragOverTabId(null)
+              } : undefined}
+              onDrop={dragMergeTab ? (e) => {
                 e.preventDefault()
                 setDragOverTabId(null)
-                // Tab-to-tab merge (check first)
-                const sourceTabId = e.dataTransfer.getData(CONSTELLAGENT_TAB_MIME)
+                const sourceTabId =
+                  e.dataTransfer.getData(CONSTELLAGENT_TAB_MIME) || draggingSourceRef.current
                 if (sourceTabId) {
                   mergeTabIntoSplit(sourceTabId, tab.id)
                   return
                 }
-                // File drop from FileTree
-                const filePath = e.dataTransfer.getData(CONSTELLAGENT_PATH_MIME)
-                  || e.dataTransfer.getData('text/plain')
-                if (filePath && tab.type === 'terminal') {
-                  const text = `@${filePath}`
-                  window.api.pty.write(tab.ptyId, `\x1b[200~${text}\x1b[201~`)
+                if (tab.type === 'terminal') {
+                  const filePath = e.dataTransfer.getData(CONSTELLAGENT_PATH_MIME)
+                    || e.dataTransfer.getData('text/plain')
+                  if (filePath) {
+                    const text = `@${filePath}`
+                    window.api.pty.write(tab.ptyId, `\x1b[200~${text}\x1b[201~`)
+                  }
                 }
               } : undefined}
             >
