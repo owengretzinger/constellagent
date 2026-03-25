@@ -255,6 +255,7 @@ export interface AppState {
   cycleFocusedPane: () => void
   setFocusedPane: (tabId: string, paneId: string) => void
   closeSplitPane: (paneId: string) => void
+  mergeTabIntoSplit: (sourceTabId: string, targetTabId: string, direction?: 'horizontal' | 'vertical') => void
   openWorkspaceDialog: (projectId: string | null) => void
   renameWorkspace: (id: string, name: string) => void
   updateWorkspaceBranch: (id: string, branch: string) => void

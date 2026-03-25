@@ -86,6 +86,23 @@ export function findLeafByPtyId(root: SplitNode, ptyId: string): (SplitLeaf & { 
 }
 
 /**
+ * Graft two split trees into a new split node at the root level.
+ * Used when merging one terminal tab's tree into another.
+ */
+export function graftTree(
+  existing: SplitNode,
+  graft: SplitNode,
+  direction: 'horizontal' | 'vertical',
+): SplitNode {
+  return {
+    type: 'split',
+    id: crypto.randomUUID(),
+    direction,
+    children: [existing, graft],
+  }
+}
+
+/**
  * Replace a leaf with a split node containing the original leaf and a new leaf.
  * Returns a new tree (immutable).
  */

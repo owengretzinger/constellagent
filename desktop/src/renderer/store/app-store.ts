@@ -24,6 +24,7 @@ import {
   normalizeSplitTree,
   getFocusedPtyId,
   resolvePtyForPlanSourceFilePath,
+  graftTree,
 } from './split-helpers'
 import { formatChatContext } from '../utils/chat-context-formatter'
 import { wrapBracketedPaste } from '../utils/bracketed-paste'
@@ -824,6 +825,57 @@ export const useAppStore = create<AppState>((set, get) => ({
           ? { ...t, ptyId: promotedPtyId, splitRoot: newRoot, focusedPaneId: newFocused }
           : t
       ),
+    }))
+  },
+
+  mergeTabIntoSplit: (sourceTabId, targetTabId, direction = 'horizontal') => {
+    const s = get()
+    if (sourceTabId === targetTabId) return
+
+    const sourceTab = s.tabs.find((t) => t.id === sourceTabId)
+    const targetTab = s.tabs.find((t) => t.id === targetTabId)
+    if (!sourceTab || !targetTab) return
+    if (sourceTab.type !== 'terminal' || targetTab.type !== 'terminal') return
+    if (sourceTab.workspaceId !== targetTab.workspaceId) return
+
+    // Build source subtree: use existing splitRoot or synthesize a single leaf
+    const sourceTree: SplitNode = sourceTab.splitRoot ?? {
+      type: 'leaf' as const,
+      id: crypto.randomUUID(),
+      contentType: 'terminal' as const,
+      ptyId: sourceTab.ptyId,
+    }
+
+    // Build target tree: use existing splitRoot or synthesize a single leaf
+    const targetTree: SplitNode = targetTab.splitRoot ?? {
+      type: 'leaf' as const,
+      id: crypto.randomUUID(),
+      contentType: 'terminal' as const,
+      ptyId: targetTab.ptyId,
+    }
+
+    // Graft source into target
+    const newRoot = graftTree(targetTree, sourceTree, direction)
+
+    // Find first leaf of source tree for focus
+    const focusedPaneId = firstLeaf(sourceTree).id
+
+    // Remap planBuildTerminalByPlanPath entries pointing to source → target
+    const newPlanMap = { ...s.planBuildTerminalByPlanPath }
+    for (const [path, tabId] of Object.entries(newPlanMap)) {
+      if (tabId === sourceTabId) newPlanMap[path] = targetTabId
+    }
+
+    set((state) => ({
+      tabs: state.tabs
+        .filter((t) => t.id !== sourceTabId) // remove source tab (no PTY destruction)
+        .map((t) =>
+          t.id === targetTabId && t.type === 'terminal'
+            ? { ...t, splitRoot: newRoot, focusedPaneId }
+            : t
+        ),
+      activeTabId: state.activeTabId === sourceTabId ? targetTabId : state.activeTabId,
+      planBuildTerminalByPlanPath: newPlanMap,
     }))
   },
 

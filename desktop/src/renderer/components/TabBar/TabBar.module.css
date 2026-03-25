@@ -175,6 +175,21 @@
 .gitR { color: var(--accent-cyan); }
 .gitU { color: var(--text-tertiary); }
 
+/* ── Drag source: instant opacity reduction ── */
+.tab.tabDragging {
+  opacity: 0.4;
+  /* No transition — drag gestures must feel instant.
+     Override the base .tab transition to prevent sluggish feedback. */
+  transition: none;
+}
+
+/* ── Drop target: fast highlight with project ease-out curve ── */
+.tab.tabDragOver {
+  background: rgba(123, 147, 189, 0.06);
+  box-shadow: inset 0 0 0 1.5px var(--accent-blue);
+  transition: background var(--motion-default), box-shadow var(--motion-default);
+}
+
 /* ── Deleted File Tab ── */
 
 .tab.deleted {

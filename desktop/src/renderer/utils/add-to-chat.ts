@@ -5,6 +5,9 @@ import { wrapBracketedPaste } from './bracketed-paste'
 /** Drag-and-drop MIME for absolute file paths from the file tree */
 export const CONSTELLAGENT_PATH_MIME = 'application/x-constellagent-path'
 
+/** Drag-and-drop MIME for terminal tab IDs (tab-to-tab merge) */
+export const CONSTELLAGENT_TAB_MIME = 'application/x-constellagent-tab'
+
 export { wrapBracketedPaste }
 
 function formatSelectionAsContext(filePath: string, languageId: string, selection: string): string {

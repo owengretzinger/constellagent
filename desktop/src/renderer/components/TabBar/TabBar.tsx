@@ -3,6 +3,7 @@ import { useAppStore } from '../../store/app-store'
 import type { Tab, AgentType } from '../../store/types'
 import { resolveEditor } from '../../store/types'
 import { getAllPtyIds } from '../../store/split-helpers'
+import { CONSTELLAGENT_PATH_MIME, CONSTELLAGENT_TAB_MIME } from '../../utils/add-to-chat'
 import { Tooltip } from '../Tooltip/Tooltip'
 import { GEMINI_TAB_LABEL } from '../../../shared/gemini-tab-title'
 import { GeminiIcon } from '../Icons/GeminiIcon'
@@ -84,6 +85,7 @@ const STATUS_LETTER_MAP: Record<string, string> = {
 
 export function TabBar() {
   const [dragOverTabId, setDragOverTabId] = useState<string | null>(null)
+  const [draggingTabId, setDraggingTabId] = useState<string | null>(null)
   const activeTabId = useAppStore((s) => s.activeTabId)
   const setActiveTab = useAppStore((s) => s.setActiveTab)
   const removeTab = useAppStore((s) => s.removeTab)
@@ -95,6 +97,7 @@ export function TabBar() {
   const gitFileStatuses = useAppStore((s) => s.gitFileStatuses)
   const workspaces = useAppStore((s) => s.workspaces)
   const addToast = useAppStore((s) => s.addToast)
+  const mergeTabIntoSplit = useAppStore((s) => s.mergeTabIntoSplit)
   const tabs = allTabs.filter((t) => t.workspaceId === activeWorkspaceId)
   const workspace = workspaces.find((w) => w.id === activeWorkspaceId)
 
@@ -164,19 +167,38 @@ export function TabBar() {
           return (
             <div
               key={tab.id}
-              className={`${styles.tab} ${tab.id === activeTabId ? styles.active : ''} ${isDeleted ? styles.deleted : ''}`}
-              style={dragOverTabId === tab.id ? { outline: '1px solid var(--accent-primary, #7aa2f7)' } : undefined}
+              className={`${styles.tab} ${tab.id === activeTabId ? styles.active : ''} ${isDeleted ? styles.deleted : ''} ${draggingTabId === tab.id ? styles.tabDragging : ''} ${dragOverTabId === tab.id && draggingTabId !== tab.id ? styles.tabDragOver : ''}`}
               onClick={() => setActiveTab(tab.id)}
+              draggable={tab.type === 'terminal'}
+              onDragStart={tab.type === 'terminal' ? (e) => {
+                e.dataTransfer.setData(CONSTELLAGENT_TAB_MIME, tab.id)
+                e.dataTransfer.effectAllowed = 'move'
+                setDraggingTabId(tab.id)
+              } : undefined}
+              onDragEnd={() => {
+                setDraggingTabId(null)
+                setDragOverTabId(null)
+              }}
               onDragOver={tab.type === 'terminal' ? (e) => {
+                // Reject self-drop: don't preventDefault so browser shows no-drop cursor
+                if (draggingTabId === tab.id) return
                 e.preventDefault()
-                e.dataTransfer.dropEffect = 'copy'
+                // Tab merge = move, file drop = copy
+                e.dataTransfer.dropEffect = draggingTabId ? 'move' : 'copy'
                 setDragOverTabId(tab.id)
               } : undefined}
               onDragLeave={tab.type === 'terminal' ? () => setDragOverTabId(null) : undefined}
               onDrop={tab.type === 'terminal' ? (e) => {
                 e.preventDefault()
                 setDragOverTabId(null)
-                const filePath = e.dataTransfer.getData('application/x-constellagent-file')
+                // Tab-to-tab merge (check first)
+                const sourceTabId = e.dataTransfer.getData(CONSTELLAGENT_TAB_MIME)
+                if (sourceTabId) {
+                  mergeTabIntoSplit(sourceTabId, tab.id)
+                  return
+                }
+                // File drop from FileTree
+                const filePath = e.dataTransfer.getData(CONSTELLAGENT_PATH_MIME)
                   || e.dataTransfer.getData('text/plain')
                 if (filePath && tab.type === 'terminal') {
                   const text = `@${filePath}`
