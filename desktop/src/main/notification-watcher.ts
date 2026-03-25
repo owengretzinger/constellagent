@@ -2,15 +2,17 @@ import { mkdirSync, readdirSync, readFileSync, statSync, unlinkSync } from 'fs'
 import { join } from 'path'
 import { BrowserWindow } from 'electron'
 import { IPC } from '../shared/ipc-channels'
+import {
+  DEFAULT_ACTIVITY_DIR,
+  CLAUDE_MARKER_SUFFIX,
+  CODEX_MARKER_SEGMENT,
+  GEMINI_MARKER_SEGMENT,
+  CURSOR_MARKER_SEGMENT,
+} from '../shared/agent-markers'
 
 const DEFAULT_NOTIFY_DIR = '/tmp/constellagent-notify'
-const DEFAULT_ACTIVITY_DIR = '/tmp/constellagent-activity'
 const POLL_INTERVAL = 500
 const FILE_SETTLE_MS = 100
-const CLAUDE_MARKER_SUFFIX = '.claude'
-const CODEX_MARKER_SEGMENT = '.codex.'
-const GEMINI_MARKER_SEGMENT = '.gemini.'
-const CURSOR_MARKER_SEGMENT = '.cursor.'
 
 interface ActivityEntry {
   wsId: string

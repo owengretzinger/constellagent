@@ -57,6 +57,7 @@ export function MarkdownPreview({ filePath, worktreePath }: Props) {
   const setActiveTab = useAppStore((s) => s.setActiveTab)
   const launchAgentTerminal = useAppStore((s) => s.launchAgentTerminalWithCommand)
   const retargetMarkdownPreviewTab = useAppStore((s) => s.retargetMarkdownPreviewTab)
+  const setPlanBuildTerminalForPlan = useAppStore((s) => s.setPlanBuildTerminalForPlan)
   const workspace = useAppStore((s) =>
     s.workspaces.find((w) => w.worktreePath === worktreePath),
   )
@@ -219,6 +220,7 @@ export function MarkdownPreview({ filePath, worktreePath }: Props) {
         command,
         agentType: planAgentToPtyAgentType(harness) as AgentType,
       })
+      setPlanBuildTerminalForPlan(planAbsPath, tabId)
       setBuilding(true)
       setActiveTab(tabId)
     } catch {
@@ -235,6 +237,7 @@ export function MarkdownPreview({ filePath, worktreePath }: Props) {
     activeTabId,
     retargetMarkdownPreviewTab,
     launchAgentTerminal,
+    setPlanBuildTerminalForPlan,
     setActiveTab,
     addToast,
   ])

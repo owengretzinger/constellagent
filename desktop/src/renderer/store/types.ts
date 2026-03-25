@@ -206,6 +206,8 @@ export interface AppState {
   /** Last seen `git ls-remote origin HEAD` hash per project (background poller) */
   lastKnownRemoteHead: Record<string, string>
   activeMonacoEditor: editor.IStandaloneCodeEditor | null
+  /** Ephemeral: plan absolute path → terminal tab id from last Build (not persisted). */
+  planBuildTerminalByPlanPath: Record<string, string>
 
   // Actions
   addProject: (project: Project) => void
@@ -237,6 +239,8 @@ export interface AppState {
   openMarkdownPreview: (filePath: string) => void
   /** Point an existing markdown preview tab at a new path (e.g. after plan relocate). */
   retargetMarkdownPreviewTab: (tabId: string, newFilePath: string) => void
+  /** Remember which terminal tab was spawned for a plan (⌘L routing). */
+  setPlanBuildTerminalForPlan: (planPath: string, terminalTabId: string) => void
   /** Open newest .md/.mdx across agent plan dirs (.cursor/plans, etc.) in the active workspace */
   openLatestAgentPlan: () => Promise<void>
   openDiffTab: (workspaceId: string) => void

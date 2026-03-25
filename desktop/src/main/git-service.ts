@@ -6,6 +6,7 @@ import { basename, dirname, isAbsolute, join, relative, resolve } from 'path'
 import type { CreateWorktreeProgress } from '../shared/workspace-creation'
 import type { GitLogEntry } from '../shared/git-types'
 import type { SyncProgress, SyncResult } from '../shared/sync-types'
+import { SKIP_DIRS as FILE_SKIP_DIRS } from './file-service'
 
 const execFileAsync = promisify(execFile)
 
@@ -97,7 +98,7 @@ function ensureWithinParent(parentDir: string, candidatePath: string): void {
   }
 }
 
-const SKIP_DIRS = new Set(['node_modules', '.git', 'dist', 'build', 'out', '.next'])
+const SKIP_DIRS = new Set([...FILE_SKIP_DIRS, 'out'])
 
 async function copyEnvFiles(dir: string, destRoot: string, srcRoot: string): Promise<void> {
   try {
@@ -471,10 +472,17 @@ export class GitService {
 
     const results: FileStatus[] = []
 
+    /** Porcelain rename/copy lines use `ORIG -> DEST`; use worktree destination path. */
+    const porcelainPath = (raw: string): string => {
+      const arrow = ' -> '
+      const i = raw.lastIndexOf(arrow)
+      return i >= 0 ? raw.slice(i + arrow.length).trim() : raw
+    }
+
     for (const line of output.split('\n')) {
       const indexStatus = line[0]
       const workStatus = line[1]
-      const path = line.slice(3)
+      const path = porcelainPath(line.slice(3))
 
       if (indexStatus === '?' && workStatus === '?') {
         results.push({ path, status: 'untracked', staged: false })

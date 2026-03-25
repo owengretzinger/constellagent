@@ -38,6 +38,23 @@ export function resolveAgentPtyForContextInjection(params: {
   return resolvePtyForTerminalTab(termTab)
 }
 
+/**
+ * PTY for the terminal tab last spawned by plan Build for this source file, if still open in the workspace.
+ */
+export function resolvePtyForPlanSourceFilePath(
+  sourceFilePath: string | undefined,
+  planBuildTerminalByPlanPath: Record<string, string>,
+  tabs: Tab[],
+  activeWorkspaceId: string | null,
+): string | undefined {
+  if (!sourceFilePath || !activeWorkspaceId) return undefined
+  const terminalTabId = planBuildTerminalByPlanPath[sourceFilePath]
+  if (!terminalTabId) return undefined
+  const tab = tabs.find((t) => t.id === terminalTabId)
+  if (!tab || tab.type !== 'terminal' || tab.workspaceId !== activeWorkspaceId) return undefined
+  return resolvePtyForTerminalTab(tab)
+}
+
 /** Recursively collect all PTY IDs from a split tree (terminal leaves only). */
 export function getAllPtyIds(node: SplitNode): string[] {
   if (node.type === 'leaf') {

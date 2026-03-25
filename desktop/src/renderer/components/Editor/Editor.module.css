@@ -216,6 +216,34 @@
 .fileHeaderBadge.renamed { color: var(--accent-cyan); }
 .fileHeaderBadge.untracked { color: var(--text-tertiary); }
 
+.combinedDiffNote {
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+  padding: var(--space-2) var(--space-6);
+  margin: 0;
+  line-height: 1.45;
+}
+
+.combinedDiffCode {
+  font-family: var(--font-mono);
+  font-size: 0.95em;
+  color: var(--text-secondary);
+}
+
+.rawMergePatch {
+  margin: 0;
+  padding: var(--space-3) var(--space-6) var(--space-6);
+  overflow: auto;
+  max-height: min(70vh, 1200px);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  line-height: 1.45;
+  color: var(--text-secondary);
+  background: var(--surface-0);
+  border-top: 1px solid var(--border-subtle);
+  white-space: pre;
+}
+
 /* Empty diff state */
 .diffEmpty {
   display: flex;

@@ -73,7 +73,10 @@ write_pending() {
   fi
   # Default empty input to null so the JSON stays valid
   [ -z "$input" ] && input="null"
-  jq -n \
+  local tmp out
+  tmp=$(mktemp "${pending_dir}/.pending.XXXXXX.tmp") || return 0
+  out="$pending_dir/$(date +%s)-$RANDOM.json"
+  if jq -n \
     --arg ws "$WS_ID" \
     --arg agent "$agent" \
     --arg sid "$sid" \
@@ -83,7 +86,12 @@ write_pending() {
     --arg head "$head" \
     --argjson input "$input" \
     '{ws:$ws, agent:$agent, sid:$sid, tool:$tool, input:$input, file:$file, ts:$ts, head:$head}' \
-    > "$pending_dir/$(date +%s)-$RANDOM.json"
+    > "$tmp"
+  then
+    mv "$tmp" "$out" || rm -f "$tmp"
+  else
+    rm -f "$tmp"
+  fi
 }
 
 write_pending_full() {
@@ -102,7 +110,10 @@ write_pending_full() {
   # Default empty input/response to null so the JSON stays valid
   [ -z "$input" ] && input="null"
   [ -z "$tool_response" ] && tool_response="null"
-  jq -n \
+  local tmp out
+  tmp=$(mktemp "${pending_dir}/.pending.XXXXXX.tmp") || return 0
+  out="$pending_dir/$(date +%s)-$RANDOM.json"
+  if jq -n \
     --arg ws "$WS_ID" \
     --arg agent "$agent" \
     --arg sid "$sid" \
@@ -114,7 +125,12 @@ write_pending_full() {
     --argjson input "$input" \
     --argjson tool_response "$tool_response" \
     '{ws:$ws, agent:$agent, sid:$sid, tool:$tool, input:$input, file:$file, ts:$ts, head:$head, event_type:$event_type, tool_response:$tool_response}' \
-    > "$pending_dir/$(date +%s)-$RANDOM.json"
+    > "$tmp"
+  then
+    mv "$tmp" "$out" || rm -f "$tmp"
+  else
+    rm -f "$tmp"
+  fi
 }
 
 # Read the best available sliding window context for the current workspace.

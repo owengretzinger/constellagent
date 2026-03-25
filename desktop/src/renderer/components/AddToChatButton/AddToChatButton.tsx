@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { useAppStore } from '../../store/app-store'
+import { sendActiveSelectionToAgent } from '../../utils/add-to-chat'
 import styles from './AddToChatButton.module.css'
 
 interface Position {
@@ -63,7 +64,6 @@ export function AddToChatButton() {
 
     document.addEventListener('selectionchange', onSelection)
 
-    // Also listen to Monaco cursor changes
     let disposable: { dispose(): void } | undefined
     const checkMonaco = () => {
       const ed = useAppStore.getState().activeMonacoEditor
@@ -76,7 +76,6 @@ export function AddToChatButton() {
       }
     }
 
-    // Re-check when active editor changes
     let prevEditor = useAppStore.getState().activeMonacoEditor
     const unsub = useAppStore.subscribe((s) => {
       if (s.activeMonacoEditor !== prevEditor) {
@@ -95,29 +94,7 @@ export function AddToChatButton() {
   }, [updatePosition])
 
   const handleClick = useCallback(() => {
-    const store = useAppStore.getState()
-    const ed = store.activeMonacoEditor
-    if (ed) {
-      const sel = ed.getSelection()
-      const text = sel ? ed.getModel()?.getValueInRange(sel) : ''
-      if (text) {
-        const uri = ed.getModel()?.uri.path
-        store.sendContextToAgent([{
-          text,
-          filePath: uri || undefined,
-          startLine: sel!.startLineNumber,
-          endLine: sel!.endLineNumber,
-        }])
-        setPos(null)
-        return
-      }
-    }
-
-    const text = window.getSelection()?.toString()
-    if (text) {
-      const activeTab = store.tabs.find((t) => t.id === store.activeTabId)
-      const filePath = activeTab && ('filePath' in activeTab) ? (activeTab as { filePath: string }).filePath : undefined
-      store.sendContextToAgent([{ text, filePath }])
+    if (sendActiveSelectionToAgent()) {
       setPos(null)
     }
   }, [])

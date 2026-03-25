@@ -1,10 +1,12 @@
-import { useCallback, useId, useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { useAppStore } from '../../store/app-store'
 import type { Tab, AgentType } from '../../store/types'
 import { resolveEditor } from '../../store/types'
 import { getAllPtyIds } from '../../store/split-helpers'
 import { Tooltip } from '../Tooltip/Tooltip'
 import { GEMINI_TAB_LABEL } from '../../../shared/gemini-tab-title'
+import { GeminiIcon } from '../Icons/GeminiIcon'
+import { CursorIcon } from '../Icons/CursorIcon'
 import claudeIcon from '../../assets/agent-icons/claude.svg'
 import openaiIcon from '../../assets/agent-icons/openai.svg'
 import styles from './TabBar.module.css'
@@ -14,57 +16,6 @@ const AGENT_ICON_MAP: Record<AgentType, { src: string; alt: string } | null> = {
   codex: { src: openaiIcon, alt: 'Codex' },
   gemini: null, // reuses GeminiIcon component
   cursor: null, // reuses CursorIcon component
-}
-
-/** Gemini spark logo — inline SVG (gradients; unique defs per instance for multiple tabs) */
-function GeminiIcon({ className }: { className?: string }) {
-  const uid = useId().replace(/:/g, '')
-  const g0 = `gemini-g0-${uid}`
-  const g1 = `gemini-g1-${uid}`
-  const g2 = `gemini-g2-${uid}`
-  const d =
-    'M20.616 10.835a14.147 14.147 0 01-4.45-3.001 14.111 14.111 0 01-3.678-6.452.503.503 0 00-.975 0 14.134 14.134 0 01-3.679 6.452 14.155 14.155 0 01-4.45 3.001c-.65.28-1.318.505-2.002.678a.502.502 0 000 .975c.684.172 1.35.397 2.002.677a14.147 14.147 0 014.45 3.001 14.112 14.112 0 013.679 6.453.502.502 0 00.975 0c.172-.685.397-1.351.677-2.003a14.145 14.145 0 013.001-4.45 14.113 14.113 0 016.453-3.678.503.503 0 000-.975 13.245 13.245 0 01-2.003-.678z'
-  return (
-    <svg
-      className={className}
-      viewBox="0 0 24 24"
-      xmlns="http://www.w3.org/2000/svg"
-      aria-hidden
-    >
-      <defs>
-        <linearGradient id={g0} gradientUnits="userSpaceOnUse" x1="7" x2="11" y1="15.5" y2="12">
-          <stop stopColor="#08B962" />
-          <stop offset="1" stopColor="#08B962" stopOpacity="0" />
-        </linearGradient>
-        <linearGradient id={g1} gradientUnits="userSpaceOnUse" x1="8" x2="11.5" y1="5.5" y2="11">
-          <stop stopColor="#F94543" />
-          <stop offset="1" stopColor="#F94543" stopOpacity="0" />
-        </linearGradient>
-        <linearGradient id={g2} gradientUnits="userSpaceOnUse" x1="3.5" x2="17.5" y1="13.5" y2="12">
-          <stop stopColor="#FABC12" />
-          <stop offset=".46" stopColor="#FABC12" stopOpacity="0" />
-        </linearGradient>
-      </defs>
-      <path d={d} fill="#3186FF" />
-      <path d={d} fill={`url(#${g0})`} />
-      <path d={d} fill={`url(#${g1})`} />
-      <path d={d} fill={`url(#${g2})`} />
-    </svg>
-  )
-}
-
-/** Cursor cube logo (2D dark variant) — inline SVG for currentColor support */
-function CursorIcon({ className }: { className?: string }) {
-  return (
-    <svg
-      className={className}
-      viewBox="0 0 466.73 532.09"
-      fill="currentColor"
-      xmlns="http://www.w3.org/2000/svg"
-    >
-      <path d="M457.43,125.94L244.42,2.96c-6.84-3.95-15.28-3.95-22.12,0L9.3,125.94c-5.75,3.32-9.3,9.46-9.3,16.11v247.99c0,6.65,3.55,12.79,9.3,16.11l213.01,122.98c6.84,3.95,15.28,3.95,22.12,0l213.01-122.98c5.75-3.32,9.3-9.46,9.3-16.11v-247.99c0-6.65-3.55-12.79-9.3-16.11h-.01ZM444.05,151.99l-205.63,356.16c-1.39,2.4-5.06,1.42-5.06-1.36v-233.21c0-4.66-2.49-8.97-6.53-11.31L24.87,145.67c-2.4-1.39-1.42-5.06,1.36-5.06h411.26c5.84,0,9.49,6.33,6.57,11.39h-.01Z" />
-    </svg>
-  )
 }
 
 /** VS Code logo */

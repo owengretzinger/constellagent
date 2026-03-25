@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import { useAppStore } from '../../store/app-store'
+import { useFileWatcher } from '../../hooks/useFileWatcher'
 import type { GitLogEntry } from '@shared/git-types'
 import styles from './GitGraph.module.css'
 
@@ -425,17 +426,7 @@ export function GitGraph({ worktreePath, workspaceId, isActive }: GitGraphProps)
   }, [isActive, entries, workspaceId, openCommitDiffTab])
 
   // Refresh on filesystem changes
-  useEffect(() => {
-    if (!isActive) return
-    window.api.fs.watchDir(worktreePath)
-    const unsub = window.api.fs.onDirChanged((changedDir: string) => {
-      if (changedDir === worktreePath) loadLog()
-    })
-    return () => {
-      unsub()
-      window.api.fs.unwatchDir(worktreePath)
-    }
-  }, [worktreePath, isActive, loadLog])
+  useFileWatcher(worktreePath, loadLog, isActive)
 
   const handleClickCommit = useCallback(
     (entry: GitLogEntry) => {
