@@ -7,6 +7,7 @@ import { WorkspaceDialog } from "./WorkspaceDialog";
 import { ProjectSettingsDialog } from "./ProjectSettingsDialog";
 
 import { Tooltip } from "../Tooltip/Tooltip";
+import { CONSTELLAGENT_WORKSPACE_MIME } from "../../utils/add-to-chat";
 import styles from "./Sidebar.module.css";
 
 const PR_ICON_SIZE = 10;
@@ -359,6 +360,7 @@ export function Sidebar() {
   const unreadWorkspaceIds = useAppStore((s) => s.unreadWorkspaceIds);
   const activeClaudeWorkspaceIds = useAppStore((s) => s.activeClaudeWorkspaceIds);
   const renameWorkspace = useAppStore((s) => s.renameWorkspace);
+  const reorderWorkspace = useAppStore((s) => s.reorderWorkspace);
   const setActiveTab = useAppStore((s) => s.setActiveTab);
   const setPrStatuses = useAppStore((s) => s.setPrStatuses);
   const settings = useAppStore((s) => s.settings);
@@ -373,6 +375,8 @@ export function Sidebar() {
   const [editingWorkspaceId, setEditingWorkspaceId] = useState<string | null>(
     null,
   );
+  const [draggedWsId, setDraggedWsId] = useState<string | null>(null);
+  const [dropTargetWsId, setDropTargetWsId] = useState<string | null>(null);
   const [workspaceCreation, setWorkspaceCreation] =
     useState<WorkspaceCreationState | null>(null);
   const [showSlowCreateMessage, setShowSlowCreateMessage] = useState(false);
@@ -1061,7 +1065,8 @@ export function Sidebar() {
                         key={ws.id}
                         className={`${styles.workspaceItem} ${
                           ws.id === activeWorkspaceId ? styles.active : ""
-                        } ${unreadWorkspaceIds.has(ws.id) ? styles.unread : ""} ${activeClaudeWorkspaceIds.has(ws.id) ? styles.claudeActive : ""}`}
+                        } ${unreadWorkspaceIds.has(ws.id) ? styles.unread : ""} ${activeClaudeWorkspaceIds.has(ws.id) ? styles.claudeActive : ""} ${draggedWsId === ws.id ? styles.workspaceItemDragging : ""} ${dropTargetWsId === ws.id && draggedWsId !== ws.id ? styles.workspaceItemDropTarget : ""}`}
+                        draggable={!isEditing}
                         onClick={() =>
                           !isEditing && handleSelectWorkspace(ws.id)
                         }
@@ -1072,6 +1077,32 @@ export function Sidebar() {
                         onDoubleClick={() => {
                           editRef.current = displayName;
                           setEditingWorkspaceId(ws.id);
+                        }}
+                        onDragStart={(e) => {
+                          setDraggedWsId(ws.id);
+                          e.dataTransfer.setData(CONSTELLAGENT_WORKSPACE_MIME, ws.id);
+                          e.dataTransfer.effectAllowed = "move";
+                        }}
+                        onDragEnd={() => {
+                          setDraggedWsId(null);
+                          setDropTargetWsId(null);
+                        }}
+                        onDragOver={(e) => {
+                          if (!e.dataTransfer.types.includes(CONSTELLAGENT_WORKSPACE_MIME)) return;
+                          e.preventDefault();
+                          e.dataTransfer.dropEffect = "move";
+                          setDropTargetWsId(ws.id);
+                        }}
+                        onDragLeave={(e) => {
+                          if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+                          setDropTargetWsId((prev) => prev === ws.id ? null : prev);
+                        }}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          const fromId = e.dataTransfer.getData(CONSTELLAGENT_WORKSPACE_MIME);
+                          if (fromId) reorderWorkspace(fromId, ws.id);
+                          setDraggedWsId(null);
+                          setDropTargetWsId(null);
                         }}
                       >
                         <span className={styles.workspaceIcon}>

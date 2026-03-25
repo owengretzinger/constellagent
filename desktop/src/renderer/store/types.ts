@@ -258,6 +258,7 @@ export interface AppState {
   mergeTabIntoSplit: (sourceTabId: string, targetTabId: string, direction?: 'horizontal' | 'vertical') => void
   openWorkspaceDialog: (projectId: string | null) => void
   renameWorkspace: (id: string, name: string) => void
+  reorderWorkspace: (fromId: string, toId: string) => void
   updateWorkspaceBranch: (id: string, branch: string) => void
   deleteWorkspace: (workspaceId: string) => Promise<void>
   updateProject: (id: string, partial: Partial<Omit<Project, 'id'>>) => void

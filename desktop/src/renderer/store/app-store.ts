@@ -231,6 +231,20 @@ export const useAppStore = create<AppState>((set, get) => ({
       workspaces: s.workspaces.map((w) => w.id === id ? { ...w, name } : w),
     })),
 
+  reorderWorkspace: (fromId, toId) => {
+    if (fromId === toId) return
+    set((s) => {
+      const fromIdx = s.workspaces.findIndex((w) => w.id === fromId)
+      const toIdx = s.workspaces.findIndex((w) => w.id === toId)
+      if (fromIdx === -1 || toIdx === -1) return s
+      if (s.workspaces[fromIdx].projectId !== s.workspaces[toIdx].projectId) return s
+      const next = [...s.workspaces]
+      const [moved] = next.splice(fromIdx, 1)
+      next.splice(toIdx, 0, moved)
+      return { workspaces: next }
+    })
+  },
+
   updateWorkspaceBranch: (id, branch) =>
     set((s) => ({
       workspaces: s.workspaces.map((w) => w.id === id ? { ...w, branch } : w),

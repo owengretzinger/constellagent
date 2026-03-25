@@ -8,6 +8,9 @@ export const CONSTELLAGENT_PATH_MIME = 'application/x-constellagent-path'
 /** Drag-and-drop MIME for terminal tab IDs (tab-to-tab merge) */
 export const CONSTELLAGENT_TAB_MIME = 'application/x-constellagent-tab'
 
+/** Drag-and-drop MIME for workspace IDs (sidebar reorder) */
+export const CONSTELLAGENT_WORKSPACE_MIME = 'application/x-constellagent-workspace'
+
 export { wrapBracketedPaste }
 
 function formatSelectionAsContext(filePath: string, languageId: string, selection: string): string {
