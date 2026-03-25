@@ -1,5 +1,11 @@
+import type { editor } from 'monaco-editor'
 import type { PrInfo } from '@shared/github-types'
 import type { WorkspaceSyncInfo } from '@shared/worktree-sync-types'
+
+/** Used with `waitFor`: how long / how to wait after the dependency before starting this command */
+export type WaitCondition =
+  | { type: 'delay'; seconds: number }
+  | { type: 'output'; pattern: string }
 
 export interface StartupCommand {
   name: string
@@ -197,6 +203,9 @@ export interface AppState {
   gitFileStatuses: Map<string, Map<string, string>>
   /** Per-workspace worktree sync status (key = workspace id) */
   worktreeSyncStatus: Map<string, WorkspaceSyncInfo>
+  /** Last seen `git ls-remote origin HEAD` hash per project (background poller) */
+  lastKnownRemoteHead: Record<string, string>
+  activeMonacoEditor: editor.IStandaloneCodeEditor | null
 
   // Actions
   addProject: (project: Project) => void
@@ -284,7 +293,6 @@ export interface AppState {
   setTabDeleted: (tabId: string, deleted: boolean) => void
 
   // Sync actions
-  setSyncState: (workspaceId: string, partial: Partial<{ syncing: boolean; lastSyncedAt: number | null; lastError: string | null }>) => void
   setLastKnownRemoteHead: (projectId: string, hash: string) => void
 
   // PR status actions

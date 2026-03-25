@@ -152,14 +152,14 @@ export class FileService {
 
     const scanDir = async (dir: string, agent: string, depth: number) => {
       if (depth > 8) return
-      let entries: Awaited<ReturnType<typeof readdir>>
+      let entries: import('fs').Dirent[]
       try {
-        entries = await readdir(dir, { withFileTypes: true })
+        entries = await readdir(dir, { withFileTypes: true }) as import('fs').Dirent[]
       } catch {
         return
       }
       for (const ent of entries) {
-        const full = join(dir, ent.name)
+        const full = join(dir, ent.name as string)
         if (ent.isDirectory()) {
           await scanDir(full, agent, depth + 1)
         } else if (ent.isFile()) {
@@ -256,14 +256,14 @@ export class FileService {
 
     const byPath = new Map<string, AgentPlanEntry>()
     for (const wt of uniqueWts) {
-      const fromWt = await this.collectPlanFilesUnderRoot(wt)
+      const fromWt = await this.collectPlanFilesUnderRoot(wt, 'worktree')
       for (const e of fromWt) {
         byPath.set(e.path, { ...e, planSourceRoot: wt })
       }
     }
     let fromHome: AgentPlanEntry[] = []
     try {
-      fromHome = await this.collectPlanFilesUnderRoot(homedir())
+      fromHome = await this.collectPlanFilesUnderRoot(homedir(), 'home')
     } catch {
       /* ignore */
     }

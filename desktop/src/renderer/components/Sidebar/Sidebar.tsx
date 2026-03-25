@@ -363,7 +363,7 @@ export function Sidebar() {
   const setPrStatuses = useAppStore((s) => s.setPrStatuses);
   const settings = useAppStore((s) => s.settings);
   const setGhAvailability = useAppStore((s) => s.setGhAvailability);
-  const syncStates = useAppStore((s) => s.syncStates);
+  const worktreeSyncMap = useAppStore((s) => s.worktreeSyncStatus);
 
   const [manualCollapsed, setManualCollapsed] = useState<Set<string>>(
     new Set(),
@@ -1075,7 +1075,14 @@ export function Sidebar() {
                         }}
                       >
                         <span className={styles.workspaceIcon}>
-                          {syncStates[ws.id]?.syncing ? "⟳" : syncStates[ws.id]?.lastError ? "⚠" : ws.automationId ? "⏱" : "⌥"}
+                          {(() => {
+                            const wss = worktreeSyncMap.get(ws.id);
+                            const syncBusy =
+                              wss?.status === "syncing" || wss?.status === "queued";
+                            const syncWarn =
+                              wss?.status === "error" || wss?.status === "conflict";
+                            return syncBusy ? "⟳" : syncWarn ? "⚠" : ws.automationId ? "⏱" : "⌥";
+                          })()}
                         </span>
                         <div className={styles.workspaceNameCol}>
                           {isEditing ? (

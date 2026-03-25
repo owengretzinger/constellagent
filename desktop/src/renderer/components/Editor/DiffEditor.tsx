@@ -59,11 +59,6 @@ function normalizeDiffSelection(range: PierreSelectedRange): {
 
 // ── Per-file diff section ──
 
-interface PendingAnnotation {
-  line: number
-  side: AnnotationSide
-}
-
 interface DiffFileSectionProps {
   data: DiffFileData
   inline: boolean
@@ -161,7 +156,7 @@ const DiffFileSection = memo(function DiffFileSection({
     () => ({
       theme: 'tokyo-night' as const,
       themeType: 'dark' as const,
-      diffStyle: (inline ? 'unified' : 'split') as const,
+      diffStyle: inline ? ('unified' as const) : ('split' as const),
       diffIndicators: 'bars' as const,
       lineDiffType: 'word-alt' as const,
       overflow: 'scroll' as const,
@@ -247,7 +242,7 @@ const DiffFileSection = memo(function DiffFileSection({
             </div>
           }
         >
-          <PatchDiff<Annotation>
+          <PatchDiff<DiffAnnotation[]>
             patch={data.patch}
             options={patchOptions}
             selectedLines={selectedLines}
@@ -303,7 +298,6 @@ export function DiffViewer({ worktreePath, active, commitHash, commitMessage }: 
   const [loading, setLoading] = useState(true)
   const [annotations, setAnnotations] = useState<DiffAnnotation[]>([])
   const [activeFile, setActiveFile] = useState<string | null>(null)
-  const [annotations, setAnnotations] = useState<Annotation[]>([])
   const scrollAreaRef = useRef<HTMLDivElement>(null)
   const settings = useAppStore((s) => s.settings)
   const updateSettings = useAppStore((s) => s.updateSettings)

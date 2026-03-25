@@ -50,6 +50,8 @@ const api = {
       ipcRenderer.invoke(IPC.GIT_GET_LOG, worktreePath, maxCount) as Promise<import('../shared/git-types').GitLogEntry[]>,
     getCommitDiff: (worktreePath: string, hash: string) =>
       ipcRenderer.invoke(IPC.GIT_GET_COMMIT_DIFF, worktreePath, hash) as Promise<string>,
+    getRemoteHead: (repoPath: string) =>
+      ipcRenderer.invoke(IPC.GIT_GET_REMOTE_HEAD, repoPath) as Promise<string | null>,
     syncAllWorktrees: (projectId: string) => ipcRenderer.invoke(IPC.GIT_SYNC_ALL_WORKTREES, projectId),
     startSyncPolling: (projectId: string, repoPath: string) =>
       ipcRenderer.invoke(IPC.GIT_START_SYNC_POLLING, projectId, repoPath),

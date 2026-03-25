@@ -1,9 +1,30 @@
 import { create } from 'zustand'
-import type { AppState, PersistedState, Project, StartupCommand, Tab, SplitNode, Workspace } from './types'
+import type {
+  AppState,
+  ChatSnippet,
+  PersistedState,
+  Project,
+  StartupCommand,
+  Tab,
+  SplitNode,
+  Workspace,
+} from './types'
 import { DEFAULT_SETTINGS } from './types'
 import { AGENT_PLAN_DIRS_LABEL } from '../utils/agent-plan-dirs'
 import { GEMINI_TAB_LABEL, isGeminiIdleOscTitle } from '../../shared/gemini-tab-title'
-import { getAllPtyIds, splitLeaf, removeLeaf, findLeaf, findLeafByPtyId, firstLeaf, firstTerminalLeaf, collectLeaves, normalizeSplitTree } from './split-helpers'
+import {
+  getAllPtyIds,
+  splitLeaf,
+  removeLeaf,
+  findLeaf,
+  findLeafByPtyId,
+  firstLeaf,
+  firstTerminalLeaf,
+  collectLeaves,
+  normalizeSplitTree,
+  getFocusedPtyId,
+} from './split-helpers'
+import { formatChatContext } from '../utils/chat-context-formatter'
 import { pathsEqualOrAlias } from '../../shared/agent-plan-path'
 
 const DEFAULT_PR_LINK_PROVIDER = 'github' as const
@@ -78,6 +99,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   ghAvailability: new Map(),
   gitFileStatuses: new Map(),
   worktreeSyncStatus: new Map(),
+  lastKnownRemoteHead: {},
+  activeMonacoEditor: null,
 
   addProject: (project) => {
     set((s) => ({
@@ -988,14 +1011,6 @@ export const useAppStore = create<AppState>((set, get) => ({
       ),
     })),
 
-  setSyncState: (workspaceId, partial) =>
-    set((s) => ({
-      syncStates: {
-        ...s.syncStates,
-        [workspaceId]: { ...(s.syncStates[workspaceId] || { syncing: false, lastSyncedAt: null, lastError: null }), ...partial },
-      },
-    })),
-
   setLastKnownRemoteHead: (projectId, hash) =>
     set((s) => ({
       lastKnownRemoteHead: { ...s.lastKnownRemoteHead, [projectId]: hash },
@@ -1130,6 +1145,8 @@ export const useAppStore = create<AppState>((set, get) => ({
       lastActiveTabByWorkspace: data.lastActiveTabByWorkspace ?? {},
       settings,
       worktreeSyncStatus: new Map(),
+      lastKnownRemoteHead: {},
+      activeMonacoEditor: null,
     })
   },
 

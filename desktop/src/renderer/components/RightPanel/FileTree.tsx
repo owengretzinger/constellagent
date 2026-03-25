@@ -266,8 +266,6 @@ function Node({ node, style }: NodeRendererProps<FileNode>) {
       onDragStart={handleDragStart}
       onClick={handleClick}
       onContextMenu={handleContextMenu}
-      draggable={node.isLeaf}
-      onDragStart={handleDragStart}
     >
       <span className={styles.treeChevron}>
         {node.isInternal ? (node.isOpen ? '▾' : '▸') : ''}

@@ -27,6 +27,7 @@ interface Props {
 }
 
 type AgentFilter = 'all' | 'cursor' | 'claude-code' | 'codex' | 'gemini'
+type SourceFilter = 'all' | 'worktree' | 'home'
 type WorktreeFilterKey = 'all' | '__home__' | string
 
 const AGENTS: { key: AgentFilter; label: string }[] = [

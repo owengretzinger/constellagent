@@ -671,6 +671,10 @@ export function registerIpcHandlers(): void {
     return GitService.getCommitDiff(worktreePath, hash)
   })
 
+  ipcMain.handle(IPC.GIT_GET_REMOTE_HEAD, async (_e, repoPath: string) => {
+    return GitService.getRemoteHead(repoPath)
+  })
+
   ipcMain.handle(IPC.GIT_SYNC_ALL_WORKTREES, async (_e, projectId: string) => {
     await worktreeSyncService.syncNow(projectId)
   })
@@ -1876,5 +1880,4 @@ export function cleanupAll(): void {
   for (const db of contextDbs.values()) db.close().catch(() => {})
   contextDbs.clear()
   closeAllAgentFS().catch(() => {})
-  closeAllAnnotationWatchers()
 }
