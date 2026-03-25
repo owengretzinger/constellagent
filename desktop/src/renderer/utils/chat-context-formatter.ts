@@ -1,11 +1,5 @@
+import type { ChatSnippet } from '../store/types'
 import { getFenceTag } from './language-map'
-
-export interface ChatSnippet {
-  text: string
-  filePath?: string
-  startLine?: number
-  endLine?: number
-}
 
 const MAX_CONTEXT_CHARS = 10_000
 

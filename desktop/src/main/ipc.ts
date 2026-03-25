@@ -222,43 +222,61 @@ function repairTruncatedJson(raw: string): string {
   return repaired
 }
 
+const PENDING_PARSE_RETRIES = 3
+const PENDING_PARSE_RETRY_MS = 40
+
+function sleepMs(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+/** Read disk and parse pending JSON (sanitize + truncated repair). Throws SyntaxError if still invalid. */
+async function parsePendingJsonFromFile(filePath: string): Promise<any> { // eslint-disable-line @typescript-eslint/no-explicit-any
+  let raw = await readFile(filePath, 'utf-8')
+  raw = raw.replace(/"input":,/g, '"input":null,')
+  raw = raw.replace(/"tool_response":,/g, '"tool_response":null,')
+
+  try {
+    return JSON.parse(raw)
+  } catch {
+    const sanitized = raw.replace(
+      /("(?:[^"\\]|\\.)*")/g,
+      (_match, strLiteral: string) => {
+        const inner = strLiteral.slice(1, -1)
+        const fixed = inner
+          .replace(/\\(?!["\\/bfnrtu])/g, '\\\\')
+          .replace(/[\x00-\x1f]/g, (ch) => {
+            const hex = ch.charCodeAt(0).toString(16).padStart(4, '0')
+            return `\\u${hex}`
+          })
+        return `"${fixed}"`
+      }
+    )
+    try {
+      return JSON.parse(sanitized)
+    } catch {
+      const repaired = repairTruncatedJson(sanitized)
+      return JSON.parse(repaired)
+    }
+  }
+}
+
 async function processPendingFile(projectDir: string, pendingDir: string, fileName: string): Promise<void> {
   if (!fileName.endsWith('.json')) return
   const filePath = join(pendingDir, fileName)
   const db = getContextDb(projectDir)
 
   try {
-    let raw = await readFile(filePath, 'utf-8')
-    // Repair common shell-hook issues
-    raw = raw.replace(/"input":,/g, '"input":null,')
-    raw = raw.replace(/"tool_response":,/g, '"tool_response":null,')
-
     let data: any // eslint-disable-line @typescript-eslint/no-explicit-any
-    try {
-      data = JSON.parse(raw)
-    } catch {
-      // Sanitize bad control characters & escape sequences inside JSON string values,
-      // then retry. Shell hooks often embed raw newlines/tabs/backslashes in values.
-      const sanitized = raw.replace(
-        /("(?:[^"\\]|\\.)*")/g,
-        (_match, strLiteral: string) => {
-          // Re-escape unescaped control chars (0x00-0x1F) inside the string
-          const inner = strLiteral.slice(1, -1)
-          const fixed = inner
-            .replace(/\\(?!["\\/bfnrtu])/g, '\\\\') // fix bad escape sequences like \x, \a
-            .replace(/[\x00-\x1f]/g, (ch) => {       // escape raw control chars
-              const hex = ch.charCodeAt(0).toString(16).padStart(4, '0')
-              return `\\u${hex}`
-            })
-          return `"${fixed}"`
-        }
-      )
+    for (let attempt = 0; attempt < PENDING_PARSE_RETRIES; attempt++) {
       try {
-        data = JSON.parse(sanitized)
-      } catch {
-        // Last resort: try to repair truncated JSON (e.g. from head -c cutting mid-value)
-        const repaired = repairTruncatedJson(sanitized)
-        data = JSON.parse(repaired) // will throw SyntaxError if still broken
+        data = await parsePendingJsonFromFile(filePath)
+        break
+      } catch (e) {
+        if (e instanceof SyntaxError && attempt < PENDING_PARSE_RETRIES - 1) {
+          await sleepMs(PENDING_PARSE_RETRY_MS)
+          continue
+        }
+        throw e
       }
     }
 
@@ -813,7 +831,7 @@ export function registerIpcHandlers(): void {
       return await FileService.readFile(filePath)
     } catch (err: unknown) {
       const code = (err as NodeJS.ErrnoException).code
-      if (code === 'ENOENT') {
+      if (code === 'ENOENT' || code === 'EISDIR') {
         return null
       }
       throw err

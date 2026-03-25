@@ -23,8 +23,10 @@ import {
   collectLeaves,
   normalizeSplitTree,
   getFocusedPtyId,
+  resolvePtyForPlanSourceFilePath,
 } from './split-helpers'
 import { formatChatContext } from '../utils/chat-context-formatter'
+import { wrapBracketedPaste } from '../utils/bracketed-paste'
 import { pathsEqualOrAlias } from '../../shared/agent-plan-path'
 
 const DEFAULT_PR_LINK_PROVIDER = 'github' as const
@@ -72,6 +74,18 @@ function activeAgentSetsEqual(a: Set<string>, b: Set<string>): boolean {
   return true
 }
 
+/** Drop plan→terminal entries when the terminal tab no longer exists (e.g. bulk tab removal). */
+function planBuildMapForTabs(map: Record<string, string>, tabs: Tab[]): Record<string, string> {
+  const terminalIds = new Set(
+    tabs.filter((t): t is Extract<Tab, { type: 'terminal' }> => t.type === 'terminal').map((t) => t.id),
+  )
+  const next: Record<string, string> = {}
+  for (const [path, tabId] of Object.entries(map)) {
+    if (terminalIds.has(tabId)) next[path] = tabId
+  }
+  return next
+}
+
 export const useAppStore = create<AppState>((set, get) => ({
   projects: [],
   workspaces: [],
@@ -101,6 +115,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   worktreeSyncStatus: new Map(),
   lastKnownRemoteHead: {},
   activeMonacoEditor: null,
+  planBuildTerminalByPlanPath: {},
 
   addProject: (project) => {
     set((s) => ({
@@ -128,6 +143,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       const newProjects = s.projects.filter((p) => p.id !== id)
       const newWorkspaces = s.workspaces.filter((w) => w.projectId !== id)
       const newTabs = s.tabs.filter((t) => !removedWsIds.has(t.workspaceId))
+      const planBuildTerminalByPlanPath = planBuildMapForTabs(s.planBuildTerminalByPlanPath, newTabs)
       const newAutomations = s.automations.filter((a) => a.projectId !== id)
       const newUnread = new Set(Array.from(s.unreadWorkspaceIds).filter((wsId) => !removedWsIds.has(wsId)))
       const newActiveClaude = new Set(Array.from(s.activeClaudeWorkspaceIds).filter((wsId) => !removedWsIds.has(wsId)))
@@ -166,6 +182,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         activeWorkspaceId,
         activeTabId,
         lastActiveTabByWorkspace: tabMap,
+        planBuildTerminalByPlanPath,
       }
     })
   },
@@ -180,6 +197,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     set((s) => {
       const newWorkspaces = s.workspaces.filter((w) => w.id !== id)
       const newTabs = s.tabs.filter((t) => t.workspaceId !== id)
+      const planBuildTerminalByPlanPath = planBuildMapForTabs(s.planBuildTerminalByPlanPath, newTabs)
       const newUnread = new Set(s.unreadWorkspaceIds)
       newUnread.delete(id)
       const newActiveClaude = new Set(s.activeClaudeWorkspaceIds)
@@ -195,6 +213,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         activeClaudeWorkspaceIds: newActiveClaude,
         worktreeSyncStatus: newWorktreeSyncStatus,
         lastActiveTabByWorkspace: tabMap,
+        planBuildTerminalByPlanPath,
         activeWorkspaceId:
           s.activeWorkspaceId === id
             ? newWorkspaces[0]?.id ?? null
@@ -250,12 +269,22 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   removeTab: (id) =>
     set((s) => {
+      const removed = s.tabs.find((t) => t.id === id)
+      let planBuildTerminalByPlanPath = s.planBuildTerminalByPlanPath
+      if (removed?.type === 'terminal') {
+        const next = { ...planBuildTerminalByPlanPath }
+        for (const k of Object.keys(next)) {
+          if (next[k] === id) delete next[k]
+        }
+        planBuildTerminalByPlanPath = next
+      }
       const newTabs = s.tabs.filter((t) => t.id !== id)
       const wasActive = s.activeTabId === id
       const wsTabs = newTabs.filter((t) => t.workspaceId === s.activeWorkspaceId)
       return {
         tabs: newTabs,
         activeTabId: wasActive ? (wsTabs[wsTabs.length - 1]?.id ?? null) : s.activeTabId,
+        planBuildTerminalByPlanPath,
       }
     }),
 
@@ -406,14 +435,32 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   retargetMarkdownPreviewTab: (tabId, newFilePath) => {
     const title = newFilePath.split('/').pop() || 'Preview'
-    set((s) => ({
-      tabs: s.tabs.map((t) =>
-        t.id === tabId && t.type === 'markdownPreview'
-          ? { ...t, filePath: newFilePath, title }
-          : t
-      ),
-    }))
+    set((s) => {
+      const old = s.tabs.find((t) => t.id === tabId && t.type === 'markdownPreview')
+      let planBuildTerminalByPlanPath = s.planBuildTerminalByPlanPath
+      if (old && old.type === 'markdownPreview' && old.filePath !== newFilePath) {
+        const terminalTabId = planBuildTerminalByPlanPath[old.filePath]
+        if (terminalTabId !== undefined) {
+          planBuildTerminalByPlanPath = { ...planBuildTerminalByPlanPath }
+          delete planBuildTerminalByPlanPath[old.filePath]
+          planBuildTerminalByPlanPath[newFilePath] = terminalTabId
+        }
+      }
+      return {
+        planBuildTerminalByPlanPath,
+        tabs: s.tabs.map((t) =>
+          t.id === tabId && t.type === 'markdownPreview'
+            ? { ...t, filePath: newFilePath, title }
+            : t
+        ),
+      }
+    })
   },
+
+  setPlanBuildTerminalForPlan: (planPath, terminalTabId) =>
+    set((s) => ({
+      planBuildTerminalByPlanPath: { ...s.planBuildTerminalByPlanPath, [planPath]: terminalTabId },
+    })),
 
   openLatestAgentPlan: async () => {
     const s = get()
@@ -499,10 +546,14 @@ export const useAppStore = create<AppState>((set, get) => ({
       }
     })
     const wsId = s.activeWorkspaceId
-    set((state) => ({
-      tabs: state.tabs.filter((t) => t.workspaceId !== wsId),
-      activeTabId: null,
-    }))
+    set((state) => {
+      const newTabs = state.tabs.filter((t) => t.workspaceId !== wsId)
+      return {
+        tabs: newTabs,
+        activeTabId: null,
+        planBuildTerminalByPlanPath: planBuildMapForTabs(state.planBuildTerminalByPlanPath, newTabs),
+      }
+    })
   },
 
   focusOrCreateTerminal: async () => {
@@ -884,11 +935,20 @@ export const useAppStore = create<AppState>((set, get) => ({
     }),
 
   setActiveAgentWorkspaces: (entries) =>
-    set(() => ({
+    set((s) => {
       // Only drive sidebar "active" dots — never infer per-tab agent type from workspace-level
       // markers (same workspace can run Claude + Codex + others; that mis-titled the wrong tab).
-      activeClaudeWorkspaceIds: new Set(entries.map((e) => e.wsId)),
-    })),
+      const newIds = new Set(entries.map((e) => e.wsId))
+      const existing = s.activeClaudeWorkspaceIds
+      if (newIds.size === existing.size) {
+        let same = true
+        for (const id of newIds) {
+          if (!existing.has(id)) { same = false; break }
+        }
+        if (same) return {}
+      }
+      return { activeClaudeWorkspaceIds: newIds }
+    }),
 
   setTerminalAgentType: (ptyId, agentType) =>
     set((s) => {
@@ -906,22 +966,24 @@ export const useAppStore = create<AppState>((set, get) => ({
       if (changed) {
         console.log(TAB_TITLE_LOG, 'renderer setTerminalAgentType', { ptyId, agentType })
       }
-      return { tabs }
+      return changed ? { tabs } : {}
     }),
 
   updateTerminalTitle: (ptyId, title) =>
     set((s) => {
-      let matched = 0
+      let changed = false
       const tabs = s.tabs.map((tab) => {
         if (!terminalTabHasPtyId(tab, ptyId)) return tab
-        matched++
         const nextTitle =
           tab.agentType === 'gemini' && isGeminiIdleOscTitle(title)
             ? GEMINI_TAB_LABEL
             : title
+        if (tab.title === nextTitle) return tab
+        changed = true
         return { ...tab, title: nextTitle }
       })
-      console.log(TAB_TITLE_LOG, 'renderer updateTerminalTitle', { ptyId, title: title.slice(0, 80), panesMatched: matched })
+      if (!changed) return {}
+      console.log(TAB_TITLE_LOG, 'renderer updateTerminalTitle', { ptyId, title: title.slice(0, 80) })
       return { tabs }
     }),
 
@@ -939,6 +1001,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         updated++
         return { ...tab, title }
       })
+      if (updated === 0) return {}
       console.log(TAB_TITLE_LOG, 'renderer applyCodexContextTitleHint', {
         workspaceId,
         title: title.slice(0, 80),
@@ -976,7 +1039,14 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   sendContextToAgent: (snippets: ChatSnippet[]) => {
     const s = get()
-    const ptyId = s.getFirstAgentTerminalPtyId()
+    const sourcePath = snippets.find((x) => x.filePath)?.filePath
+    const ptyId =
+      resolvePtyForPlanSourceFilePath(
+        sourcePath,
+        s.planBuildTerminalByPlanPath,
+        s.tabs,
+        s.activeWorkspaceId,
+      ) ?? s.getFirstAgentTerminalPtyId()
     if (!ptyId) {
       s.addToast({
         id: `no-agent-${Date.now()}`,
@@ -988,7 +1058,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
     // Format and send via bracketed paste
     const text = formatChatContext(snippets)
-    window.api.pty.write(ptyId, `\x1b[200~${text}\x1b[201~`)
+    window.api.pty.write(ptyId, wrapBracketedPaste(text))
 
     // Switch to the agent terminal tab
     const tab = s.tabs.find((t) =>
@@ -1018,15 +1088,30 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   setPrStatuses: (projectId, statuses) =>
     set((s) => {
+      let changed = false
       const newMap = new Map(s.prStatusMap)
       for (const [branch, info] of Object.entries(statuses)) {
-        newMap.set(`${projectId}:${branch}`, info)
+        const key = `${projectId}:${branch}`
+        const prev = newMap.get(key)
+        if (!prev || !info || prev.number !== info.number || prev.state !== info.state
+          || prev.title !== info.title || prev.url !== info.url
+          || prev.checkStatus !== info.checkStatus
+          || prev.hasPendingComments !== info.hasPendingComments
+          || prev.pendingCommentCount !== info.pendingCommentCount
+          || prev.isBlockedByCi !== info.isBlockedByCi
+          || prev.isApproved !== info.isApproved
+          || prev.isChangesRequested !== info.isChangesRequested
+          || prev.updatedAt !== info.updatedAt) {
+          newMap.set(key, info)
+          changed = true
+        }
       }
-      return { prStatusMap: newMap }
+      return changed ? { prStatusMap: newMap } : {}
     }),
 
   setGhAvailability: (projectId, available) =>
     set((s) => {
+      if (s.ghAvailability.get(projectId) === available) return {}
       const newMap = new Map(s.ghAvailability)
       newMap.set(projectId, available)
       return { ghAvailability: newMap }
@@ -1147,6 +1232,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       worktreeSyncStatus: new Map(),
       lastKnownRemoteHead: {},
       activeMonacoEditor: null,
+      planBuildTerminalByPlanPath: {},
     })
   },
 
@@ -1194,6 +1280,7 @@ function pruneDetachedHeadWorkspaces(): void {
       activeWorkspaceId,
       activeTabId,
       lastActiveTabByWorkspace: tabMap,
+      planBuildTerminalByPlanPath: planBuildMapForTabs(s.planBuildTerminalByPlanPath, newTabs),
     }
   })
 }

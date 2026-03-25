@@ -28,10 +28,10 @@ export function useWorktreeSyncPoller(): void {
             if (!hash) continue
 
             const prev = lastKnownRemoteHead[project.id]
-            if (prev && prev !== hash) {
-              await window.api.git.syncAllWorktrees(project.id)
+            if (hash !== prev) {
+              if (prev) await window.api.git.syncAllWorktrees(project.id)
+              setLastKnownRemoteHead(project.id, hash)
             }
-            setLastKnownRemoteHead(project.id, hash)
           } catch {
             // Network issue or missing remote — skip
           }

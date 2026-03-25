@@ -5,6 +5,13 @@ import { join } from 'path'
 import { WebContents } from 'electron'
 import { IPC } from '../shared/ipc-channels'
 import { GEMINI_TAB_LABEL, isGeminiIdleOscTitle } from '../shared/gemini-tab-title'
+import {
+  DEFAULT_ACTIVITY_DIR,
+  CLAUDE_MARKER_SUFFIX,
+  CODEX_MARKER_SEGMENT,
+  GEMINI_MARKER_SEGMENT,
+  CURSOR_MARKER_SEGMENT,
+} from '../shared/agent-markers'
 
 const TAB_TITLE_LOG = '[constellagent:tab-title]'
 
@@ -82,11 +89,6 @@ function detectAgentFromCommand(command: string): string | null {
   return null
 }
 
-const DEFAULT_ACTIVITY_DIR = '/tmp/constellagent-activity'
-const CLAUDE_MARKER_SUFFIX = '.claude'
-const CODEX_MARKER_SEGMENT = '.codex.'
-const GEMINI_MARKER_SEGMENT = '.gemini.'
-const CURSOR_MARKER_SEGMENT = '.cursor.'
 const CODEX_PROMPT_BUFFER_MAX = 4096
 const CODEX_QUESTION_HEADER_RE = /Question\s+\d+\s*\/\s*\d+\s*\(\s*\d+\s+unanswered\s*\)/i
 const CODEX_QUESTION_HINT_RE = /enter to submit answer/i

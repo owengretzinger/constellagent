@@ -1,14 +1,13 @@
 import { useAppStore } from '../store/app-store'
-import { resolveAgentPtyForContextInjection } from '../store/split-helpers'
+import { resolveAgentPtyForContextInjection, resolvePtyForPlanSourceFilePath } from '../store/split-helpers'
+import { wrapBracketedPaste } from './bracketed-paste'
 
 /** Drag-and-drop MIME for absolute file paths from the file tree */
 export const CONSTELLAGENT_PATH_MIME = 'application/x-constellagent-path'
 
-export function wrapBracketedPaste(body: string): string {
-  return `\x1b[200~${body}\x1b[201~`
-}
+export { wrapBracketedPaste }
 
-export function formatSelectionAsContext(filePath: string, languageId: string, selection: string): string {
+function formatSelectionAsContext(filePath: string, languageId: string, selection: string): string {
   const fence = languageId && languageId !== 'plaintext' ? languageId : ''
   const header = `// ${filePath}`
   if (fence) {
@@ -21,11 +20,18 @@ export function sendAddToChatText(filePath: string, languageId: string, selectio
   const trimmed = selection.trim()
   if (!trimmed) return false
   const s = useAppStore.getState()
-  const pty = resolveAgentPtyForContextInjection({
-    tabs: s.tabs,
-    activeTabId: s.activeTabId,
-    activeWorkspaceId: s.activeWorkspaceId,
-  })
+  const pty =
+    resolvePtyForPlanSourceFilePath(
+      filePath,
+      s.planBuildTerminalByPlanPath,
+      s.tabs,
+      s.activeWorkspaceId,
+    ) ??
+    resolveAgentPtyForContextInjection({
+      tabs: s.tabs,
+      activeTabId: s.activeTabId,
+      activeWorkspaceId: s.activeWorkspaceId,
+    })
   if (!pty) {
     s.addToast({
       id: crypto.randomUUID(),
@@ -38,6 +44,39 @@ export function sendAddToChatText(filePath: string, languageId: string, selectio
   window.api.pty.write(pty, wrapBracketedPaste(payload))
   s.addToast({ id: crypto.randomUUID(), message: 'Added selection to terminal', type: 'info' })
   return true
+}
+
+/**
+ * Gather the active selection (Monaco editor or window) and send it to the agent terminal.
+ * Returns true if a snippet was sent.
+ */
+export function sendActiveSelectionToAgent(): boolean {
+  const store = useAppStore.getState()
+  const ed = store.activeMonacoEditor
+  if (ed) {
+    const sel = ed.getSelection()
+    const text = sel ? ed.getModel()?.getValueInRange(sel) : ''
+    if (text) {
+      const uri = ed.getModel()?.uri.path
+      store.sendContextToAgent([{
+        text,
+        filePath: uri || undefined,
+        startLine: sel!.startLineNumber,
+        endLine: sel!.endLineNumber,
+      }])
+      return true
+    }
+  }
+
+  const text = window.getSelection()?.toString()
+  if (text) {
+    const activeTab = store.tabs.find((t) => t.id === store.activeTabId)
+    const filePath = activeTab && ('filePath' in activeTab) ? (activeTab as { filePath: string }).filePath : undefined
+    store.sendContextToAgent([{ text, filePath }])
+    return true
+  }
+
+  return false
 }
 
 export function sendPathToPty(ptyId: string, absolutePath: string): void {

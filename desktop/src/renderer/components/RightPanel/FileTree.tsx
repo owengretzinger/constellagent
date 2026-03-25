@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useRef, type DragEvent } from 'react'
 import { Tree, NodeRendererProps, NodeApi } from 'react-arborist'
 import { useAppStore } from '../../store/app-store'
+import { useFileWatcher } from '../../hooks/useFileWatcher'
 import { CONSTELLAGENT_PATH_MIME } from '../../utils/add-to-chat'
 import { isMarkdownDocumentPath } from '../../utils/markdown-path'
 import styles from './RightPanel.module.css'
@@ -301,16 +302,7 @@ export function FileTree({ worktreePath, isActive }: Props) {
   }, [fetchTree])
 
   // Auto-refresh on filesystem changes
-  useEffect(() => {
-    window.api.fs.watchDir(worktreePath)
-    const unsub = window.api.fs.onDirChanged((changedDir: string) => {
-      if (changedDir === worktreePath) fetchTree()
-    })
-    return () => {
-      unsub()
-      window.api.fs.unwatchDir(worktreePath)
-    }
-  }, [worktreePath, fetchTree])
+  useFileWatcher(worktreePath, fetchTree)
 
   useEffect(() => {
     const onGitFilesChanged = (e: Event) => {

@@ -1,5 +1,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useAppStore } from '../../store/app-store'
+import { STATUS_LABELS } from '../../../shared/status-labels'
+import { useFileWatcher } from '../../hooks/useFileWatcher'
 import { Tooltip } from '../Tooltip/Tooltip'
 import styles from './RightPanel.module.css'
 
@@ -13,14 +15,6 @@ interface Props {
   worktreePath: string
   workspaceId: string
   isActive?: boolean
-}
-
-const STATUS_LABELS: Record<string, string> = {
-  modified: 'M',
-  added: 'A',
-  deleted: 'D',
-  renamed: 'R',
-  untracked: 'U',
 }
 
 export function ChangedFiles({ worktreePath, workspaceId, isActive }: Props) {
@@ -50,20 +44,7 @@ export function ChangedFiles({ worktreePath, workspaceId, isActive }: Props) {
   }, [worktreePath])
 
   // Watch filesystem for changes and auto-refresh
-  useEffect(() => {
-    window.api.fs.watchDir(worktreePath)
-
-    const cleanup = window.api.fs.onDirChanged((changedPath) => {
-      if (changedPath === worktreePath) {
-        refresh()
-      }
-    })
-
-    return () => {
-      cleanup()
-      window.api.fs.unwatchDir(worktreePath)
-    }
-  }, [worktreePath, refresh])
+  useFileWatcher(worktreePath, refresh)
 
   // Explicit refresh after checkpoint restore / git ops that bypass FS watcher timing
   useEffect(() => {

@@ -25,7 +25,7 @@ export interface FileNode {
 }
 
 // Directories to always skip
-const SKIP_DIRS = new Set([
+export const SKIP_DIRS = new Set([
   'node_modules', '.git', '.DS_Store', 'dist', 'build',
   '.next', '.cache', '__pycache__', '.venv', 'venv',
   'coverage', '.nyc_output',

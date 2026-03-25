@@ -2,6 +2,8 @@ import { useEffect, useState, useCallback, useRef, memo, useMemo } from 'react'
 import { PatchDiff, type DiffLineAnnotation } from '@pierre/diffs/react'
 import type { DiffAnnotation, DiffAnnotationSide } from '@shared/diff-annotation-types'
 import { useAppStore } from '../../store/app-store'
+import { STATUS_LABELS } from '../../../shared/status-labels'
+import { useFileWatcher } from '../../hooks/useFileWatcher'
 import { isMarkdownDocumentPath } from '../../utils/markdown-path'
 import { ErrorBoundary } from '../ErrorBoundary/ErrorBoundary'
 import { AnnotationBubble, AnnotationComposer } from './AnnotationBubble'
@@ -27,14 +29,6 @@ interface Props {
   commitMessage?: string
 }
 
-const STATUS_LABELS: Record<string, string> = {
-  modified: 'M',
-  added: 'A',
-  deleted: 'D',
-  renamed: 'R',
-  untracked: 'U',
-}
-
 /** Pierre LineSelectionManager payload (not re-exported from `@pierre/diffs/react`). */
 interface PierreSelectedRange {
   start: number
@@ -55,6 +49,62 @@ function normalizeDiffSelection(range: PierreSelectedRange): {
   const lo = Math.min(range.start, range.end)
   const hi = Math.max(range.start, range.end)
   return { side, lineNumber: lo, lineEnd: hi }
+}
+
+/** Unescape minimal C-style sequences Git uses in quoted diff paths. */
+function unquoteGitPath(s: string): string {
+  return s.replace(/\\([\\"])/g, '$1')
+}
+
+/**
+ * Prefer `+++ b/…` / `--- a/…` (unified diff); fall back to first `diff --git` line; then `unknown`.
+ */
+function extractFilePathFromGitPatchSegment(part: string): string {
+  const lines = part.split('\n')
+  for (const line of lines) {
+    if (line.startsWith('+++ /dev/null')) continue
+    const quotedPlus = line.match(/^\+\+\+ "b\/((?:[^"\\]|\\.)*)"(?:\t.*)?$/)
+    if (quotedPlus) return unquoteGitPath(quotedPlus[1])
+    const plainPlus = line.match(/^\+\+\+ b\/(.+?)(?:\t|$)/)
+    if (plainPlus) return plainPlus[1]
+  }
+  for (const line of lines) {
+    if (!line.startsWith('--- a/') && !line.startsWith('--- "a/')) continue
+    const quotedMinus = line.match(/^--- "a\/((?:[^"\\]|\\.)*)"(?:\t.*)?$/)
+    if (quotedMinus) return unquoteGitPath(quotedMinus[1])
+    const plainMinus = line.match(/^--- a\/(.+?)(?:\t|$)/)
+    if (plainMinus) return plainMinus[1]
+  }
+  const firstLine = lines[0] || ''
+  const diffCc = firstLine.match(/^diff --cc (.+)$/)
+  if (diffCc) return diffCc[1].trim()
+  const quotedGit = firstLine.match(/"b\/((?:[^"\\]|\\.)*)"\s*$/)
+  if (quotedGit) return unquoteGitPath(quotedGit[1])
+  const plainGit = firstLine.match(/\bb\/(.+)$/)
+  if (plainGit) return plainGit[1]
+  return 'unknown'
+}
+
+/** Split `git show` output into one blob per file (`diff --git` or merge `diff --cc`). */
+function splitGitShowPatchIntoFiles(patchOutput: string): string[] {
+  const trimmed = patchOutput.trimEnd()
+  if (!trimmed) return []
+  const headerRe = /^diff --(?:git|cc) /gm
+  const matches = [...trimmed.matchAll(headerRe)]
+  if (matches.length === 0) return [trimmed]
+  return matches.map((m, i) => {
+    const start = m.index!
+    const end = i + 1 < matches.length ? (matches[i + 1]!.index as number) : trimmed.length
+    return trimmed.slice(start, end).trimEnd()
+  })
+}
+
+/**
+ * Merge commits use combined diffs (`diff --cc`, `@@@` hunks). @pierre/diffs only supports
+ * unified `diff --git` / `@@` patches — see its GIT_DIFF_FILE_BREAK_REGEX / FILE_CONTEXT_BLOB.
+ */
+function isCombinedMergePatch(patch: string): boolean {
+  return /^diff --cc /m.test(patch) || /^@@@ /m.test(patch)
 }
 
 // ── Per-file diff section ──
@@ -219,6 +269,7 @@ const DiffFileSection = memo(function DiffFileSection({
   )
 
   const hasAnnotationUi = displayLineAnnotations.length > 0
+  const combinedMergePatch = isCombinedMergePatch(data.patch)
 
   return (
     <div className={styles.diffFileSection} id={`diff-${data.filePath}`}>
@@ -235,26 +286,37 @@ const DiffFileSection = memo(function DiffFileSection({
         </span>
       </div>
       {data.patch ? (
-        <ErrorBoundary
-          fallback={
-            <div style={{ padding: 12, color: '#888', fontSize: 13 }}>
-              Failed to render diff for this file.
-            </div>
-          }
-        >
-          <PatchDiff<DiffAnnotation[]>
-            patch={data.patch}
-            options={patchOptions}
-            selectedLines={selectedLines}
-            lineAnnotations={hasAnnotationUi ? displayLineAnnotations : undefined}
-            renderAnnotation={hasAnnotationUi ? renderAnnotation : undefined}
-          />
-          {showPatchAnchorNote && fileAnnotations.length > 0 && (
-            <p className={annotationUi.commitNote}>
-              Comments reflect this patch; line anchors may not match other revisions.
+        combinedMergePatch ? (
+          <>
+            <p className={styles.combinedDiffNote}>
+              Merge commit: combined diff (<code className={styles.combinedDiffCode}>diff --cc</code> /{' '}
+              <code className={styles.combinedDiffCode}>@@@</code>) — showing raw patch. The rich diff
+              viewer only supports unified <code className={styles.combinedDiffCode}>diff --git</code> format.
             </p>
-          )}
-        </ErrorBoundary>
+            <pre className={styles.rawMergePatch}>{data.patch}</pre>
+          </>
+        ) : (
+          <ErrorBoundary
+            fallback={
+              <div style={{ padding: 12, color: '#888', fontSize: 13 }}>
+                Failed to render diff for this file.
+              </div>
+            }
+          >
+            <PatchDiff<DiffAnnotation[]>
+              patch={data.patch}
+              options={patchOptions}
+              selectedLines={selectedLines}
+              lineAnnotations={hasAnnotationUi ? displayLineAnnotations : undefined}
+              renderAnnotation={hasAnnotationUi ? renderAnnotation : undefined}
+            />
+            {showPatchAnchorNote && fileAnnotations.length > 0 && (
+              <p className={annotationUi.commitNote}>
+                Comments reflect this patch; line anchors may not match other revisions.
+              </p>
+            )}
+          </ErrorBoundary>
+        )
       ) : (
         <div style={{ padding: 12, color: '#888', fontSize: 13 }}>No diff available</div>
       )}
@@ -343,18 +405,12 @@ export function DiffViewer({ worktreePath, active, commitHash, commitMessage }: 
         setFiles([])
         return
       }
-      // Split by file boundaries
-      const parts = patchOutput.split(/^diff --git /m).filter(Boolean)
-      const results: DiffFileData[] = parts.map((part) => {
-        const firstLine = part.split('\n')[0]
-        const match = firstLine.match(/b\/(.+)$/)
-        const filePath = match ? match[1] : 'unknown'
-        return {
-          filePath,
-          patch: 'diff --git ' + part,
-          status: 'modified', // commit diffs don't distinguish status easily
-        }
-      })
+      const parts = splitGitShowPatchIntoFiles(patchOutput)
+      const results: DiffFileData[] = parts.map((part) => ({
+        filePath: extractFilePathFromGitPatchSegment(part),
+        patch: part,
+        status: 'modified', // commit diffs don't distinguish status easily
+      }))
       setFiles(results)
     } catch (err) {
       console.error('Failed to load commit diff:', err)
@@ -377,7 +433,12 @@ export function DiffViewer({ worktreePath, active, commitHash, commitMessage }: 
             const fullPath = file.path.startsWith('/')
               ? file.path
               : `${worktreePath}/${file.path}`
-            const content = await window.api.fs.readFile(fullPath)
+            let content: string | null = null
+            try {
+              content = await window.api.fs.readFile(fullPath)
+            } catch {
+              content = null
+            }
             if (content === null) return { filePath: file.path, patch: '', status: file.status }
             const lines = content.split('\n')
             patch = [
@@ -414,17 +475,7 @@ export function DiffViewer({ worktreePath, active, commitHash, commitMessage }: 
   }, [commitHash, loadCommitDiff, loadFiles])
 
   // Auto-refresh on filesystem changes (only for working-tree diffs)
-  useEffect(() => {
-    if (commitHash) return // commit diffs are immutable
-    window.api.fs.watchDir(worktreePath)
-    const unsub = window.api.fs.onDirChanged((changedDir: string) => {
-      if (changedDir === worktreePath) loadFiles()
-    })
-    return () => {
-      unsub()
-      window.api.fs.unwatchDir(worktreePath)
-    }
-  }, [worktreePath, loadFiles, commitHash])
+  useFileWatcher(worktreePath, loadFiles, !commitHash)
 
   // Listen for scroll-to-file events from ChangedFiles panel
   useEffect(() => {
