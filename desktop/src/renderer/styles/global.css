@@ -192,5 +192,17 @@ body {
 .sash-container .sash:hover,
 .sash-container .sash.active {
   background: var(--accent-blue) !important;
-  transition-delay: 100ms !important;
+}
+
+/* ═══════════════════════════════════════════════════════
+   REDUCED MOTION — global accessibility reset
+   ═══════════════════════════════════════════════════════ */
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

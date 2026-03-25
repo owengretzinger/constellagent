@@ -56,6 +56,7 @@ export function WorkspaceDialog({
   const [basePickerOpen, setBasePickerOpen] = useState(false)
   const pickerRef = useRef<HTMLDivElement>(null)
   const basePickerRef = useRef<HTMLDivElement>(null)
+  const [exiting, setExiting] = useState(false)
 
   useEffect(() => {
     const loadBranches = async () => {
@@ -146,8 +147,8 @@ export function WorkspaceDialog({
   }, [pickerOpen, basePickerOpen])
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
-    if (isCreating) return
-    if (e.key === 'Escape') { onCancel(); return }
+    if (isCreating || exiting) return
+    if (e.key === 'Escape') { animateExit(); return }
 
     if (e.key === 'Enter') {
       // If the focused input has a PR reference, resolve it instead of submitting
@@ -172,9 +173,15 @@ export function WorkspaceDialog({
     }
   }, [handleSubmit, onCancel, isCreating, isNewBranch, resolvePr])
 
+  const animateExit = useCallback(() => {
+    if (exiting || isCreating) return
+    setExiting(true)
+    setTimeout(() => onCancel(), 150)
+  }, [exiting, isCreating, onCancel])
+
   return (
-    <div className={styles.overlay} onClick={() => { if (!isCreating) onCancel() }}>
-      <div className={styles.dialog} onClick={(e) => e.stopPropagation()} onKeyDown={handleKeyDown}>
+    <div className={`${styles.overlay} ${exiting ? styles.overlayExiting : ''}`} onClick={animateExit}>
+      <div className={`${styles.dialog} ${exiting ? styles.dialogExiting : ''}`} onClick={(e) => e.stopPropagation()} onKeyDown={handleKeyDown}>
         <div className={styles.title}>New Workspace</div>
 
         <label className={styles.label}>Name</label>
@@ -298,7 +305,7 @@ export function WorkspaceDialog({
         )}
 
         <div className={styles.actions}>
-          <button className={styles.cancelBtn} onClick={onCancel} disabled={isCreating}>Cancel</button>
+          <button className={styles.cancelBtn} onClick={animateExit} disabled={isCreating || exiting}>Cancel</button>
           <button className={styles.createBtn} onClick={handleSubmit} disabled={!name.trim() || isCreating || prResolving}>
             {isCreating ? 'Creating...' : 'Create'}
           </button>

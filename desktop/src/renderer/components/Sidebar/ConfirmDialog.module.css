@@ -6,7 +6,7 @@
   align-items: center;
   justify-content: center;
   z-index: 100;
-  animation: overlayFadeIn 200ms cubic-bezier(0.23, 1, 0.32, 1) both;
+  animation: overlayFadeIn 200ms var(--ease-out) both;
 }
 
 .dialog {
@@ -20,7 +20,7 @@
   gap: var(--space-4);
   box-shadow: var(--shadow-lg);
   transform-origin: center;
-  animation: dialogEnter 200ms cubic-bezier(0.23, 1, 0.32, 1) both;
+  animation: dialogEnter 200ms var(--ease-out) both;
 }
 
 .title {
@@ -164,4 +164,23 @@
     opacity: 1;
     transform: scale(1);
   }
+}
+
+/* Exit animations */
+.overlayExiting {
+  animation: overlayFadeOut 150ms var(--ease-out) both;
+}
+
+.dialogExiting {
+  animation: dialogExit 150ms var(--ease-out) both;
+}
+
+@keyframes overlayFadeOut {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+@keyframes dialogExit {
+  from { opacity: 1; transform: scale(1); }
+  to { opacity: 0; transform: scale(0.95); }
 }

@@ -6,6 +6,7 @@
   justify-content: center;
   padding-top: 15vh;
   z-index: 100;
+  animation: overlayFadeIn 150ms var(--ease-out) both;
 }
 
 .panel {
@@ -19,6 +20,18 @@
   box-shadow: var(--shadow-lg);
   overflow: hidden;
   align-self: flex-start;
+  transform-origin: top center;
+  animation: paletteEnter 150ms var(--ease-out) both;
+}
+
+@keyframes overlayFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes paletteEnter {
+  from { opacity: 0; transform: translateY(-8px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
 }
 
 .inputWrap {

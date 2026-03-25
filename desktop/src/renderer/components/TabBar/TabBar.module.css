@@ -145,7 +145,7 @@
   font-size: 10px;
   cursor: pointer;
   opacity: 0;
-  transition: all var(--transition-fast);
+  transition: opacity var(--motion-fast), background-color var(--motion-fast), color var(--motion-fast);
   flex-shrink: 0;
 }
 

@@ -51,7 +51,7 @@
   font-size: var(--text-xs);
   font-family: var(--font-ui);
   cursor: pointer;
-  transition: all var(--transition-fast);
+  transition: background-color var(--motion-fast), color var(--motion-fast), border-color var(--motion-fast), transform 100ms var(--ease-out);
   flex-shrink: 0;
 }
 
@@ -59,6 +59,10 @@
   background: var(--surface-3);
   color: var(--text-primary);
   border-color: var(--border-strong);
+}
+
+.editButton:active:not(:disabled) {
+  transform: scale(0.97);
 }
 
 /* ── Coding agent selector ── */
@@ -127,13 +131,17 @@
   font-family: var(--font-ui);
   font-weight: 500;
   cursor: pointer;
-  transition: all var(--transition-fast);
+  transition: background-color var(--motion-fast), color var(--motion-fast), transform 100ms var(--ease-out);
   white-space: nowrap;
 }
 
 .buildButton:hover {
   background: var(--accent-blue, #388bfd);
   color: #fff;
+}
+
+.buildButton:active:not(:disabled) {
+  transform: scale(0.97);
 }
 
 .builtBadge {
@@ -145,7 +153,7 @@
   border: 1px solid var(--border-default);
   background: transparent;
   color: var(--text-tertiary);
-  transition: all var(--transition-fast);
+  transition: opacity var(--motion-fast);
   white-space: nowrap;
 }
 
@@ -174,7 +182,7 @@
   border: 2px solid var(--border-default);
   border-top-color: var(--accent-blue, #388bfd);
   border-radius: 50%;
-  animation: buildSpin 0.7s linear infinite;
+  animation: buildSpin var(--duration-spinner) linear infinite;
 }
 
 @keyframes buildSpin {
@@ -195,7 +203,7 @@
   color: var(--text-secondary);
   font-size: 12px;
   cursor: pointer;
-  transition: all var(--transition-fast);
+  transition: background-color var(--motion-fast), color var(--motion-fast), border-color var(--motion-fast);
   line-height: 1;
 }
 

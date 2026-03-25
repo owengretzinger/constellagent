@@ -92,7 +92,7 @@
   font-size: var(--text-xs);
   font-family: var(--font-ui);
   cursor: pointer;
-  transition: all var(--transition-fast);
+  transition: color var(--motion-fast), background-color var(--motion-fast);
 }
 
 .diffToggleOption:hover {
@@ -155,7 +155,7 @@
   font-family: var(--font-mono);
   cursor: pointer;
   white-space: nowrap;
-  transition: all var(--transition-fast);
+  transition: color var(--motion-fast), background-color var(--motion-fast);
 }
 
 .fileStripItem:hover {

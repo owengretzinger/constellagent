@@ -6,6 +6,7 @@
   align-items: center;
   justify-content: center;
   z-index: 100;
+  animation: overlayFadeIn 200ms var(--ease-out) both;
 }
 
 .dialog {
@@ -18,6 +19,18 @@
   flex-direction: column;
   gap: var(--space-4);
   box-shadow: var(--shadow-lg);
+  transform-origin: center;
+  animation: dialogEnter 200ms var(--ease-out) both;
+}
+
+@keyframes overlayFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes dialogEnter {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
 }
 
 .title {
@@ -308,7 +321,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all var(--transition-fast);
+  transition: background-color var(--motion-fast), color var(--motion-fast);
 }
 
 .removeBtn:hover {
@@ -328,7 +341,7 @@
   font-size: var(--text-sm);
   font-family: var(--font-ui);
   cursor: pointer;
-  transition: all var(--transition-fast);
+  transition: border-color var(--motion-fast), color var(--motion-fast);
 }
 
 .addBtn:hover {
@@ -352,12 +365,16 @@
   font-size: var(--text-sm);
   font-family: var(--font-ui);
   cursor: pointer;
-  transition: all var(--transition-fast);
+  transition: background-color var(--motion-fast), color var(--motion-fast), transform 100ms var(--ease-out);
 }
 
 .cancelBtn:hover {
   background: var(--surface-3);
   color: var(--text-primary);
+}
+
+.cancelBtn:active:not(:disabled) {
+  transform: scale(0.97);
 }
 
 .saveBtn {
@@ -370,9 +387,32 @@
   font-family: var(--font-ui);
   font-weight: var(--weight-medium);
   cursor: pointer;
-  transition: all var(--transition-fast);
+  transition: filter var(--motion-fast), transform 100ms var(--ease-out);
 }
 
 .saveBtn:hover {
   filter: brightness(1.1);
+}
+
+.saveBtn:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+/* Exit animations */
+.overlayExiting {
+  animation: overlayFadeOut 150ms var(--ease-out) both;
+}
+
+.dialogExiting {
+  animation: dialogExit 150ms var(--ease-out) both;
+}
+
+@keyframes overlayFadeOut {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+@keyframes dialogExit {
+  from { opacity: 1; transform: scale(1); }
+  to { opacity: 0; transform: scale(0.95); }
 }
