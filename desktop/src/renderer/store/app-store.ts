@@ -657,6 +657,45 @@ export const useAppStore = create<AppState>((set, get) => ({
       return
     }
 
+    // Markdown preview tab — convert to a split container with file editor + terminal panes
+    if (tab.type === 'markdownPreview') {
+      const backingPtyId = await window.api.pty.create(ws.worktreePath, shell, { AGENT_ORCH_WS_ID: ws.id })
+      const newPtyId = await window.api.pty.create(ws.worktreePath, shell, { AGENT_ORCH_WS_ID: ws.id })
+
+      const originalLeafId = crypto.randomUUID()
+      const newLeafId = crypto.randomUUID()
+
+      const splitRoot: SplitNode = {
+        type: 'split' as const,
+        id: crypto.randomUUID(),
+        direction,
+        children: [
+          { type: 'leaf' as const, id: originalLeafId, contentType: 'file' as const, filePath: tab.filePath },
+          { type: 'leaf' as const, id: newLeafId, contentType: 'terminal' as const, ptyId: newPtyId },
+        ] as [SplitNode, SplitNode],
+      }
+
+      const fileName = tab.filePath.split('/').pop() || 'Split'
+      const id = tab.id
+      set((state) => ({
+        tabs: state.tabs.map((t) =>
+          t.id === id
+            ? {
+                id,
+                workspaceId: t.workspaceId,
+                type: 'terminal' as const,
+                title: fileName,
+                ptyId: backingPtyId,
+                splitRoot,
+                focusedPaneId: newLeafId,
+              }
+            : t
+        ),
+        activeTabId: id,
+      }))
+      return
+    }
+
     if (tab.type !== 'terminal') return
 
     const newPtyId = await window.api.pty.create(ws.worktreePath, shell, { AGENT_ORCH_WS_ID: ws.id })

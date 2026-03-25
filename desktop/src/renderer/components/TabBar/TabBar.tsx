@@ -277,7 +277,7 @@ export function TabBar() {
               key={tab.id}
               className={`${styles.tab} ${tab.id === activeTabId ? styles.active : ''} ${isDeleted ? styles.deleted : ''} ${draggingTabId === tab.id ? styles.tabDragging : ''} ${dragOverTabId === tab.id && draggingTabIdRef.current !== tab.id ? styles.tabDragOver : ''}`}
               onClick={(e) => {
-                if (tab.type === 'terminal' && (e.metaKey || e.ctrlKey)) {
+                if ((e.metaKey || e.ctrlKey) && (tab.type === 'terminal' || tab.type === 'file' || tab.type === 'markdownPreview')) {
                   e.preventDefault()
                   e.stopPropagation()
                   void splitTerminalPaneForTab(tab.id, 'horizontal')
