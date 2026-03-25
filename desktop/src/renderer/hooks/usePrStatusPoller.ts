@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import type { PrLookupResult } from '@shared/github-types'
 import { useAppStore } from '../store/app-store'
 
 const FAST_POLL_INTERVAL = 7_000
@@ -67,13 +68,17 @@ export function usePrStatusPoller(): void {
       const fetches = Array.from(projectBranches.entries()).map(
         async ([projectId, { repoPath, branches }]) => {
           try {
-            const result = await window.api.github.getPrStatuses(repoPath, branches)
+            const result = (await window.api.github.getPrStatuses(
+              repoPath,
+              branches,
+            )) as PrLookupResult
             setGhAvailability(projectId, result.available)
             if (result.available) {
               setPrStatuses(projectId, result.data)
-              return Object.values(result.data).some(
-                (pr) => pr !== null && pr.state === 'open' && pr.checkStatus === 'pending'
-              )
+              return Object.values(result.data).some((pr) => {
+                if (pr == null) return false
+                return pr.state === 'open' && pr.checkStatus === 'pending'
+              })
             }
             return false
           } catch {

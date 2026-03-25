@@ -648,12 +648,16 @@ export class GithubService {
         }
       `
 
-      const payload = await this.fetchGraphqlJson<GraphqlReviewThreadsResponse>(query, {
-        owner: repoInfo.owner,
-        name: repoInfo.name,
-        number,
-        cursor,
-      }, token)
+      const payload: GraphqlReviewThreadsResponse = await this.fetchGraphqlJson<GraphqlReviewThreadsResponse>(
+        query,
+        {
+          owner: repoInfo.owner,
+          name: repoInfo.name,
+          number,
+          cursor,
+        },
+        token,
+      )
 
       const threads = payload.data?.repository?.pullRequest?.reviewThreads
       if (!threads) return 0

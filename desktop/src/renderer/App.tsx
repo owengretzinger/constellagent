@@ -20,7 +20,6 @@ import { AddToChatButton } from './components/AddToChatButton/AddToChatButton'
 import { useShortcuts } from './hooks/useShortcuts'
 import { usePrStatusPoller } from './hooks/usePrStatusPoller'
 import { useWorktreeSyncPoller } from './hooks/useWorktreeSyncPoller'
-import { useSyncProgressListener } from './hooks/useSyncProgressListener'
 import { ErrorBoundary } from './components/ErrorBoundary/ErrorBoundary'
 import styles from './App.module.css'
 
@@ -28,7 +27,6 @@ export function App() {
   useShortcuts()
   usePrStatusPoller()
   useWorktreeSyncPoller()
-  useSyncProgressListener()
 
   // Listen for workspace notification signals from Claude Code hooks
   useEffect(() => {

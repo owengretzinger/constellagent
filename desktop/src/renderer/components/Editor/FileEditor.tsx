@@ -29,7 +29,7 @@ loader.init().then((monaco) => {
   monaco.languages.typescript.typescriptDefaults.setDiagnosticsOptions(diagnosticsOptions)
   monaco.languages.typescript.javascriptDefaults.setDiagnosticsOptions(diagnosticsOptions)
 
-  const compilerOptions: import('monaco-editor').languages.typescript.CompilerOptions = {
+  const compilerOptions = {
     target: monaco.languages.typescript.ScriptTarget.ESNext,
     module: monaco.languages.typescript.ModuleKind.ESNext,
     moduleResolution: monaco.languages.typescript.ModuleResolutionKind.NodeJs,

@@ -24,15 +24,12 @@ export function useWorktreeSyncPoller(): void {
           if (projectWs.length === 0) continue
 
           try {
-            const defaultBranch = await window.api.git.getDefaultBranch(project.repoPath)
-            const shortBranch = defaultBranch.replace(/^origin\//, '')
-            const hash = await window.api.git.checkRemoteHead(project.repoPath, shortBranch)
+            const hash = await window.api.git.getRemoteHead(project.repoPath)
             if (!hash) continue
 
             const prev = lastKnownRemoteHead[project.id]
             if (prev && prev !== hash) {
-              // Remote head changed — sync all worktrees
-              await window.api.git.syncAllWorktrees(project.repoPath)
+              await window.api.git.syncAllWorktrees(project.id)
             }
             setLastKnownRemoteHead(project.id, hash)
           } catch {

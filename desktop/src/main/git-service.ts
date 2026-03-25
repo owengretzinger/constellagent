@@ -36,12 +36,6 @@ export interface PrWorktreeResult {
   branch: string
 }
 
-/** Result of auto-sync (stash / rebase / stash pop) for one worktree */
-export interface SyncResult {
-  status: 'ok' | 'conflict' | 'error'
-  message?: string
-}
-
 async function git(args: string[], cwd: string): Promise<string> {
   const { stdout } = await execFileAsync('git', args, {
     cwd,
@@ -763,48 +757,5 @@ export class GitService {
     const hasOrigin = await this.hasRemote(repoPath, 'origin')
     if (!hasOrigin) return
     await git(['fetch', '--prune', 'origin'], repoPath).catch(() => {})
-  }
-
-  /**
-   * Rebase current branch onto remote default tip: stash (if dirty), rebase, stash pop.
-   * `defaultBranch` is from {@link getDefaultBranch} (e.g. `origin/main` or `main`).
-   */
-  static async syncWorktree(worktreePath: string, defaultBranch: string): Promise<SyncResult> {
-    const onto = defaultBranch.includes('/') ? defaultBranch : `origin/${defaultBranch}`
-    let stashed = false
-    try {
-      const porcelain = await git(['status', '--porcelain'], worktreePath)
-      if (porcelain.trim().length > 0) {
-        await git(['stash', 'push', '-u', '-m', 'constellagent-auto-sync'], worktreePath)
-        stashed = true
-      }
-    } catch (err) {
-      return { status: 'error', message: friendlyGitError(err, 'Failed to stash changes') }
-    }
-
-    try {
-      await git(['rebase', onto], worktreePath)
-    } catch (err) {
-      await git(['rebase', '--abort'], worktreePath).catch(() => {})
-      if (stashed) {
-        await git(['stash', 'pop'], worktreePath).catch(() => {})
-      }
-      const msg = friendlyGitError(err, 'Rebase failed')
-      const lower = msg.toLowerCase()
-      if (lower.includes('conflict') || lower.includes('could not apply')) {
-        return { status: 'conflict', message: msg }
-      }
-      return { status: 'error', message: msg }
-    }
-
-    if (stashed) {
-      try {
-        await git(['stash', 'pop'], worktreePath)
-      } catch (err) {
-        return { status: 'conflict', message: friendlyGitError(err, 'stash pop failed') }
-      }
-    }
-
-    return { status: 'ok' }
   }
 }

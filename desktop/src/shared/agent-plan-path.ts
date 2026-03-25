@@ -113,6 +113,8 @@ export interface AgentPlanEntry {
   agent: string
   built?: boolean
   codingAgent?: string | null
+  /** Where this row was discovered (palette filter). */
+  source?: 'worktree' | 'home'
   /** Absolute path: worktree root this plan was indexed under, or user home for dot-agent plan dirs. */
   planSourceRoot?: string
 }

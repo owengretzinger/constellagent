@@ -20,6 +20,8 @@ export const IPC = {
   GIT_SHOW_FILE_AT_HEAD: 'git:show-file-at-head',
   GIT_GET_LOG: 'git:get-log',
   GIT_GET_COMMIT_DIFF: 'git:get-commit-diff',
+  /** Resolve `origin` default branch tip (`ls-remote origin HEAD`). */
+  GIT_GET_REMOTE_HEAD: 'git:get-remote-head',
   GIT_SYNC_ALL_WORKTREES: 'git:sync-all-worktrees',
   /** Main → renderer: per-worktree sync status */
   GIT_WORKTREE_SYNC_STATUS: 'git:worktree-sync-status',
@@ -145,23 +147,16 @@ export const IPC = {
   // App file picker
   APP_SELECT_FILE: 'app:select-file',
 
-  // Annotations (human review comments on diffs)
-  ANNOTATION_LOAD: 'annotation:load',
-  ANNOTATION_ADD: 'annotation:add',
-  ANNOTATION_RESOLVE: 'annotation:resolve',
-  ANNOTATION_DELETE: 'annotation:delete',
-  ANNOTATION_CHANGED: 'annotation:changed',
-
-  // State persistence
-  STATE_SAVE: 'state:save',
-  STATE_SAVE_SYNC: 'state:save-sync',
-  STATE_LOAD: 'state:load',
-
-  /** Diff review annotations (`{worktree}/.constellagent/annotations.json`) */
+  // Annotations — human review on diffs (`{worktree}/.constellagent/annotations.json`)
   ANNOTATION_LOAD: 'annotation:load',
   ANNOTATION_ADD: 'annotation:add',
   ANNOTATION_RESOLVE: 'annotation:resolve',
   ANNOTATION_DELETE: 'annotation:delete',
   /** Main → renderer: annotations file changed for a worktree */
   ANNOTATION_CHANGED: 'annotation:changed',
+
+  // State persistence
+  STATE_SAVE: 'state:save',
+  STATE_SAVE_SYNC: 'state:save-sync',
+  STATE_LOAD: 'state:load',
 } as const

@@ -1,5 +1,6 @@
+import { realpathSync } from 'fs'
 import { BrowserWindow } from 'electron'
-import { realpathSync, resolve } from 'path'
+import { resolve } from 'path'
 import { IPC } from '../shared/ipc-channels'
 import type { WorktreeSyncEvent, WorkspaceSyncInfo } from '../shared/worktree-sync-types'
 import { GitService } from './git-service'
@@ -65,15 +66,20 @@ export class WorktreeSyncService {
     this.mergeBroadcast(projectId, { [key]: this.workspaceInfo(worktreePath, 'syncing') })
 
     const result = await GitService.syncWorktree(worktreePath, defaultBranch)
-    if (result.status === 'ok') {
-      this.mergeBroadcast(projectId, { [key]: this.workspaceInfo(worktreePath, 'synced') })
-    } else if (result.status === 'conflict') {
-      this.mergeBroadcast(projectId, {
-        [key]: this.workspaceInfo(worktreePath, 'conflict', result.message),
-      })
+    if (result.success) {
+      if (result.stashPopConflict) {
+        this.mergeBroadcast(projectId, {
+          [key]: this.workspaceInfo(worktreePath, 'conflict', 'Stash pop had conflicts'),
+        })
+      } else {
+        this.mergeBroadcast(projectId, { [key]: this.workspaceInfo(worktreePath, 'synced') })
+      }
     } else {
+      const err = result.error ?? 'Sync failed'
+      const lower = err.toLowerCase()
+      const conflictish = lower.includes('conflict') || lower.includes('could not apply')
       this.mergeBroadcast(projectId, {
-        [key]: this.workspaceInfo(worktreePath, 'error', result.message),
+        [key]: this.workspaceInfo(worktreePath, conflictish ? 'conflict' : 'error', err),
       })
     }
   }
