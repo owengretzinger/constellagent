@@ -45,7 +45,7 @@
   color: var(--text-tertiary);
   font-size: 20px;
   cursor: pointer;
-  transition: all var(--transition-fast);
+  transition: background-color var(--motion-fast), color var(--motion-fast);
   padding: 0;
   line-height: 1;
 }
@@ -70,7 +70,7 @@
   font-size: var(--text-xs);
   font-family: var(--font-ui);
   cursor: pointer;
-  transition: all var(--transition-fast);
+  transition: border-color var(--motion-fast), color var(--motion-fast);
 }
 
 .newBtn:hover {
@@ -109,7 +109,7 @@
   font-size: var(--text-sm);
   font-family: var(--font-ui);
   cursor: pointer;
-  transition: all var(--transition-fast);
+  transition: border-color var(--motion-fast), color var(--motion-fast);
 }
 
 .emptyBtn:hover {
@@ -196,12 +196,16 @@
   font-size: var(--text-xs);
   font-family: var(--font-ui);
   cursor: pointer;
-  transition: all var(--transition-fast);
+  transition: border-color var(--motion-fast), color var(--motion-fast), transform 100ms var(--ease-out);
 }
 
 .runBtn:hover {
   border-color: var(--accent-blue);
   color: var(--accent-blue);
+}
+
+.runBtn:active:not(:disabled) {
+  transform: scale(0.97);
 }
 
 .deleteBtn {
@@ -216,12 +220,16 @@
   color: var(--text-tertiary);
   font-size: 11px;
   cursor: pointer;
-  transition: all var(--transition-fast);
+  transition: background-color var(--motion-fast), color var(--motion-fast), transform 100ms var(--ease-out);
 }
 
 .deleteBtn:hover {
   background: rgba(255, 80, 80, 0.1);
   color: var(--accent-red);
+}
+
+.deleteBtn:active:not(:disabled) {
+  transform: scale(0.97);
 }
 
 /* Toggle switch */
@@ -357,7 +365,7 @@
   font-size: var(--text-xs);
   font-family: var(--font-ui);
   cursor: pointer;
-  transition: all var(--transition-fast);
+  transition: border-color var(--motion-fast), color var(--motion-fast), background-color var(--motion-fast);
 }
 
 .presetBtn:hover {
@@ -386,12 +394,16 @@
   font-size: var(--text-sm);
   font-family: var(--font-ui);
   cursor: pointer;
-  transition: all var(--transition-fast);
+  transition: background-color var(--motion-fast), color var(--motion-fast), transform 100ms var(--ease-out);
 }
 
 .cancelBtn:hover {
   background: var(--surface-3);
   color: var(--text-primary);
+}
+
+.cancelBtn:active:not(:disabled) {
+  transform: scale(0.97);
 }
 
 .submitBtn {
@@ -404,11 +416,15 @@
   font-family: var(--font-ui);
   font-weight: var(--weight-medium);
   cursor: pointer;
-  transition: all var(--transition-fast);
+  transition: filter var(--motion-fast), transform 100ms var(--ease-out);
 }
 
 .submitBtn:hover {
   filter: brightness(1.1);
+}
+
+.submitBtn:active:not(:disabled) {
+  transform: scale(0.97);
 }
 
 .submitBtn:disabled {

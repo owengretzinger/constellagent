@@ -19,7 +19,7 @@
   max-width: 400px;
   box-shadow: var(--shadow-lg);
   cursor: pointer;
-  animation: slideIn 0.2s ease-out;
+  animation: slideIn 0.2s var(--ease-out);
   border-left: 3px solid var(--border-strong);
 }
 
@@ -46,5 +46,20 @@
   to {
     opacity: 1;
     transform: translateX(0);
+  }
+}
+
+.exiting {
+  animation: slideOut 150ms var(--ease-out) both;
+}
+
+@keyframes slideOut {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(20px);
   }
 }

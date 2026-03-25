@@ -39,7 +39,7 @@
   font-family: var(--font-ui);
   font-weight: var(--weight-medium);
   cursor: pointer;
-  transition: all var(--transition-fast);
+  transition: background-color var(--motion-fast), color var(--motion-fast), box-shadow var(--motion-fast);
   text-align: center;
 }
 
@@ -186,7 +186,11 @@
   font-family: var(--font-ui);
   font-weight: var(--weight-medium);
   cursor: pointer;
-  transition: opacity var(--transition-fast);
+  transition: opacity var(--transition-fast), transform 100ms var(--ease-out);
+}
+
+.commitButton:active:not(:disabled) {
+  transform: scale(0.97);
 }
 
 .commitButton:disabled {
@@ -251,7 +255,7 @@
   font-weight: var(--weight-semibold);
   cursor: pointer;
   border-radius: var(--radius-sm);
-  transition: all var(--transition-fast);
+  transition: color var(--motion-fast), background-color var(--motion-fast);
 }
 
 .sectionAction:hover {
@@ -344,7 +348,7 @@
   font-size: 14px;
   cursor: pointer;
   border-radius: var(--radius-sm);
-  transition: all var(--transition-fast);
+  transition: color var(--motion-fast), background-color var(--motion-fast);
 }
 
 .fileActionBtn:hover {

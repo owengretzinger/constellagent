@@ -10,9 +10,13 @@ interface Props {
 }
 
 const SHOW_DELAY = 400
+const SHOW_DELAY_FAST = 50
+const SKIP_WINDOW = 500
 const EDGE_PAD = 8
 const GAP = 6
 const TOOLTIP_HEIGHT_EST = 28
+
+let lastTooltipHidden = 0
 
 export function Tooltip({ label, shortcut, position = 'top', children }: Props) {
   const [visible, setVisible] = useState(false)
@@ -24,6 +28,7 @@ export function Tooltip({ label, shortcut, position = 'top', children }: Props) 
 
   const show = useCallback(() => {
     clearTimeout(showTimer.current)
+    const delay = Date.now() - lastTooltipHidden < SKIP_WINDOW ? SHOW_DELAY_FAST : SHOW_DELAY
     showTimer.current = setTimeout(() => {
       if (!elRef.current) return
       const rect = elRef.current.getBoundingClientRect()
@@ -43,13 +48,14 @@ export function Tooltip({ label, shortcut, position = 'top', children }: Props) 
         y: pos === 'top' ? rect.top - GAP : rect.bottom + GAP,
       })
       setVisible(true)
-    }, SHOW_DELAY)
+    }, delay)
   }, [position])
 
   const hide = useCallback(() => {
     clearTimeout(showTimer.current)
+    if (visible) lastTooltipHidden = Date.now()
     setVisible(false)
-  }, [])
+  }, [visible])
 
   useEffect(() => {
     return () => clearTimeout(showTimer.current)

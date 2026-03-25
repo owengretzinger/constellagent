@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import styles from './ConfirmDialog.module.css'
 
 interface Props {
@@ -14,15 +14,40 @@ interface Props {
   onSecondaryConfirm?: () => void
 }
 
+const EXIT_DURATION = 150
+
 export function ConfirmDialog({ title, message, confirmLabel = 'Delete', onConfirm, onCancel, destructive = false, tip, loading = false, secondaryConfirmLabel, onSecondaryConfirm }: Props) {
-  const handleKeyDown = useCallback((e: KeyboardEvent) => {
+  const [exiting, setExiting] = useState(false)
+
+  const animateExit = useCallback((cb: () => void) => {
+    if (exiting) return
+    setExiting(true)
+    setTimeout(() => cb(), EXIT_DURATION)
+  }, [exiting])
+
+  const handleCancel = useCallback(() => {
     if (loading) return
-    if (e.key === 'Escape') onCancel()
+    animateExit(onCancel)
+  }, [loading, animateExit, onCancel])
+
+  const handleConfirm = useCallback(() => {
+    if (loading) return
+    animateExit(onConfirm)
+  }, [loading, animateExit, onConfirm])
+
+  const handleSecondary = useCallback(() => {
+    if (loading || !onSecondaryConfirm) return
+    animateExit(onSecondaryConfirm)
+  }, [loading, animateExit, onSecondaryConfirm])
+
+  const handleKeyDown = useCallback((e: KeyboardEvent) => {
+    if (loading || exiting) return
+    if (e.key === 'Escape') handleCancel()
     if (e.key === 'Enter') {
       e.preventDefault()
-      onConfirm()
+      handleConfirm()
     }
-  }, [onConfirm, onCancel, loading])
+  }, [handleConfirm, handleCancel, loading, exiting])
 
   useEffect(() => {
     window.addEventListener('keydown', handleKeyDown)
@@ -32,27 +57,27 @@ export function ConfirmDialog({ title, message, confirmLabel = 'Delete', onConfi
   const btnClass = destructive ? styles.destructiveBtn : styles.confirmBtn
 
   return (
-    <div className={styles.overlay} onClick={loading ? undefined : onCancel}>
-      <div className={styles.dialog} onClick={(e) => e.stopPropagation()}>
+    <div className={`${styles.overlay} ${exiting ? styles.overlayExiting : ''}`} onClick={loading ? undefined : handleCancel}>
+      <div className={`${styles.dialog} ${exiting ? styles.dialogExiting : ''}`} onClick={(e) => e.stopPropagation()}>
         <div className={styles.title}>{title}</div>
         <div className={styles.message}>{message}</div>
         {tip && <div className={styles.tip}>{tip}</div>}
         <div className={styles.actions}>
-          <button className={styles.cancelBtn} onClick={onCancel} disabled={loading}>Cancel</button>
+          <button className={styles.cancelBtn} onClick={handleCancel} disabled={loading || exiting}>Cancel</button>
           {secondaryConfirmLabel && onSecondaryConfirm && (
             <button
               className={`${styles.secondaryBtn} ${loading ? styles.btnLoading : ''}`}
-              onClick={onSecondaryConfirm}
-              disabled={loading}
+              onClick={handleSecondary}
+              disabled={loading || exiting}
             >
               {secondaryConfirmLabel}
             </button>
           )}
           <button
             className={`${btnClass} ${loading ? styles.btnLoading : ''}`}
-            onClick={onConfirm}
+            onClick={handleConfirm}
             autoFocus
-            disabled={loading}
+            disabled={loading || exiting}
           >
             {confirmLabel}
           </button>

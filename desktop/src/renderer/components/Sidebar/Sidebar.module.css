@@ -83,7 +83,7 @@
   font-size: 12px;
   cursor: pointer;
   flex-shrink: 0;
-  transition: all var(--transition-fast);
+  transition: background-color var(--motion-fast), color var(--motion-fast);
   padding: 0;
   line-height: 1;
   z-index: 1;
@@ -116,7 +116,7 @@
   letter-spacing: 0.04em;
   cursor: pointer;
   flex-shrink: 0;
-  transition: all var(--transition-fast);
+  transition: background-color var(--motion-fast), color var(--motion-fast);
   padding: 0;
   line-height: 1;
   z-index: 1;
@@ -146,7 +146,7 @@
   font-size: 12px;
   cursor: pointer;
   flex-shrink: 0;
-  transition: all var(--transition-fast);
+  transition: background-color var(--motion-fast), color var(--motion-fast);
   padding: 0;
   line-height: 1;
   z-index: 1;
@@ -177,7 +177,7 @@
   font-size: 9px;
   cursor: pointer;
   flex-shrink: 0;
-  transition: all var(--transition-fast);
+  transition: background-color var(--motion-fast), color var(--motion-fast);
   padding: 0;
   line-height: 1;
   z-index: 1;
@@ -202,6 +202,7 @@
   justify-content: center;
   padding: var(--space-10);
   background: rgba(0, 0, 0, 0.5);
+  animation: prOverlayFadeIn 200ms var(--ease-out) both;
 }
 
 .projectPrModal {
@@ -214,6 +215,18 @@
   background: var(--surface-2);
   box-shadow: var(--shadow-lg);
   overflow: hidden;
+  transform-origin: center;
+  animation: prDialogEnter 200ms var(--ease-out) both;
+}
+
+@keyframes prOverlayFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes prDialogEnter {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
 }
 
 .projectPrModalHeader {
@@ -263,7 +276,7 @@
   font-family: var(--font-ui);
   font-size: var(--text-sm);
   cursor: pointer;
-  transition: all var(--transition-fast);
+  transition: background-color var(--motion-fast), color var(--motion-fast);
 }
 
 .projectPrModalGhostBtn:hover:not(:disabled) {
@@ -286,7 +299,7 @@
   font-size: var(--text-sm);
   line-height: 1;
   cursor: pointer;
-  transition: all var(--transition-fast);
+  transition: background-color var(--motion-fast), color var(--motion-fast);
 }
 
 .projectPrModalCloseBtn:hover {
@@ -346,7 +359,7 @@
   border: 2px solid var(--border-default);
   border-top-color: var(--accent-blue);
   border-radius: var(--radius-full);
-  animation: projectPrSpin 0.8s linear infinite;
+  animation: projectPrSpin var(--duration-spinner) linear infinite;
 }
 
 @keyframes projectPrSpin {
@@ -381,7 +394,7 @@
   border-radius: var(--radius-md);
   border: 1px solid var(--border-subtle);
   background: var(--surface-1);
-  transition: all var(--transition-fast);
+  transition: border-color var(--motion-fast);
 }
 
 .projectPrRow:hover {
@@ -513,8 +526,12 @@
   font-family: var(--font-ui);
   padding: var(--space-2) var(--space-5);
   cursor: pointer;
-  transition: all var(--transition-fast);
+  transition: background-color var(--motion-fast), border-color var(--motion-fast), color var(--motion-fast), transform 100ms var(--ease-out);
   white-space: nowrap;
+}
+
+.projectPrPullBtn:active:not(:disabled) {
+  transform: scale(0.97);
 }
 
 .projectPrPullBtn:hover:not(:disabled) {
@@ -580,7 +597,7 @@
   color: var(--text-secondary);
   font-size: var(--text-base);
   font-family: var(--font-mono);
-  transition: all var(--transition-fast);
+  transition: background-color var(--motion-fast), color var(--motion-fast);
   position: relative;
 }
 
@@ -641,13 +658,13 @@
   mask: radial-gradient(farthest-side, transparent calc(100% - 1.5px), #000 calc(100% - 1.5px));
   opacity: 0.7;
   transform: rotate(0deg);
-  animation: spin 0.9s linear infinite;
+  animation: spin var(--duration-spinner) linear infinite;
 }
 
 /* When both unread and active, spinner wins */
 .workspaceItem.unread.claudeActive::after {
   background: conic-gradient(transparent 100deg, var(--accent-blue));
-  animation: spin 0.9s linear infinite;
+  animation: spin var(--duration-spinner) linear infinite;
 }
 
 @keyframes spin {
@@ -712,7 +729,7 @@
   background: conic-gradient(transparent 100deg, var(--accent-blue));
   -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 1.2px), #000 calc(100% - 1.2px));
   mask: radial-gradient(farthest-side, transparent calc(100% - 1.2px), #000 calc(100% - 1.2px));
-  animation: spin 0.9s linear infinite;
+  animation: spin var(--duration-spinner) linear infinite;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -925,7 +942,7 @@
   font-size: var(--text-sm);
   font-family: var(--font-ui);
   cursor: pointer;
-  transition: all var(--transition-fast);
+  transition: background-color var(--motion-fast), color var(--motion-fast), transform 100ms var(--ease-out);
   width: 100%;
   text-align: left;
 }
@@ -933,6 +950,10 @@
 .actionButton:hover {
   background: rgba(255, 255, 255, 0.04);
   color: var(--text-primary);
+}
+
+.actionButton:active:not(:disabled) {
+  transform: scale(0.97);
 }
 
 .actionIcon {
