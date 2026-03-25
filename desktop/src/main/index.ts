@@ -2,7 +2,8 @@ import { app, BrowserWindow, Menu, shell } from 'electron'
 import type { MenuItemConstructorOptions } from 'electron'
 import { join } from 'path'
 import { symlink, unlink, stat, readlink } from 'fs/promises'
-import { execFile } from 'child_process'
+import { execFile, execFileSync } from 'child_process'
+import { createHash } from 'crypto'
 import { promisify } from 'util'
 import { registerIpcHandlers, cleanupAll } from './ipc'
 import { NotificationWatcher } from './notification-watcher'
@@ -100,6 +101,23 @@ if (process.env.CI_TEST) {
   app.setPath('userData', testData)
   process.env.CONSTELLAGENT_NOTIFY_DIR ||= join(testData, 'notify')
   process.env.CONSTELLAGENT_ACTIVITY_DIR ||= join(testData, 'activity')
+} else if (!app.isPackaged && process.env.CONSTELLAGENT_ISOLATED_DEV === '1') {
+  // Opt-in: separate userData + single-instance lock per git worktree root so multiple
+  // `bun run dev` from different checkouts can run in parallel. Default dev uses the normal
+  // userData path so projects/workspaces persist (see constellagent-state.json).
+  const desktopDir = join(__dirname, '..', '..')
+  let isolationKey = desktopDir
+  try {
+    isolationKey =
+      execFileSync('git', ['-C', desktopDir, 'rev-parse', '--show-toplevel'], {
+        encoding: 'utf8',
+      }).trim() || desktopDir
+  } catch {
+    /* not a git checkout or git missing — fall back to desktop path */
+  }
+  const suffix = createHash('sha256').update(isolationKey).digest('hex').slice(0, 12)
+  const baseUserData = app.getPath('userData')
+  app.setPath('userData', join(baseUserData, 'dev-worktree', suffix))
 }
 
 // Single instance lock: if a second instance is launched (e.g. `constell .`),

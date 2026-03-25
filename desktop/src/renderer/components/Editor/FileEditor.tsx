@@ -4,6 +4,12 @@ import type { editor } from 'monaco-editor'
 import { useAppStore } from '../../store/app-store'
 import { useGitGutter } from '../../hooks/useGitGutter'
 import { MarkdownRenderer } from '../MarkdownRenderer/MarkdownRenderer'
+import { AddToChatMarkdownSurface } from '../AddToChat/AddToChatMarkdownSurface'
+import { sendAddToChatText } from '../../utils/add-to-chat'
+import {
+  setMonacoAddToChatHandler,
+  clearMonacoAddToChatHandler,
+} from '../../utils/add-to-chat-monaco-bridge'
 import styles from './Editor.module.css'
 
 import { isLspLanguage, getOrCreateClient, notifyDidOpen, notifyDidClose } from '../../services/lsp-client-manager'
@@ -88,6 +94,7 @@ export const FileEditor = forwardRef<FileEditorHandle, Props>(function FileEdito
   const notifyTabSaved = useAppStore((s) => s.notifyTabSaved)
   const addToast = useAppStore((s) => s.addToast)
   const settings = useAppStore((s) => s.settings)
+  const runAddToChatRef = useRef<() => void>(() => {})
 
   // Git gutter decorations (no-op when worktreePath is undefined or editor not mounted)
   useGitGutter(editorInstance, filePath, worktreePath)
@@ -228,16 +235,50 @@ export const FileEditor = forwardRef<FileEditorHandle, Props>(function FileEdito
     }
   }, [filePath, worktreePath]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Cmd+S handler
+  // Cmd+S + Cmd+L fallback (2048 = CtrlCmd). Primary ⌘L path: useShortcuts capture + monaco bridge.
   const handleEditorMount = useCallback((ed: editor.IStandaloneCodeEditor) => {
     editorRef.current = ed
     setEditorInstance(ed)
-    ed.addCommand(
-      // Monaco.KeyMod.CtrlCmd | Monaco.KeyCode.KeyS
-      2048 | 49,
-      () => handleSave()
-    )
+    ed.addCommand(2048 | 49, () => handleSave())
+    ed.addCommand(2048 | 42, () => runAddToChatRef.current())
   }, [handleSave])
+
+  useEffect(() => {
+    const ed = editorInstance
+    if (!ed) return
+
+    runAddToChatRef.current = () => {
+      const selection = ed.getSelection()
+      const model = ed.getModel()
+      if (!selection || !model || selection.isEmpty()) {
+        addToast({
+          id: crypto.randomUUID(),
+          message: 'Select text to add to the terminal',
+          type: 'info',
+        })
+        return
+      }
+      const text = model.getValueInRange(selection)
+      sendAddToChatText(filePath, getLanguage(filePath), text)
+    }
+
+    const subFocus = ed.onDidFocusEditorWidget(() => {
+      setMonacoAddToChatHandler(ed, () => runAddToChatRef.current())
+    })
+    const subBlur = ed.onDidBlurEditorWidget(() => {
+      clearMonacoAddToChatHandler(ed)
+    })
+
+    if (ed.hasTextFocus()) {
+      setMonacoAddToChatHandler(ed, () => runAddToChatRef.current())
+    }
+
+    return () => {
+      subFocus.dispose()
+      subBlur.dispose()
+      clearMonacoAddToChatHandler(ed)
+    }
+  }, [editorInstance, filePath, addToast])
 
   if (content === null) {
     return (
@@ -280,9 +321,11 @@ export const FileEditor = forwardRef<FileEditorHandle, Props>(function FileEdito
       )}
       {previewMode && isMarkdown ? (
         <div style={{ flex: 1, overflowY: 'auto', padding: '16px 24px' }}>
-          <div style={{ maxWidth: 760, margin: '0 auto' }}>
-            <MarkdownRenderer>{content}</MarkdownRenderer>
-          </div>
+          <AddToChatMarkdownSurface filePath={filePath}>
+            <div style={{ maxWidth: 760, margin: '0 auto' }}>
+              <MarkdownRenderer>{content}</MarkdownRenderer>
+            </div>
+          </AddToChatMarkdownSurface>
         </div>
       ) : (
         <Editor

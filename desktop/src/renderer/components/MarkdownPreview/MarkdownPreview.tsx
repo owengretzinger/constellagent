@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useAppStore } from '../../store/app-store'
 import { MarkdownRenderer } from '../MarkdownRenderer/MarkdownRenderer'
+import { AddToChatMarkdownSurface } from '../AddToChat/AddToChatMarkdownSurface'
 import {
   isAgentPlanPath,
   agentForPlanPath,
@@ -486,9 +487,9 @@ export function MarkdownPreview({ filePath, worktreePath }: Props) {
         </div>
       </div>
       <div className={styles.scrollArea}>
-        <div className={styles.content}>
+        <AddToChatMarkdownSurface filePath={filePath} className={styles.content}>
           <MarkdownRenderer>{content}</MarkdownRenderer>
-        </div>
+        </AddToChatMarkdownSurface>
       </div>
     </div>
   )

@@ -73,7 +73,7 @@
   align-items: center;
   justify-content: center;
   position: absolute;
-  right: calc(var(--space-2) + 44px);
+  right: calc(var(--space-2) + 66px);
   width: 18px;
   height: 18px;
   border: none;
@@ -103,7 +103,7 @@
   align-items: center;
   justify-content: center;
   position: absolute;
-  right: calc(var(--space-2) + 22px);
+  right: calc(var(--space-2) + 44px);
   width: 18px;
   height: 18px;
   border: none;
@@ -128,6 +128,36 @@
 }
 
 .projectHeader:hover .prListBtn {
+  display: flex;
+}
+
+.syncBtn {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  position: absolute;
+  right: calc(var(--space-2) + 22px);
+  width: 18px;
+  height: 18px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: var(--surface-1);
+  color: var(--text-tertiary);
+  font-size: 12px;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all var(--transition-fast);
+  padding: 0;
+  line-height: 1;
+  z-index: 1;
+}
+
+.syncBtn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-primary);
+}
+
+.projectHeader:hover .syncBtn {
   display: flex;
 }
 
@@ -663,6 +693,54 @@
   outline: 1px solid var(--accent-blue);
 }
 
+.syncIndicator {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  font-size: 10px;
+  line-height: 1;
+}
+
+.syncIndicatorQueued {
+  opacity: 0.75;
+}
+
+.syncIndicatorSyncing {
+  width: 10px;
+  height: 10px;
+  border-radius: var(--radius-full);
+  background: conic-gradient(transparent 100deg, var(--accent-blue));
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 1.2px), #000 calc(100% - 1.2px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 1.2px), #000 calc(100% - 1.2px));
+  animation: spin 0.9s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .syncIndicatorSyncing {
+    animation: none;
+  }
+}
+
+.syncIndicatorOk {
+  color: var(--accent-green, #3fb950);
+  opacity: 0.9;
+}
+
+.syncIndicatorError {
+  width: 7px;
+  height: 7px;
+  border-radius: var(--radius-full);
+  background: var(--accent-red, #f85149);
+}
+
+.workspaceMetaRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+  margin-top: 1px;
+}
+
 .workspaceMeta {
   font-size: var(--text-xs);
   color: var(--text-tertiary);
@@ -670,7 +748,8 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  margin-top: 1px;
+  flex: 1;
+  min-width: 0;
 }
 
 /* ── PR Status (inline with branch meta) ── */

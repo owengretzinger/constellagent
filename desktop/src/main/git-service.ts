@@ -15,6 +15,8 @@ export interface WorktreeInfo {
   branch: string
   head: string
   isBare: boolean
+  /** Set when git porcelain includes a standalone `detached` line (not on any branch) */
+  isDetached?: boolean
 }
 
 export interface FileStatus {
@@ -31,6 +33,12 @@ export interface FileDiff {
 export interface PrWorktreeResult {
   worktreePath: string
   branch: string
+}
+
+/** Result of auto-sync (stash / rebase / stash pop) for one worktree */
+export interface SyncResult {
+  status: 'ok' | 'conflict' | 'error'
+  message?: string
 }
 
 async function git(args: string[], cwd: string): Promise<string> {
@@ -138,15 +146,22 @@ export class GitService {
 
     for (const block of blocks) {
       const lines = block.split('\n')
-      const info: Partial<WorktreeInfo> = { isBare: false }
+      const info: Partial<WorktreeInfo> = { isBare: false, isDetached: false }
       for (const line of lines) {
         if (line.startsWith('worktree ')) info.path = line.slice(9)
         else if (line.startsWith('HEAD ')) info.head = line.slice(5)
         else if (line.startsWith('branch ')) info.branch = line.slice(7).replace('refs/heads/', '')
         else if (line === 'bare') info.isBare = true
+        else if (line === 'detached') info.isDetached = true
       }
       if (info.path) {
-        worktrees.push(info as WorktreeInfo)
+        worktrees.push({
+          path: info.path,
+          branch: info.branch ?? '',
+          head: info.head ?? '',
+          isBare: info.isBare ?? false,
+          isDetached: info.isDetached || undefined,
+        })
       }
     }
     return worktrees
@@ -628,5 +643,73 @@ export class GitService {
         return '' // Object is unreachable — return empty diff
       }
     }
+  }
+
+  /** Remote hash pointed to by origin HEAD (default branch tip). No fetch. */
+  static async getRemoteHead(repoPath: string): Promise<string | null> {
+    const hasOrigin = await this.hasRemote(repoPath, 'origin')
+    if (!hasOrigin) return null
+    try {
+      const { stdout } = await execFileAsync('git', ['ls-remote', 'origin', 'HEAD'], {
+        cwd: repoPath,
+        maxBuffer: 1024 * 1024,
+      })
+      const line = stdout.trim().split('\n')[0]
+      if (!line) return null
+      const hash = line.split('\t')[0]?.trim()
+      return hash || null
+    } catch {
+      return null
+    }
+  }
+
+  /** Best-effort fetch so local origin/* matches remote before rebase. */
+  static async fetchOrigin(repoPath: string): Promise<void> {
+    const hasOrigin = await this.hasRemote(repoPath, 'origin')
+    if (!hasOrigin) return
+    await git(['fetch', '--prune', 'origin'], repoPath).catch(() => {})
+  }
+
+  /**
+   * Rebase current branch onto remote default tip: stash (if dirty), rebase, stash pop.
+   * `defaultBranch` is from {@link getDefaultBranch} (e.g. `origin/main` or `main`).
+   */
+  static async syncWorktree(worktreePath: string, defaultBranch: string): Promise<SyncResult> {
+    const onto = defaultBranch.includes('/') ? defaultBranch : `origin/${defaultBranch}`
+    let stashed = false
+    try {
+      const porcelain = await git(['status', '--porcelain'], worktreePath)
+      if (porcelain.trim().length > 0) {
+        await git(['stash', 'push', '-u', '-m', 'constellagent-auto-sync'], worktreePath)
+        stashed = true
+      }
+    } catch (err) {
+      return { status: 'error', message: friendlyGitError(err, 'Failed to stash changes') }
+    }
+
+    try {
+      await git(['rebase', onto], worktreePath)
+    } catch (err) {
+      await git(['rebase', '--abort'], worktreePath).catch(() => {})
+      if (stashed) {
+        await git(['stash', 'pop'], worktreePath).catch(() => {})
+      }
+      const msg = friendlyGitError(err, 'Rebase failed')
+      const lower = msg.toLowerCase()
+      if (lower.includes('conflict') || lower.includes('could not apply')) {
+        return { status: 'conflict', message: msg }
+      }
+      return { status: 'error', message: msg }
+    }
+
+    if (stashed) {
+      try {
+        await git(['stash', 'pop'], worktreePath)
+      } catch (err) {
+        return { status: 'conflict', message: friendlyGitError(err, 'stash pop failed') }
+      }
+    }
+
+    return { status: 'ok' }
   }
 }

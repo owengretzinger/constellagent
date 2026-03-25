@@ -5,6 +5,8 @@
     "postinstall": "bun install --cwd desktop",
     "setup": "bun install --cwd desktop && bun run --cwd desktop rebuild",
     "dev": "bun run --cwd desktop dev",
+    "dev:isolated": "sh scripts/dev-isolated.sh",
+    "dev-isolated": "sh scripts/dev-isolated.sh",
     "build": "bun run --cwd desktop build",
     "test": "bun run --cwd desktop test",
     "rebuild": "bun run --cwd desktop rebuild",

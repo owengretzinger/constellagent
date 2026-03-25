@@ -1,4 +1,5 @@
 import type { PrInfo } from '@shared/github-types'
+import type { WorkspaceSyncInfo } from '@shared/worktree-sync-types'
 
 export interface StartupCommand {
   name: string
@@ -185,6 +186,8 @@ export interface AppState {
   prStatusMap: Map<string, PrInfo | null>
   ghAvailability: Map<string, boolean>
   gitFileStatuses: Map<string, Map<string, string>>
+  /** Per-workspace worktree sync status (key = workspace id) */
+  worktreeSyncStatus: Map<string, WorkspaceSyncInfo>
 
   // Actions
   addProject: (project: Project) => void
@@ -269,6 +272,7 @@ export interface AppState {
   // PR status actions
   setPrStatuses: (projectId: string, statuses: Record<string, PrInfo | null>) => void
   setGhAvailability: (projectId: string, available: boolean) => void
+  setWorktreeSyncStatus: (projectId: string, workspaces: Record<string, WorkspaceSyncInfo>) => void
 
   // Automation actions
   addAutomation: (automation: Automation) => void

@@ -113,6 +113,8 @@ export interface AgentPlanEntry {
   agent: string
   built?: boolean
   codingAgent?: string | null
+  /** Absolute path: worktree root this plan was indexed under, or user home for dot-agent plan dirs. */
+  planSourceRoot?: string
 }
 
 /** Constellagent-owned frontmatter metadata stored under a namespaced key. */

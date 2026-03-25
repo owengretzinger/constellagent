@@ -1,8 +1,9 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, type DragEvent } from 'react'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { WebLinksAddon } from '@xterm/addon-web-links'
 import { useAppStore } from '../../store/app-store'
+import { CONSTELLAGENT_PATH_MIME, wrapBracketedPaste } from '../../utils/add-to-chat'
 import styles from './TerminalPanel.module.css'
 
 const TAB_TITLE_LOG = '[constellagent:tab-title]'
@@ -265,6 +266,25 @@ export function TerminalPanel({ ptyId, active, inSplit, paneId, onFocus, isFocus
     if (paneId && onFocus) onFocus(paneId)
   }
 
+  const handleDragOver = (e: DragEvent) => {
+    if (
+      e.dataTransfer.types.includes(CONSTELLAGENT_PATH_MIME)
+      || e.dataTransfer.types.includes('text/plain')
+    ) {
+      e.preventDefault()
+      e.dataTransfer.dropEffect = 'copy'
+    }
+  }
+
+  const handleDrop = (e: DragEvent) => {
+    const path =
+      e.dataTransfer.getData(CONSTELLAGENT_PATH_MIME)
+      || e.dataTransfer.getData('text/plain')
+    if (!path?.trim()) return
+    e.preventDefault()
+    window.api.pty.write(ptyId, wrapBracketedPaste(path.trim()))
+  }
+
   // In split mode: relative positioning, no visibility toggling (parent handles that)
   // In standalone mode: absolute-fill with visibility toggling
   const containerClass = inSplit
@@ -276,6 +296,8 @@ export function TerminalPanel({ ptyId, active, inSplit, paneId, onFocus, isFocus
       className={containerClass}
       ref={containerRef}
       onMouseDown={handleMouseDown}
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}
     >
       {/* Separate div for xterm — not managed by React. */}
       <div ref={termDivRef} className={styles.terminalInner} />

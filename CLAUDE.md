@@ -9,6 +9,7 @@ Monorepo with root package.json delegating to `desktop/`.
 ```
 constellagent/
 ├── package.json          # Root scripts (proxy to desktop/)
+├── scripts/              # e.g. dev-isolated.sh (parallel worktree dev)
 └── desktop/              # Electron app (all source code lives here)
     ├── src/main/         # Main process: PTY, git, file services, IPC
     ├── src/preload/      # contextBridge (window.api)
@@ -24,7 +25,9 @@ constellagent/
 All commands run from repo root via bun:
 
 ```bash
-bun run dev       # Dev server + Electron
+bun run dev                 # Dev server + Electron
+bun run dev-isolated        # Isolated app data per checkout (see scripts/dev-isolated.sh)
+# Any worktree, no new package scripts: CONSTELLAGENT_ISOLATED_DEV=1 bun run --cwd desktop dev
 bun run build     # Production build
 bun run test      # Playwright e2e tests
 bun run rebuild   # Rebuild native modules (node-pty)

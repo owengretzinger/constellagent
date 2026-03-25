@@ -33,10 +33,33 @@ else
     (cd "$DESKTOP_DIR" && bun install)
   fi
 
-  # Check if a dev server is already running (Electron renderer URL port 5173)
-  if lsof -i :5173 -sTCP:LISTEN >/dev/null 2>&1; then
-    # Dev server running — just launch electron pointing at existing build
-    echo "constell: dev server already running, opening app..."
+  # Attach to an existing Vite dev server (5173, or next free port when multiple worktrees run dev).
+  # Override with CONSTELLAGENT_RENDERER_PORT=5174 or full CONSTELLAGENT_RENDERER_URL=http://127.0.0.1:5174
+  pick_renderer_url() {
+    if [ -n "${CONSTELLAGENT_RENDERER_URL:-}" ]; then
+      printf '%s' "$CONSTELLAGENT_RENDERER_URL"
+      return
+    fi
+    if [ -n "${CONSTELLAGENT_RENDERER_PORT:-}" ]; then
+      printf 'http://127.0.0.1:%s' "$CONSTELLAGENT_RENDERER_PORT"
+      return
+    fi
+    p=5173
+    while [ "$p" -le 5190 ]; do
+      if lsof -i ":$p" -sTCP:LISTEN >/dev/null 2>&1; then
+        printf 'http://127.0.0.1:%s' "$p"
+        return
+      fi
+      p=$((p + 1))
+    done
+    printf ''
+  }
+
+  RENDERER_URL="$(pick_renderer_url)"
+  if [ -n "$RENDERER_URL" ]; then
+    # Dev server running — launch electron pointing at that renderer URL
+    echo "constell: dev server at $RENDERER_URL, opening app..."
+    export ELECTRON_RENDERER_URL="$RENDERER_URL"
     exec "$DESKTOP_DIR/node_modules/.bin/electron" "$DESKTOP_DIR/out/main/index.js"
   else
     # Start full dev server (bun run dev)

@@ -216,6 +216,19 @@ export class FileService {
     return merged
   }
 
+  private static dedupeWorktreePaths(paths: string[]): string[] {
+    const seen = new Set<string>()
+    const out: string[] = []
+    for (const p of paths) {
+      if (!p || typeof p !== 'string') continue
+      const k = p.replace(/\/+$/, '') || '/'
+      if (seen.has(k)) continue
+      seen.add(k)
+      out.push(p)
+    }
+    return out
+  }
+
   /**
    * Find the most recently modified `.md` / `.mdx` under known agent plan folders
    * in the workspace worktree (e.g. `.cursor/plans/*.plan.md`).
@@ -230,9 +243,36 @@ export class FileService {
     return best.path
   }
 
-  /** All plan markdowns sorted newest-first, capped at 200. */
-  static async listAgentPlanMarkdowns(worktreePath: string): Promise<AgentPlanEntry[]> {
-    const all = await this.collectPlanFiles(worktreePath)
+  /**
+   * All plan markdowns sorted newest-first, capped at 200.
+   * Pass one or more worktree roots (same project); each entry includes `planSourceRoot`.
+   * Home plan dirs (~/.cursor/plans, etc.) are merged once; workspace paths win on duplicate paths.
+   */
+  static async listAgentPlanMarkdowns(worktreePathOrPaths: string | string[]): Promise<AgentPlanEntry[]> {
+    const raw = Array.isArray(worktreePathOrPaths) ? worktreePathOrPaths : [worktreePathOrPaths]
+    const uniqueWts = this.dedupeWorktreePaths(raw.filter(Boolean))
+    if (uniqueWts.length === 0) return []
+
+    const byPath = new Map<string, AgentPlanEntry>()
+    for (const wt of uniqueWts) {
+      const fromWt = await this.collectPlanFilesUnderRoot(wt)
+      for (const e of fromWt) {
+        byPath.set(e.path, { ...e, planSourceRoot: wt })
+      }
+    }
+    let fromHome: AgentPlanEntry[] = []
+    try {
+      fromHome = await this.collectPlanFilesUnderRoot(homedir())
+    } catch {
+      /* ignore */
+    }
+    const homeRoot = homedir()
+    for (const e of fromHome) {
+      if (!byPath.has(e.path)) {
+        byPath.set(e.path, { ...e, planSourceRoot: homeRoot })
+      }
+    }
+    const all = [...byPath.values()]
     all.sort((a, b) => b.mtimeMs - a.mtimeMs)
     return all.slice(0, 200)
   }

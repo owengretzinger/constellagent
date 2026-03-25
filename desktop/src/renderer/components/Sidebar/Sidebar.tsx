@@ -19,6 +19,11 @@ const PR_PROVIDER_DOMAINS: Record<PrLinkProvider, string> = {
   devinreview: "devinreview.com",
 };
 
+/** Detached checkouts use branch label `HEAD` — hide from sidebar (not a named branch). */
+function isRenderableWorkspaceBranch(branch: string): boolean {
+  return branch.trim().toUpperCase() !== "HEAD";
+}
+
 function providerUrl(url: string, provider: PrLinkProvider): string {
   return url.replace("github.com", PR_PROVIDER_DOMAINS[provider]);
 }
@@ -255,6 +260,79 @@ function WorkspaceMeta({
       {hasPr && showBranch && <span style={{ marginRight: 4 }} />}
       {showBranch && branch}
     </span>
+  );
+}
+
+function WorkspaceSyncIndicator({ workspaceId }: { workspaceId: string }) {
+  const info = useAppStore((s) => s.worktreeSyncStatus.get(workspaceId));
+  const [hideSynced, setHideSynced] = useState(false);
+
+  useEffect(() => {
+    if (info?.status !== "synced") {
+      setHideSynced(false);
+      return;
+    }
+    setHideSynced(false);
+    const t = window.setTimeout(() => setHideSynced(true), 5000);
+    return () => window.clearTimeout(t);
+  }, [info?.status, info?.lastSyncAt]);
+
+  if (!info || info.status === "idle") return null;
+  if (info.status === "synced" && hideSynced) return null;
+
+  const tip =
+    info.message ||
+    (info.status === "queued"
+      ? "Waiting for agent to finish"
+      : info.status === "syncing"
+        ? "Syncing worktree…"
+        : info.status === "synced"
+          ? "Synced"
+          : info.status === "conflict"
+            ? "Sync conflict"
+            : "Sync error");
+
+  if (info.status === "queued") {
+    return (
+      <Tooltip label={tip}>
+        <span
+          className={`${styles.syncIndicator} ${styles.syncIndicatorQueued}`}
+          aria-hidden="true"
+        >
+          ⏳
+        </span>
+      </Tooltip>
+    );
+  }
+  if (info.status === "syncing") {
+    return (
+      <Tooltip label={tip}>
+        <span
+          className={`${styles.syncIndicator} ${styles.syncIndicatorSyncing}`}
+          aria-hidden="true"
+        />
+      </Tooltip>
+    );
+  }
+  if (info.status === "synced") {
+    return (
+      <Tooltip label={tip}>
+        <span
+          className={`${styles.syncIndicator} ${styles.syncIndicatorOk}`}
+          aria-hidden="true"
+        >
+          ✓
+        </span>
+      </Tooltip>
+    );
+  }
+  return (
+    <Tooltip label={tip}>
+      <span
+        className={`${styles.syncIndicator} ${styles.syncIndicatorError}`}
+        aria-hidden="true"
+      />
+    </Tooltip>
   );
 }
 
@@ -842,7 +920,7 @@ export function Sidebar() {
         {projects.map((project) => {
           const isExpanded = isProjectExpanded(project.id);
           const projectWorkspaces = workspaces.filter(
-            (w) => w.projectId === project.id,
+            (w) => w.projectId === project.id && isRenderableWorkspaceBranch(w.branch),
           );
 
           return (
@@ -878,6 +956,18 @@ export function Sidebar() {
                     }}
                   >
                     PR
+                  </button>
+                </Tooltip>
+                <Tooltip label="Sync all worktrees">
+                  <button
+                    type="button"
+                    className={styles.syncBtn}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      void window.api.git.syncAllWorktrees(project.id);
+                    }}
+                  >
+                    ↻
                   </button>
                 </Tooltip>
                 <Tooltip label="Delete project">
@@ -953,11 +1043,14 @@ export function Sidebar() {
                               {displayName}
                             </span>
                           )}
-                          <WorkspaceMeta
-                            projectId={ws.projectId}
-                            branch={ws.branch}
-                            showBranch={!!showMeta}
-                          />
+                          <span className={styles.workspaceMetaRow}>
+                            <WorkspaceMeta
+                              projectId={ws.projectId}
+                              branch={ws.branch}
+                              showBranch={!!showMeta}
+                            />
+                            <WorkspaceSyncIndicator workspaceId={ws.id} />
+                          </span>
                         </div>
                         <Tooltip label="Delete workspace">
                           <button

@@ -58,6 +58,16 @@
   flex-shrink: 0;
 }
 
+.diffCommentHint {
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+  padding: var(--space-2) var(--space-6);
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border-subtle);
+  line-height: 1.4;
+  flex-shrink: 0;
+}
+
 .diffLabel {
   font-size: var(--text-sm);
   color: var(--text-secondary);

@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useMemo } from 'react'
 import { Allotment } from 'allotment'
 import 'allotment/dist/style.css'
 import { useAppStore } from './store/app-store'
@@ -81,6 +81,12 @@ export function App() {
     })
   }, [])
 
+  useEffect(() => {
+    return window.api.git.onWorktreeSyncStatus((event) => {
+      useAppStore.getState().setWorktreeSyncStatus(event.projectId, event.workspaces)
+    })
+  }, [])
+
   const allTabs = useAppStore((s) => s.tabs)
   const activeTabId = useAppStore((s) => s.activeTabId)
   const rightPanelOpen = useAppStore((s) => s.rightPanelOpen)
@@ -99,6 +105,15 @@ export function App() {
   const wsTabs = activeWorkspaceTabs()
   const activeTab = wsTabs.find((t) => t.id === activeTabId)
   const workspace = workspaces.find((w) => w.id === activeWorkspaceId)
+  const planProjectWorktrees = useMemo(() => {
+    if (!workspace) return []
+    return workspaces
+      .filter((w) => w.projectId === workspace.projectId)
+      .map((w) => ({
+        path: w.worktreePath,
+        label: w.name || w.branch || w.worktreePath.split('/').filter(Boolean).pop() || w.worktreePath,
+      }))
+  }, [workspaces, workspace])
   const tabWorkspace = activeTab
     ? workspaces.find((w) => w.id === activeTab.workspaceId)
     : undefined
@@ -211,7 +226,7 @@ export function App() {
         <QuickOpen worktreePath={workspace.worktreePath} />
       )}
       {planPaletteVisible && workspace && (
-        <PlanPalette worktreePath={workspace.worktreePath} />
+        <PlanPalette worktreePath={workspace.worktreePath} projectWorktrees={planProjectWorktrees} />
       )}
       {confirmDialog && (
         <ConfirmDialog

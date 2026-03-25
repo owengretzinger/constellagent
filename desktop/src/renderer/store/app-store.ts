@@ -1,11 +1,24 @@
 import { create } from 'zustand'
-import type { AppState, PersistedState, Tab, SplitNode } from './types'
+import type { AppState, PersistedState, Project, StartupCommand, Tab, SplitNode, Workspace } from './types'
 import { DEFAULT_SETTINGS } from './types'
 import { AGENT_PLAN_DIRS_LABEL } from '../utils/agent-plan-dirs'
 import { GEMINI_TAB_LABEL, isGeminiIdleOscTitle } from '../../shared/gemini-tab-title'
 import { getAllPtyIds, splitLeaf, removeLeaf, findLeaf, findLeafByPtyId, firstLeaf, firstTerminalLeaf, collectLeaves, normalizeSplitTree } from './split-helpers'
+import { pathsEqualOrAlias } from '../../shared/agent-plan-path'
 
 const DEFAULT_PR_LINK_PROVIDER = 'github' as const
+
+/** Strip unknown persisted fields (e.g. legacy waitFor / waitCondition). */
+function normalizeHydratedStartupCommands(raw: Project['startupCommands']): StartupCommand[] | undefined {
+  if (!raw?.length) return undefined
+  const out: StartupCommand[] = []
+  for (const c of raw) {
+    const command = typeof c.command === 'string' ? c.command : ''
+    if (!command.trim()) continue
+    out.push({ name: typeof c.name === 'string' ? c.name : '', command })
+  }
+  return out.length > 0 ? out : undefined
+}
 
 const TAB_TITLE_LOG = '[constellagent:tab-title]'
 
@@ -28,6 +41,14 @@ function isGenericTerminalTitle(title: string): boolean {
   if (!title.trim()) return true
   if (GENERIC_AGENT_TITLES.has(title)) return true
   return /^Terminal \d+$/.test(title)
+}
+
+function activeAgentSetsEqual(a: Set<string>, b: Set<string>): boolean {
+  if (a.size !== b.size) return false
+  for (const id of a) {
+    if (!b.has(id)) return false
+  }
+  return true
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -56,8 +77,9 @@ export const useAppStore = create<AppState>((set, get) => ({
   prStatusMap: new Map(),
   ghAvailability: new Map(),
   gitFileStatuses: new Map(),
+  worktreeSyncStatus: new Map(),
 
-  addProject: (project) =>
+  addProject: (project) => {
     set((s) => ({
       projects: [
         ...s.projects,
@@ -66,9 +88,13 @@ export const useAppStore = create<AppState>((set, get) => ({
           prLinkProvider: project.prLinkProvider ?? DEFAULT_PR_LINK_PROVIDER,
         },
       ],
-    })),
+    }))
+    void window.api.git.startSyncPolling(project.id, project.repoPath)
+    void reconcileGitWorktreesForStore(project.id)
+  },
 
-  removeProject: (id) =>
+  removeProject: (id) => {
+    void window.api.git.stopSyncPolling(id)
     set((s) => {
       // Clean up automations for this project in main process
       const projectAutomations = s.automations.filter((a) => a.projectId === id)
@@ -87,6 +113,11 @@ export const useAppStore = create<AppState>((set, get) => ({
       )
       const newGhAvailability = new Map(s.ghAvailability)
       newGhAvailability.delete(id)
+
+      const newWorktreeSyncStatus = new Map(s.worktreeSyncStatus)
+      for (const ws of s.workspaces.filter((w) => w.projectId === id)) {
+        newWorktreeSyncStatus.delete(ws.id)
+      }
 
       const tabMap = { ...s.lastActiveTabByWorkspace }
       for (const wsId of removedWsIds) delete tabMap[wsId]
@@ -108,11 +139,13 @@ export const useAppStore = create<AppState>((set, get) => ({
         activeClaudeWorkspaceIds: newActiveClaude,
         prStatusMap: newPrStatusMap,
         ghAvailability: newGhAvailability,
+        worktreeSyncStatus: newWorktreeSyncStatus,
         activeWorkspaceId,
         activeTabId,
         lastActiveTabByWorkspace: tabMap,
       }
-    }),
+    })
+  },
 
   addWorkspace: (workspace) =>
     set((s) => ({
@@ -130,11 +163,14 @@ export const useAppStore = create<AppState>((set, get) => ({
       newActiveClaude.delete(id)
       const tabMap = { ...s.lastActiveTabByWorkspace }
       delete tabMap[id]
+      const newWorktreeSyncStatus = new Map(s.worktreeSyncStatus)
+      newWorktreeSyncStatus.delete(id)
       return {
         workspaces: newWorkspaces,
         tabs: newTabs,
         unreadWorkspaceIds: newUnread,
         activeClaudeWorkspaceIds: newActiveClaude,
+        worktreeSyncStatus: newWorktreeSyncStatus,
         lastActiveTabByWorkspace: tabMap,
         activeWorkspaceId:
           s.activeWorkspaceId === id
@@ -919,6 +955,21 @@ export const useAppStore = create<AppState>((set, get) => ({
       return { ghAvailability: newMap }
     }),
 
+  setWorktreeSyncStatus: (projectId, workspaces) =>
+    set((s) => {
+      const next = new Map(s.worktreeSyncStatus)
+      for (const [pathKey, info] of Object.entries(workspaces)) {
+        const ws = s.workspaces.find(
+          (w) =>
+            w.projectId === projectId &&
+            (pathsEqualOrAlias(w.worktreePath, info.workspacePath) ||
+              pathsEqualOrAlias(w.worktreePath, pathKey)),
+        )
+        if (ws) next.set(ws.id, info)
+      }
+      return { worktreeSyncStatus: next }
+    }),
+
   addAutomation: (automation) =>
     set((s) => ({ automations: [...s.automations, automation] })),
 
@@ -989,6 +1040,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     const projects = (data.projects ?? []).map((project) => ({
       ...project,
       prLinkProvider: project.prLinkProvider ?? DEFAULT_PR_LINK_PROVIDER,
+      startupCommands: normalizeHydratedStartupCommands(project.startupCommands),
     }))
     const workspaces = data.workspaces ?? []
     const saved = data.activeWorkspaceId
@@ -1015,6 +1067,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       activeTabId,
       lastActiveTabByWorkspace: data.lastActiveTabByWorkspace ?? {},
       settings,
+      worktreeSyncStatus: new Map(),
     })
   },
 
@@ -1029,6 +1082,112 @@ export const useAppStore = create<AppState>((set, get) => ({
     return ws ? s.projects.find((p) => p.id === ws.projectId) : undefined
   },
 }))
+
+/** Detached git checkouts report as branch `HEAD`; they are not useful sidebar rows. */
+function isDetachedHeadBranchLabel(branch: string): boolean {
+  return branch.trim().toUpperCase() === 'HEAD'
+}
+
+/** Drop workspaces that only represent detached HEAD (from older reconcile / git state). */
+function pruneDetachedHeadWorkspaces(): void {
+  useAppStore.setState((s) => {
+    const removeIds = new Set(
+      s.workspaces.filter((w) => isDetachedHeadBranchLabel(w.branch)).map((w) => w.id),
+    )
+    if (removeIds.size === 0) return s
+
+    const newWorkspaces = s.workspaces.filter((w) => !removeIds.has(w.id))
+    const newTabs = s.tabs.filter((t) => !removeIds.has(t.workspaceId))
+    const tabMap = { ...s.lastActiveTabByWorkspace }
+    for (const id of removeIds) delete tabMap[id]
+
+    let activeWorkspaceId = s.activeWorkspaceId
+    if (activeWorkspaceId && removeIds.has(activeWorkspaceId)) {
+      activeWorkspaceId = newWorkspaces[0]?.id ?? null
+    }
+    const activeTabId = newTabs.some((t) => t.id === s.activeTabId)
+      ? s.activeTabId
+      : (newTabs.find((t) => t.workspaceId === activeWorkspaceId)?.id ?? newTabs[0]?.id ?? null)
+
+    return {
+      workspaces: newWorkspaces,
+      tabs: newTabs,
+      activeWorkspaceId,
+      activeTabId,
+      lastActiveTabByWorkspace: tabMap,
+    }
+  })
+}
+
+/**
+ * Merge git worktrees from `git worktree list` into the store when they are missing from persisted state.
+ * The sidebar only renders app workspaces — it does not scan git by itself.
+ */
+async function reconcileGitWorktreesForStore(projectIdFilter: string | null): Promise<void> {
+  pruneDetachedHeadWorkspaces()
+
+  const projects =
+    projectIdFilter === null
+      ? useAppStore.getState().projects
+      : useAppStore.getState().projects.filter((p) => p.id === projectIdFilter)
+  if (projects.length === 0) return
+
+  const additions: Workspace[] = []
+
+  for (const project of projects) {
+    let listed: { path: string; branch: string; head: string; isBare: boolean; isDetached?: boolean }[]
+    try {
+      listed = await window.api.git.listWorktrees(project.repoPath)
+    } catch {
+      continue
+    }
+
+    const workspacesSnap = useAppStore.getState().workspaces
+    const currentForProject = workspacesSnap.filter((w) => w.projectId === project.id)
+
+    for (const wt of listed) {
+      if (wt.isBare) continue
+      if (wt.isDetached) continue
+      const path = wt.path?.trim()
+      if (!path) continue
+      if (currentForProject.some((w) => pathsEqualOrAlias(w.worktreePath, path))) continue
+      if (additions.some((w) => w.projectId === project.id && pathsEqualOrAlias(w.worktreePath, path))) continue
+
+      let branch = (wt.branch || '').trim()
+      if (!branch) {
+        try {
+          branch = (await window.api.git.getCurrentBranch(path)).trim()
+        } catch {
+          branch = ''
+        }
+      }
+      if (isDetachedHeadBranchLabel(branch)) continue
+
+      const fallbackName = path.split(/[/\\]/).filter(Boolean).pop() || 'workspace'
+      const name = branch || fallbackName
+      additions.push({
+        id: crypto.randomUUID(),
+        name,
+        branch,
+        worktreePath: path,
+        projectId: project.id,
+      })
+    }
+  }
+
+  if (additions.length === 0) return
+
+  console.info(`[constellagent] merged ${additions.length} git worktree(s) into sidebar state`)
+
+  useAppStore.setState((s) => {
+    const nextWorkspaces = [...s.workspaces, ...additions]
+    let activeWorkspaceId = s.activeWorkspaceId
+    if (activeWorkspaceId === null && additions.length > 0) {
+      activeWorkspaceId = additions[0].id
+    }
+    return { workspaces: nextWorkspaces, activeWorkspaceId }
+  })
+}
 
 // ── State persistence ──
 
@@ -1069,6 +1228,14 @@ useAppStore.subscribe((state, prevState) => {
   }
 })
 
+useAppStore.subscribe((state, prevState) => {
+  if (activeAgentSetsEqual(state.activeClaudeWorkspaceIds, prevState.activeClaudeWorkspaceIds)) return
+  const paths = [...state.activeClaudeWorkspaceIds]
+    .map((wsId) => state.workspaces.find((w) => w.id === wsId)?.worktreePath)
+    .filter((p): p is string => Boolean(p))
+  window.api.git.setSyncBusy(paths)
+})
+
 // Flush state to disk synchronously when the window is closing.
 // Uses sendSync + writeFileSync so the write completes before the renderer is destroyed.
 window.addEventListener('beforeunload', () => {
@@ -1086,6 +1253,8 @@ export async function hydrateFromDisk(): Promise<void> {
   } catch (err) {
     console.error('Failed to load persisted state:', err)
   }
+
+  await reconcileGitWorktreesForStore(null)
 
   // Reconcile persisted terminal tabs against live PTY processes
   try {
@@ -1151,8 +1320,18 @@ export async function hydrateFromDisk(): Promise<void> {
     console.error('Failed to reconcile PTY tabs:', err)
   }
 
-  // Schedule all enabled automations on startup
   const state = useAppStore.getState()
+  for (const project of state.projects) {
+    void window.api.git.startSyncPolling(project.id, project.repoPath)
+  }
+  {
+    const paths = [...state.activeClaudeWorkspaceIds]
+      .map((wsId) => state.workspaces.find((w) => w.id === wsId)?.worktreePath)
+      .filter((p): p is string => Boolean(p))
+    window.api.git.setSyncBusy(paths)
+  }
+
+  // Schedule all enabled automations on startup
   for (const automation of state.automations) {
     if (!automation.enabled) continue
     const project = state.projects.find((p) => p.id === automation.projectId)

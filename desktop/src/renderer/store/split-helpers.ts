@@ -1,4 +1,42 @@
-import type { SplitNode, SplitLeaf } from './types'
+import type { SplitNode, SplitLeaf, Tab } from './types'
+
+function isTerminalTab(tab: Tab): tab is Extract<Tab, { type: 'terminal' }> {
+  return tab.type === 'terminal'
+}
+
+/**
+ * PTY to receive agent input for a terminal tab, even when the focused split pane is a file editor.
+ */
+export function resolvePtyForTerminalTab(tab: Extract<Tab, { type: 'terminal' }>): string {
+  const pty = getFocusedPtyId(tab.splitRoot, tab.focusedPaneId, tab.ptyId)
+  if (pty) return pty
+  if (tab.splitRoot) {
+    const leaf = firstTerminalLeaf(tab.splitRoot)
+    if (leaf) return leaf.ptyId
+  }
+  return tab.ptyId
+}
+
+/**
+ * PTY for "Add to chat" / context injection: active terminal tab if any, else first terminal in workspace.
+ */
+export function resolveAgentPtyForContextInjection(params: {
+  tabs: Tab[]
+  activeTabId: string | null
+  activeWorkspaceId: string | null
+}): string | undefined {
+  const { tabs, activeTabId, activeWorkspaceId } = params
+  if (!activeWorkspaceId) return undefined
+
+  const activeTab = activeTabId ? tabs.find((t) => t.id === activeTabId) : undefined
+  if (activeTab && isTerminalTab(activeTab)) {
+    return resolvePtyForTerminalTab(activeTab)
+  }
+
+  const termTab = tabs.find((t) => t.workspaceId === activeWorkspaceId && t.type === 'terminal')
+  if (!termTab || termTab.type !== 'terminal') return undefined
+  return resolvePtyForTerminalTab(termTab)
+}
 
 /** Recursively collect all PTY IDs from a split tree (terminal leaves only). */
 export function getAllPtyIds(node: SplitNode): string[] {

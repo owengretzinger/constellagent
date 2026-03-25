@@ -13,6 +13,8 @@ bunx playwright test --grep "creates terminal"     # Single test by name
 bun run rebuild      # Rebuild native modules (node-pty) for Electron
 ```
 
+**Multiple git worktrees / parallel dev:** Normal `bun run dev` uses the standard `userData` path (projects persist in `constellagent-state.json`). For **isolated** dev (separate profile per checkout), from repo root run **`sh scripts/dev-isolated.sh`** or **`bun run dev-isolated`** (runs that shell script). That only needs the stock `desktop` `dev` script — no extra entries in `desktop/package.json`. Universal fallback (any branch): **`CONSTELLAGENT_ISOLATED_DEV=1 bun run --cwd desktop dev`**. Isolated profiles live under `…/Constellagent/dev-worktree/<hash>/`. Vite uses `strictPort: false` (port 5173, then next free). Optional: `CONSTELLAGENT_VITE_PORT`, `CONSTELLAGENT_RENDERER_PORT` / `CONSTELLAGENT_RENDERER_URL` for `constell` attach. The `constell` helper sets `ELECTRON_RENDERER_URL` when attaching (scans 5173–5190).
+
 After modifying native dependencies: `bun run rebuild`
 
 **Main vs renderer in dev:** Changes under `src/main/` or `src/shared/ipc-channels.ts` require a **full app quit (⌘Q)** and a fresh `bun run dev`. **⌘R / Reload** only reloads the renderer; if you see `No handler registered for 'fs:…'`, the running main process is stale.

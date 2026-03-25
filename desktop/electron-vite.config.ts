@@ -23,6 +23,12 @@ export default defineConfig({
       alias: {
         '@shared': resolve(__dirname, 'src/shared')
       }
-    }
+    },
+    server: {
+      strictPort: false,
+      ...(process.env.CONSTELLAGENT_VITE_PORT
+        ? { port: Number.parseInt(process.env.CONSTELLAGENT_VITE_PORT, 10) || 5173 }
+        : {}),
+    },
   }
 })

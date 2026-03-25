@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useLayoutEffect, useRef } from 'react'
 import { useAppStore } from '../../store/app-store'
 import type { Project, PrLinkProvider, StartupCommand } from '../../store/types'
 import styles from './ProjectSettingsDialog.module.css'
@@ -9,23 +9,156 @@ interface Props {
   onCancel: () => void
 }
 
+function normalizeStartupCommands(list: StartupCommand[] | undefined): StartupCommand[] {
+  if (!list?.length) return []
+  return list
+    .filter((c) => c.command?.trim())
+    .map((c) => ({ name: c.name ?? '', command: c.command }))
+}
+
+interface StartupCommandRowProps {
+  cmd: StartupCommand
+  expanded: boolean
+  autoFocusCommand: boolean
+  onNameChange: (value: string) => void
+  onCommandChange: (value: string) => void
+  onRemove: () => void
+  onToggleExpand: () => void
+}
+
+function StartupCommandRow({
+  cmd,
+  expanded,
+  autoFocusCommand,
+  onNameChange,
+  onCommandChange,
+  onRemove,
+  onToggleExpand,
+}: StartupCommandRowProps) {
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const multilineLocked = cmd.command.includes('\n')
+  const expandDisabled = expanded && multilineLocked
+
+  useLayoutEffect(() => {
+    const el = textareaRef.current
+    if (!el || !expanded) return
+    el.style.height = 'auto'
+    el.style.height = `${Math.min(Math.max(el.scrollHeight, 72), 280)}px`
+  }, [expanded, cmd.command])
+
+  return (
+    <div className={styles.commandBlock}>
+      <div className={styles.commandRowTop}>
+        <input
+          className={`${styles.input} ${styles.nameInput}`}
+          value={cmd.name}
+          onChange={(e) => onNameChange(e.target.value)}
+          placeholder="Tab name"
+        />
+        {!expanded && (
+          <input
+            className={`${styles.input} ${styles.commandInput}`}
+            value={cmd.command}
+            onChange={(e) => onCommandChange(e.target.value)}
+            placeholder="command"
+            autoFocus={autoFocusCommand}
+          />
+        )}
+        <button
+          type="button"
+          className={styles.expandCmdBtn}
+          onClick={onToggleExpand}
+          disabled={expandDisabled}
+          aria-expanded={expanded}
+          aria-label={expanded ? 'Collapse command field' : 'Expand command field'}
+          title={
+            expandDisabled
+              ? 'Remove line breaks to use single-line mode'
+              : expanded
+                ? 'Collapse to single line'
+                : 'Expand for long or multi-line command'
+          }
+        >
+          <span className={styles.expandCmdIcon} aria-hidden>
+            {expanded ? '▴' : '▾'}
+          </span>
+        </button>
+        <button className={styles.removeBtn} onClick={onRemove} title="Remove" type="button">
+          ✕
+        </button>
+      </div>
+      {expanded && (
+        <textarea
+          ref={textareaRef}
+          className={styles.commandTextarea}
+          value={cmd.command}
+          onChange={(e) => onCommandChange(e.target.value)}
+          placeholder="command"
+          rows={3}
+          spellCheck={false}
+          autoFocus={autoFocusCommand}
+        />
+      )}
+    </div>
+  )
+}
+
 export function ProjectSettingsDialog({ project, onSave, onCancel }: Props) {
   const { settings, addToast } = useAppStore()
-  const [commands, setCommands] = useState<StartupCommand[]>(
-    project.startupCommands?.length ? [...project.startupCommands] : []
+  const [commands, setCommands] = useState<StartupCommand[]>(() =>
+    normalizeStartupCommands(project.startupCommands),
   )
+  const [startupOpen, setStartupOpen] = useState(() => (project.startupCommands?.length ?? 0) > 0)
   const [syncing, setSyncing] = useState(false)
   const [prLinkProvider, setPrLinkProvider] = useState<PrLinkProvider>(
     project.prLinkProvider ?? 'github'
   )
+  const [expandedCommandRows, setExpandedCommandRows] = useState<Set<number>>(() => {
+    const list = normalizeStartupCommands(project.startupCommands)
+    const s = new Set<number>()
+    list.forEach((c, i) => {
+      if (c.command.includes('\n')) s.add(i)
+    })
+    return s
+  })
+
+  const shiftExpandedIndices = useCallback((removedIndex: number) => {
+    setExpandedCommandRows((prev) => {
+      const next = new Set<number>()
+      for (const idx of prev) {
+        if (idx < removedIndex) next.add(idx)
+        else if (idx > removedIndex) next.add(idx - 1)
+      }
+      return next
+    })
+  }, [])
 
   const handleAdd = useCallback(() => {
     setCommands((prev) => [...prev, { name: '', command: '' }])
   }, [])
 
-  const handleRemove = useCallback((index: number) => {
-    setCommands((prev) => prev.filter((_, i) => i !== index))
-  }, [])
+  const handleRemove = useCallback(
+    (index: number) => {
+      shiftExpandedIndices(index)
+      setCommands((prev) => prev.filter((_, i) => i !== index))
+    },
+    [shiftExpandedIndices],
+  )
+
+  const toggleCommandExpand = useCallback((index: number) => {
+    setExpandedCommandRows((prev) => {
+      const next = new Set(prev)
+      const isOpen = next.has(index)
+      if (isOpen) {
+        const cmd = commands[index]
+        if (cmd?.command.includes('\n')) return prev
+        next.delete(index)
+      } else {
+        next.add(index)
+      }
+      return next
+    })
+  }, [commands])
 
   const handleChange = useCallback((index: number, field: keyof StartupCommand, value: string) => {
     setCommands((prev) =>
@@ -34,10 +167,9 @@ export function ProjectSettingsDialog({ project, onSave, onCancel }: Props) {
   }, [])
 
   const handleSave = useCallback(() => {
-    // Filter out entries with no command
-    const filtered = commands.filter((c) => c.command.trim())
+    const normalized = normalizeStartupCommands(commands)
     onSave({
-      startupCommands: filtered.length > 0 ? filtered : [],
+      startupCommands: normalized.length > 0 ? normalized : [],
       prLinkProvider,
     })
   }, [commands, onSave, prLinkProvider])
@@ -49,47 +181,57 @@ export function ProjectSettingsDialog({ project, onSave, onCancel }: Props) {
     [onCancel]
   )
 
+  const configuredStartupCount = commands.filter((c) => c.command.trim()).length
+
   return (
     <div className={styles.overlay} onClick={onCancel}>
       <div className={styles.dialog} onClick={(e) => e.stopPropagation()} onKeyDown={handleKeyDown}>
         <div className={styles.title}>{project.name}</div>
 
-        <label className={styles.label}>Startup Commands</label>
-        <div className={styles.hint}>
-          Run in separate terminals when creating a workspace.
-        </div>
+        <button
+          type="button"
+          className={styles.sectionToggle}
+          onClick={() => setStartupOpen((o) => !o)}
+          aria-expanded={startupOpen}
+        >
+          <span className={styles.sectionToggleLabel}>Startup commands</span>
+          <span className={styles.sectionToggleMeta}>
+            {configuredStartupCount > 0 ? `${configuredStartupCount} configured` : 'optional'}
+          </span>
+          <span className={`${styles.sectionChevron} ${startupOpen ? styles.sectionChevronOpen : ''}`} aria-hidden>
+            ▸
+          </span>
+        </button>
 
-        <div className={styles.commandList}>
-          {commands.map((cmd, i) => (
-            <div key={i} className={styles.commandRow}>
-              <input
-                className={`${styles.input} ${styles.nameInput}`}
-                value={cmd.name}
-                onChange={(e) => handleChange(i, 'name', e.target.value)}
-                placeholder="Tab name"
-              />
-              <input
-                className={styles.input}
-                value={cmd.command}
-                onChange={(e) => handleChange(i, 'command', e.target.value)}
-                placeholder="command"
-                autoFocus={i === commands.length - 1}
-              />
-              <button
-                className={styles.removeBtn}
-                onClick={() => handleRemove(i)}
-                title="Remove"
-              >
-                ✕
+        {startupOpen && (
+          <>
+            <div className={styles.hint}>
+              Each row opens its own tab. To run steps in order in one tab, use{' '}
+              <code className={styles.inlineCode}>&&</code> (for example{' '}
+              <code className={styles.inlineCode}>pnpm install && pnpm dev</code>).
+            </div>
+
+            <div className={styles.commandList}>
+              {commands.map((cmd, i) => (
+                <StartupCommandRow
+                  key={i}
+                  cmd={cmd}
+                  expanded={expandedCommandRows.has(i)}
+                  autoFocusCommand={i === commands.length - 1}
+                  onNameChange={(v) => handleChange(i, 'name', v)}
+                  onCommandChange={(v) => handleChange(i, 'command', v)}
+                  onRemove={() => handleRemove(i)}
+                  onToggleExpand={() => toggleCommandExpand(i)}
+                />
+              ))}
+
+              <button className={styles.addBtn} onClick={handleAdd}>
+                <span>+</span>
+                <span>Add command</span>
               </button>
             </div>
-          ))}
-
-          <button className={styles.addBtn} onClick={handleAdd}>
-            <span>+</span>
-            <span>Add command</span>
-          </button>
-        </div>
+          </>
+        )}
 
         <label className={styles.label}>PR Link Provider</label>
         <div className={styles.hint}>

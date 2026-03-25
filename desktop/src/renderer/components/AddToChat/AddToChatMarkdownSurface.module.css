@@ -1,0 +1,31 @@
+.previewWrap {
+  position: relative;
+  width: 100%;
+  min-height: 100%;
+}
+
+.floatBtn {
+  position: absolute;
+  z-index: 20;
+  transform: translateX(-50%);
+  padding: 6px 12px;
+  border-radius: var(--radius-full, 999px);
+  border: 1px solid var(--border-subtle, #3b3d57);
+  background: var(--surface-3, #2a2b3d);
+  color: var(--text-primary, #c0caf5);
+  font-size: var(--text-xs, 11px);
+  font-family: var(--font-ui, -apple-system, sans-serif);
+  font-weight: 500;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+  user-select: none;
+}
+
+.floatBtn:hover {
+  background: var(--surface-4, rgba(255, 255, 255, 0.08));
+}
+
+.floatBtn:focus-visible {
+  outline: 2px solid var(--accent-blue, #7aa2f7);
+  outline-offset: 2px;
+}

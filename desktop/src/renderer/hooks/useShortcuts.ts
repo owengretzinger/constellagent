@@ -1,7 +1,9 @@
 import { useEffect } from 'react'
 import { useAppStore } from '../store/app-store'
 import { resolveEditor } from '../store/types'
-import { getFocusedPtyId, isFocusedPaneTerminal } from '../store/split-helpers'
+import { getFocusedPtyId, isFocusedPaneTerminal, resolveAgentPtyForContextInjection } from '../store/split-helpers'
+import { sendAddToChatText, findMarkdownPreviewRootForCurrentSelection } from '../utils/add-to-chat'
+import { runMonacoAddToChatIfFocused } from '../utils/add-to-chat-monaco-bridge'
 
 export function useShortcuts() {
   useEffect(() => {
@@ -87,6 +89,36 @@ export function useShortcuts() {
       function consume() {
         e.preventDefault()
         e.stopPropagation()
+      }
+
+      // ── Add to Chat: Cmd+L — Monaco (capture phase) + markdown preview
+      if (!shift && !alt && e.code === 'KeyL') {
+        const target = e.target as HTMLElement
+        const activeEl = document.activeElement as HTMLElement | null
+        if (target?.closest?.('[class*="terminalInner"]') || activeEl?.closest?.('[class*="terminalInner"]')) {
+          return
+        }
+
+        const inMonaco =
+          target?.closest?.('[class*="monaco-editor"]') ?? activeEl?.closest?.('[class*="monaco-editor"]')
+        if (inMonaco) {
+          if (runMonacoAddToChatIfFocused()) {
+            consume()
+          }
+          return
+        }
+
+        const preview =
+          (target?.closest?.('[data-constellagent-md-preview]') as HTMLElement | null)
+          ?? (activeEl?.closest?.('[data-constellagent-md-preview]') as HTMLElement | null)
+          ?? findMarkdownPreviewRootForCurrentSelection()
+        if (!preview) return
+        const filePathAttr = preview.dataset.constellagentFilePath
+        const text = window.getSelection()?.toString().trim() ?? ''
+        if (!filePathAttr || !text) return
+        consume()
+        sendAddToChatText(filePathAttr, 'markdown', text)
+        return
       }
 
       // ── Quick open: Cmd+P ──
@@ -369,11 +401,12 @@ export function useShortcuts() {
       if (!filePath) return
 
       const s = useAppStore.getState()
-      const tab = s.tabs.find((t) => t.id === s.activeTabId)
-      if (tab?.type === 'terminal' && isFocusedPaneTerminal(tab.splitRoot, tab.focusedPaneId)) {
-        const pty = getFocusedPtyId(tab.splitRoot, tab.focusedPaneId, tab.ptyId)
-        if (pty) window.api.pty.write(pty, `\x1b[200~${filePath}\x1b[201~`)
-      }
+      const pty = resolveAgentPtyForContextInjection({
+        tabs: s.tabs,
+        activeTabId: s.activeTabId,
+        activeWorkspaceId: s.activeWorkspaceId,
+      })
+      if (pty) window.api.pty.write(pty, `\x1b[200~${filePath}\x1b[201~`)
     }
 
     document.addEventListener('paste', handlePaste, true)

@@ -11,6 +11,7 @@ import type { PlanAgent } from '../shared/agent-plan-path'
 import type { CreateWorktreeProgressEvent } from '../shared/workspace-creation'
 import { PtyManager, type PtyWriteOpts } from './pty-manager'
 import { GitService } from './git-service'
+import { WorktreeSyncService } from './worktree-sync-service'
 import { GithubService } from './github-service'
 import { FileService, type FileNode } from './file-service'
 import { readPlanMeta } from './plan-meta'
@@ -25,8 +26,11 @@ import { SkillsService } from './skills-service'
 
 import { ContextDb } from './context-db'
 import { getAgentFS, closeAllAgentFS, checkpoint, checkpointAll } from './agentfs-service'
+import { AnnotationService, cleanupAnnotationWatchers, setAnnotationNotify } from './annotation-service'
+import type { DiffAnnotationAddInput } from '../shared/diff-annotation-types'
 
 const ptyManager = new PtyManager()
+const worktreeSyncService = new WorktreeSyncService()
 
 // Wire up OSC title changes to persist session meta in AgentFS
 ptyManager.onTitleChanged = (ptyId, title, workspaceId, workingDir) => {
@@ -448,6 +452,34 @@ function isTabLike(value: unknown): value is TabLike {
   return isRecord(value) && typeof value.id === 'string' && typeof value.workspaceId === 'string'
 }
 
+/**
+ * macOS often stores `/var/...` while Node/git use `/private/var/...` (or the reverse).
+ * A plain existsSync on the persisted string can falsely drop valid workspaces on load.
+ */
+function resolveWorktreePathIfExists(worktreePath: string): string | null {
+  const trimmed = worktreePath.trim()
+  if (!trimmed) return null
+  const norm = trimmed.replace(/\/+$/, '') || '/'
+  const variants = new Set<string>([trimmed, norm])
+  if (norm.startsWith('/var/') && !norm.startsWith('/private/')) {
+    variants.add('/private' + norm)
+  }
+  if (norm.startsWith('/private/var/')) {
+    const stripped = norm.slice('/private'.length)
+    if (stripped) variants.add(stripped)
+  }
+  for (const v of variants) {
+    try {
+      if (existsSync(v)) {
+        return realpathSync(v)
+      }
+    } catch {
+      // realpathSync can throw on race / permission
+    }
+  }
+  return null
+}
+
 function sanitizeLoadedState(data: unknown): StateSanitizeResult {
   if (!isRecord(data)) return { data, changed: false, removedWorkspaceCount: 0 }
   const rawWorkspaces = Array.isArray(data.workspaces) ? data.workspaces : null
@@ -456,17 +488,28 @@ function sanitizeLoadedState(data: unknown): StateSanitizeResult {
   const keptWorkspaces: unknown[] = []
   const keptWorkspaceIds = new Set<string>()
   let removedWorkspaceCount = 0
+  let pathNormalized = false
 
   for (const workspace of rawWorkspaces) {
-    if (!isWorkspaceLike(workspace) || !existsSync(workspace.worktreePath)) {
+    if (!isWorkspaceLike(workspace)) {
       removedWorkspaceCount += 1
       continue
     }
-    keptWorkspaces.push(workspace)
+    const resolved = resolveWorktreePathIfExists(workspace.worktreePath)
+    if (!resolved) {
+      removedWorkspaceCount += 1
+      continue
+    }
     keptWorkspaceIds.add(workspace.id)
+    if (resolved === workspace.worktreePath) {
+      keptWorkspaces.push(workspace)
+    } else {
+      pathNormalized = true
+      keptWorkspaces.push({ ...workspace, worktreePath: resolved })
+    }
   }
 
-  if (removedWorkspaceCount === 0) {
+  if (removedWorkspaceCount === 0 && !pathNormalized) {
     return { data, changed: false, removedWorkspaceCount: 0 }
   }
 
@@ -532,6 +575,12 @@ function sanitizeLoadedState(data: unknown): StateSanitizeResult {
 }
 
 export function registerIpcHandlers(): void {
+  setAnnotationNotify((worktreePath: string) => {
+    for (const win of BrowserWindow.getAllWindows()) {
+      if (!win.isDestroyed()) win.webContents.send(IPC.ANNOTATION_CHANGED, { worktreePath })
+    }
+  })
+
   // ── Git handlers ──
   ipcMain.handle(IPC.GIT_LIST_WORKTREES, async (_e, repoPath: string) => {
     return GitService.listWorktrees(repoPath)
@@ -620,6 +669,24 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle(IPC.GIT_GET_COMMIT_DIFF, async (_e, worktreePath: string, hash: string) => {
     return GitService.getCommitDiff(worktreePath, hash)
+  })
+
+  ipcMain.handle(IPC.GIT_SYNC_ALL_WORKTREES, async (_e, projectId: string) => {
+    await worktreeSyncService.syncNow(projectId)
+  })
+
+  ipcMain.handle(IPC.GIT_START_SYNC_POLLING, async (_e, projectId: string, repoPath: string) => {
+    worktreeSyncService.startPolling(projectId, repoPath)
+  })
+
+  ipcMain.handle(IPC.GIT_STOP_SYNC_POLLING, async (_e, projectId: string) => {
+    worktreeSyncService.stopPolling(projectId)
+  })
+
+  ipcMain.on(IPC.GIT_SYNC_SET_BUSY, (_e, paths: unknown) => {
+    if (!Array.isArray(paths)) return
+    const strings = paths.filter((p): p is string => typeof p === 'string')
+    worktreeSyncService.setBusyWorktrees(strings)
   })
 
   // ── GitHub handlers ──
@@ -761,7 +828,7 @@ export function registerIpcHandlers(): void {
     return FileService.findNewestPlanMarkdown(worktreePath)
   })
 
-  ipcMain.handle(IPC.FS_LIST_AGENT_PLANS, async (_e, worktreePath: string) => {
+  ipcMain.handle(IPC.FS_LIST_AGENT_PLANS, async (_e, worktreePath: string | string[]) => {
     return FileService.listAgentPlanMarkdowns(worktreePath)
   })
 
@@ -1745,6 +1812,23 @@ Cachebro is pre-configured via \`npx cachebro init\`. Use the cachebro MCP tools
     return filePath
   })
 
+  // ── Diff annotations (`{worktree}/.constellagent/annotations.json`) ──
+  ipcMain.handle(IPC.ANNOTATION_LOAD, async (_e, worktreePath: string) => {
+    return AnnotationService.load(worktreePath)
+  })
+
+  ipcMain.handle(IPC.ANNOTATION_ADD, async (_e, worktreePath: string, input: DiffAnnotationAddInput) => {
+    return AnnotationService.add(worktreePath, input)
+  })
+
+  ipcMain.handle(IPC.ANNOTATION_RESOLVE, async (_e, worktreePath: string, id: string) => {
+    await AnnotationService.resolve(worktreePath, id)
+  })
+
+  ipcMain.handle(IPC.ANNOTATION_DELETE, async (_e, worktreePath: string, id: string) => {
+    await AnnotationService.delete(worktreePath, id)
+  })
+
   // ── State persistence handlers ──
   const stateFilePath = () =>
     join(app.getPath('userData'), 'constellagent-state.json')
@@ -1781,9 +1865,11 @@ Cachebro is pre-configured via \`npx cachebro init\`. Use the cachebro MCP tools
 
 /** Kill all PTY processes and stop all automation jobs. Call on app quit. */
 export function cleanupAll(): void {
+  worktreeSyncService.stopAll()
   ptyManager.destroyAll()
   automationScheduler.destroyAll()
   lspService.shutdown()
+  cleanupAnnotationWatchers()
   for (const watcher of pendingIndexerWatchers.values()) watcher.close()
   pendingIndexerWatchers.clear()
   // Close AgentFS-backed context databases (async, best-effort on quit)

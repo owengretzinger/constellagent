@@ -43,6 +43,67 @@
   margin-top: calc(-1 * var(--space-2));
 }
 
+.sectionToggle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--surface-0);
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  text-align: left;
+  transition: border-color var(--transition-fast), background var(--transition-fast);
+}
+
+.sectionToggle:hover {
+  border-color: var(--border-strong);
+  background: var(--surface-3);
+}
+
+.sectionToggleLabel {
+  font-weight: var(--weight-semibold);
+  color: var(--text-tertiary);
+}
+
+.sectionToggleMeta {
+  margin-left: auto;
+  margin-right: var(--space-2);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-normal);
+  text-transform: none;
+  letter-spacing: normal;
+  color: var(--text-ghost);
+}
+
+.sectionChevron {
+  display: inline-block;
+  flex-shrink: 0;
+  font-size: 10px;
+  color: var(--text-tertiary);
+  transform: rotate(0deg);
+  transition: transform var(--transition-fast);
+}
+
+.sectionChevronOpen {
+  transform: rotate(90deg);
+}
+
+.inlineCode {
+  font-family: var(--font-mono);
+  font-size: 0.95em;
+  color: var(--text-secondary);
+  background: var(--surface-3);
+  padding: 0.1em 0.35em;
+  border-radius: var(--radius-sm);
+}
+
 .commandList {
   display: flex;
   flex-direction: column;
@@ -55,7 +116,88 @@
   align-items: center;
 }
 
-.commandRow .input {
+.commandBlock {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.commandRowTop {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.commandInput {
+  flex: 1;
+  min-width: 0;
+}
+
+.commandTextarea {
+  width: 100%;
+  min-height: 72px;
+  max-height: 280px;
+  resize: vertical;
+  line-height: 1.45;
+  box-sizing: border-box;
+  padding: var(--space-3) var(--space-4);
+  background: var(--surface-0);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  font-family: var(--font-mono);
+  outline: none;
+  transition: border-color var(--transition-fast);
+}
+
+.commandTextarea:focus {
+  border-color: var(--accent-blue);
+}
+
+.expandCmdBtn {
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--surface-0);
+  color: var(--text-tertiary);
+  font-size: 10px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition:
+    border-color var(--transition-fast),
+    color var(--transition-fast),
+    background var(--transition-fast);
+}
+
+.expandCmdBtn:hover:not(:disabled) {
+  border-color: var(--accent-blue);
+  color: var(--accent-blue);
+  background: var(--surface-3);
+}
+
+.expandCmdBtn:focus-visible {
+  outline: 2px solid var(--accent-blue);
+  outline-offset: 1px;
+}
+
+.expandCmdBtn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.expandCmdIcon {
+  display: block;
+  transform: translateY(-1px);
+}
+
+.commandRow .input,
+.commandRowTop .input {
   flex: 1;
   padding: var(--space-3) var(--space-4);
   background: var(--surface-0);
@@ -69,7 +211,8 @@
   min-width: 0;
 }
 
-.commandRow .input:focus {
+.commandRow .input:focus,
+.commandRowTop .input:focus {
   border-color: var(--accent-blue);
 }
 
