@@ -5,6 +5,7 @@ import type { CreateWorktreeProgressEvent } from '../shared/workspace-creation'
 import type { SyncProgress, SyncResult } from '../shared/sync-types'
 import type { PlanAgent } from '../shared/agent-plan-path'
 import type { WorktreeSyncEvent } from '../shared/worktree-sync-types'
+import type { GraphiteStackInfo } from '../shared/graphite-types'
 import type { DiffAnnotation, DiffAnnotationAddInput } from '../shared/diff-annotation-types'
 
 const api = {
@@ -64,6 +65,17 @@ const api = {
         ipcRenderer.removeListener(IPC.GIT_WORKTREE_SYNC_STATUS, listener)
       }
     },
+  },
+
+  graphite: {
+    getStack: (repoPath: string, worktreePath: string) =>
+      ipcRenderer.invoke(IPC.GRAPHITE_GET_STACK, repoPath, worktreePath) as Promise<GraphiteStackInfo | null>,
+    checkoutBranch: (worktreePath: string, branch: string) =>
+      ipcRenderer.invoke(IPC.GRAPHITE_CHECKOUT_BRANCH, worktreePath, branch) as Promise<string>,
+    cloneStack: (repoPath: string, name: string, prBranches: { name: string; parent: string | null }[]) =>
+      ipcRenderer.invoke(IPC.GRAPHITE_CLONE_STACK, repoPath, name, prBranches) as Promise<{ worktreePath: string; branch: string }>,
+    getStackForPr: (repoPath: string, prBranch: string) =>
+      ipcRenderer.invoke(IPC.GRAPHITE_GET_STACK_FOR_PR, repoPath, prBranch) as Promise<{ name: string; parent: string | null }[] | null>,
   },
 
   pty: {

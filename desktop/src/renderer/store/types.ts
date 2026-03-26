@@ -1,6 +1,7 @@
 import type { editor } from 'monaco-editor'
 import type { PrInfo } from '@shared/github-types'
 import type { WorkspaceSyncInfo } from '@shared/worktree-sync-types'
+import type { GraphiteStackInfo } from '@shared/graphite-types'
 
 /** Used with `waitFor`: how long / how to wait after the dependency before starting this command */
 export type WaitCondition =
@@ -203,6 +204,8 @@ export interface AppState {
   gitFileStatuses: Map<string, Map<string, string>>
   /** Per-workspace worktree sync status (key = workspace id) */
   worktreeSyncStatus: Map<string, WorkspaceSyncInfo>
+  /** Graphite stack info per workspace (key = workspace id). Ephemeral, not persisted. */
+  graphiteStacks: Map<string, GraphiteStackInfo>
   /** Last seen `git ls-remote origin HEAD` hash per project (background poller) */
   lastKnownRemoteHead: Record<string, string>
   activeMonacoEditor: editor.IStandaloneCodeEditor | null
@@ -308,6 +311,7 @@ export interface AppState {
   setPrStatuses: (projectId: string, statuses: Record<string, PrInfo | null>) => void
   setGhAvailability: (projectId: string, available: boolean) => void
   setWorktreeSyncStatus: (projectId: string, workspaces: Record<string, WorkspaceSyncInfo>) => void
+  setGraphiteStack: (workspaceId: string, stack: GraphiteStackInfo | null) => void
 
   // Automation actions
   addAutomation: (automation: Automation) => void

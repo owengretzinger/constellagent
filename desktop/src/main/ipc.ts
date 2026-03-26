@@ -23,6 +23,7 @@ import { loadMcpServersFromConfig, removeServerFromConfig } from './mcp-config'
 import { CLAUDE_CONFIG_PATH } from './claude-config'
 import { LspService } from './lsp/lsp-service'
 import { SkillsService } from './skills-service'
+import { GraphiteService } from './graphite-service'
 
 import { ContextDb } from './context-db'
 import { getAgentFS, closeAllAgentFS, checkpoint, checkpointAll } from './agentfs-service'
@@ -722,6 +723,23 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle(IPC.GITHUB_RESOLVE_PR, async (_e, repoPath: string, prNumber: number, repoSlug?: string) => {
     return GithubService.resolvePr(repoPath, prNumber, repoSlug)
+  })
+
+  // ── Graphite handlers ──
+  ipcMain.handle(IPC.GRAPHITE_GET_STACK, async (_e, repoPath: string, worktreePath: string) => {
+    return GraphiteService.getStackInfo(repoPath, worktreePath)
+  })
+
+  ipcMain.handle(IPC.GRAPHITE_CHECKOUT_BRANCH, async (_e, worktreePath: string, branch: string) => {
+    return GraphiteService.checkoutBranch(worktreePath, branch)
+  })
+
+  ipcMain.handle(IPC.GRAPHITE_CLONE_STACK, async (_e, repoPath: string, name: string, prBranches: { name: string; parent: string | null }[]) => {
+    return GraphiteService.cloneStack(repoPath, name, prBranches)
+  })
+
+  ipcMain.handle(IPC.GRAPHITE_GET_STACK_FOR_PR, async (_e, repoPath: string, prBranch: string) => {
+    return GraphiteService.getStackForPr(repoPath, prBranch)
   })
 
   // ── PTY handlers ──

@@ -7,6 +7,7 @@ import { WorkspaceDialog } from "./WorkspaceDialog";
 import { ProjectSettingsDialog } from "./ProjectSettingsDialog";
 
 import { Tooltip } from "../Tooltip/Tooltip";
+import { GraphiteStack } from "./GraphiteStack";
 import { CONSTELLAGENT_WORKSPACE_MIME } from "../../utils/add-to-chat";
 import styles from "./Sidebar.module.css";
 
@@ -366,6 +367,7 @@ export function Sidebar() {
   const settings = useAppStore((s) => s.settings);
   const setGhAvailability = useAppStore((s) => s.setGhAvailability);
   const worktreeSyncMap = useAppStore((s) => s.worktreeSyncStatus);
+  const graphiteStacks = useAppStore((s) => s.graphiteStacks);
 
   const [manualCollapsed, setManualCollapsed] = useState<Set<string>>(
     new Set(),
@@ -393,6 +395,7 @@ export function Sidebar() {
     Record<string, string | null>
   >({});
   const [pullingPrKey, setPullingPrKey] = useState<string | null>(null);
+  const [pullingStackPrKey, setPullingStackPrKey] = useState<string | null>(null);
   const [projectPrSearch, setProjectPrSearch] = useState("");
   const draggingWorkspaceIdRef = useRef<string | null>(null);
   const editRef = useRef<string>("");
@@ -853,6 +856,63 @@ export function Sidebar() {
     ],
   );
 
+  const handlePullGraphiteStack = useCallback(
+    async (project: Project, pr: OpenPrInfo) => {
+      const prKey = `${project.id}:${pr.number}`;
+      if (pullingStackPrKey || workspaceCreation) return;
+      setPullingStackPrKey(prKey);
+
+      try {
+        // Discover the stack for this PR's branch
+        const headBranch = sanitizeBranchName(pr.headRefName) || `pr-${pr.number}`;
+        const stackBranches = await window.api.graphite.getStackForPr(
+          project.repoPath,
+          headBranch,
+        );
+
+        if (!stackBranches || stackBranches.length === 0) {
+          addToast({
+            id: crypto.randomUUID(),
+            message: `No Graphite stack found for branch "${headBranch}"`,
+            type: "error",
+          });
+          return;
+        }
+
+        const stackName = uniqueWorkspaceName(
+          `stack-${pr.number}`,
+          project.id,
+          workspaces,
+        );
+
+        const { worktreePath, branch } = await window.api.graphite.cloneStack(
+          project.repoPath,
+          stackName,
+          stackBranches,
+        );
+
+        await finishCreateWorkspace(project, stackName, branch, worktreePath);
+        closeProjectPrModal();
+      } catch (err) {
+        const msg =
+          err instanceof Error
+            ? err.message
+            : `Failed to pull Graphite stack for PR #${pr.number}`;
+        addToast({ id: crypto.randomUUID(), message: msg, type: "error" });
+      } finally {
+        setPullingStackPrKey((prev) => (prev === prKey ? null : prev));
+      }
+    },
+    [
+      pullingStackPrKey,
+      workspaceCreation,
+      workspaces,
+      finishCreateWorkspace,
+      closeProjectPrModal,
+      addToast,
+    ],
+  );
+
   const handleResumeAgent = useCallback(
     async (wsId: string, agent: 'claude' | 'codex' | 'gemini') => {
       setContextMenu(null);
@@ -1066,7 +1126,7 @@ export function Sidebar() {
                         key={ws.id}
                         className={`${styles.workspaceItem} ${
                           ws.id === activeWorkspaceId ? styles.active : ""
-                        } ${unreadWorkspaceIds.has(ws.id) ? styles.unread : ""} ${activeClaudeWorkspaceIds.has(ws.id) ? styles.claudeActive : ""} ${draggedWsId === ws.id ? styles.workspaceItemDragging : ""} ${dropTargetWsId === ws.id && draggedWsId !== ws.id ? styles.workspaceItemDropTarget : ""}`}
+                        } ${unreadWorkspaceIds.has(ws.id) ? styles.unread : ""} ${activeClaudeWorkspaceIds.has(ws.id) ? styles.claudeActive : ""} ${draggedWsId === ws.id ? styles.workspaceItemDragging : ""} ${dropTargetWsId === ws.id && draggedWsId !== ws.id ? styles.workspaceItemDropTarget : ""} ${graphiteStacks.has(ws.id) && (graphiteStacks.get(ws.id)?.branches.length ?? 0) > 1 ? styles.graphiteWorkspace : ""}`}
                         draggable={!isEditing}
                         onClick={() =>
                           !isEditing && handleSelectWorkspace(ws.id)
@@ -1163,6 +1223,11 @@ export function Sidebar() {
                             />
                             <WorkspaceSyncIndicator workspaceId={ws.id} />
                           </span>
+                          <GraphiteStack
+                            workspaceId={ws.id}
+                            projectId={ws.projectId}
+                            worktreePath={ws.worktreePath}
+                          />
                         </div>
                         <Tooltip label="Delete workspace">
                           <button
@@ -1348,7 +1413,8 @@ export function Sidebar() {
                       ws.branch === localBranch,
                   );
                   const isPulling = pullingPrKey === prKey;
-                  const disablePull = !!workspaceCreation || !!pullingPrKey;
+                  const isPullingStack = pullingStackPrKey === prKey;
+                  const disablePull = !!workspaceCreation || !!pullingPrKey || !!pullingStackPrKey;
 
                   return (
                     <div key={pr.number} className={styles.projectPrRow}>
@@ -1417,6 +1483,17 @@ export function Sidebar() {
                               ? "Pulling..."
                               : "Pull locally"}
                         </button>
+                        {projectPrModalProject.prLinkProvider === "graphite" && !existingWorkspace && (
+                          <button
+                            className={styles.projectPrPullBtn}
+                            onClick={() => {
+                              void handlePullGraphiteStack(projectPrModalProject, pr);
+                            }}
+                            disabled={disablePull}
+                          >
+                            {isPullingStack ? "Pulling stack..." : "Pull stack"}
+                          </button>
+                        )}
                       </div>
                     </div>
                   );
