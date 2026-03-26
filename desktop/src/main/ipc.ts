@@ -605,6 +605,14 @@ export function registerIpcHandlers(): void {
     return GitService.listWorktrees(repoPath)
   })
 
+  ipcMain.handle(IPC.GIT_CHECK_IS_REPO, async (_e, dirPath: string) => {
+    return GitService.isGitRepo(dirPath)
+  })
+
+  ipcMain.handle(IPC.GIT_INIT_REPO, async (_e, dirPath: string) => {
+    return GitService.initRepo(dirPath)
+  })
+
   ipcMain.handle(IPC.GIT_CREATE_WORKTREE, async (_e, repoPath: string, name: string, branch: string, newBranch: boolean, baseBranch?: string, force?: boolean, requestId?: string) => {
     return GitService.createWorktree(
       repoPath,

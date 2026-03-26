@@ -1,6 +1,6 @@
 import { execFile } from 'child_process'
 import { existsSync } from 'fs'
-import { copyFile, mkdir, readdir, rm } from 'fs/promises'
+import { copyFile, mkdir, readdir, rm, writeFile } from 'fs/promises'
 import { promisify } from 'util'
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'path'
 import type { CreateWorktreeProgress } from '../shared/workspace-creation'
@@ -99,6 +99,15 @@ function ensureWithinParent(parentDir: string, candidatePath: string): void {
 }
 
 const SKIP_DIRS = new Set([...FILE_SKIP_DIRS, 'out'])
+const DEFAULT_GITIGNORE = [
+  'node_modules/',
+  'dist/',
+  'build/',
+  'out/',
+  'coverage/',
+  '.DS_Store',
+  '*.log',
+].join('\n') + '\n'
 
 async function copyEnvFiles(dir: string, destRoot: string, srcRoot: string): Promise<void> {
   try {
@@ -131,6 +140,40 @@ export class GitService {
       () => true,
       () => false,
     )
+  }
+
+  static async isGitRepo(dirPath: string): Promise<boolean> {
+    return git(['rev-parse', '--show-toplevel'], dirPath).then(
+      () => true,
+      () => false,
+    )
+  }
+
+  static async initRepo(dirPath: string): Promise<void> {
+    if (await this.isGitRepo(dirPath)) {
+      throw new Error('Directory is already inside a git repository')
+    }
+
+    try {
+      await git(['init'], dirPath)
+
+      const gitignorePath = join(dirPath, '.gitignore')
+      if (!existsSync(gitignorePath)) {
+        await writeFile(gitignorePath, DEFAULT_GITIGNORE, 'utf-8')
+      }
+
+      await git(['add', '-A'], dirPath)
+      await git([
+        '-c', 'user.name=Constellagent',
+        '-c', 'user.email=noreply@constellagent',
+        'commit',
+        '--no-gpg-sign',
+        '--allow-empty',
+        '-m', 'Initial commit',
+      ], dirPath)
+    } catch (err) {
+      throw new Error(friendlyGitError(err, 'Failed to initialize repository'))
+    }
   }
 
   static async listWorktrees(repoPath: string): Promise<WorktreeInfo[]> {

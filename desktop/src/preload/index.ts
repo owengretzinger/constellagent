@@ -12,6 +12,10 @@ const api = {
   git: {
     listWorktrees: (repoPath: string) =>
       ipcRenderer.invoke(IPC.GIT_LIST_WORKTREES, repoPath),
+    checkIsRepo: (dirPath: string) =>
+      ipcRenderer.invoke(IPC.GIT_CHECK_IS_REPO, dirPath) as Promise<boolean>,
+    initRepo: (dirPath: string) =>
+      ipcRenderer.invoke(IPC.GIT_INIT_REPO, dirPath) as Promise<void>,
     createWorktree: (repoPath: string, name: string, branch: string, newBranch: boolean, baseBranch?: string, force?: boolean, requestId?: string) =>
       ipcRenderer.invoke(IPC.GIT_CREATE_WORKTREE, repoPath, name, branch, newBranch, baseBranch, force, requestId),
     createWorktreeFromPr: (repoPath: string, name: string, prNumber: number, localBranch: string, force?: boolean, requestId?: string) =>

@@ -478,10 +478,42 @@ export function Sidebar() {
     const dirPath = await window.api.app.selectDirectory();
     if (!dirPath) return;
 
-    const name = dirPath.split("/").pop() || dirPath;
-    const id = crypto.randomUUID();
-    addProject({ id, name, repoPath: dirPath });
-  }, [addProject]);
+    try {
+      const isRepo = await window.api.git.checkIsRepo(dirPath);
+      const name = dirPath.split("/").pop() || dirPath;
+      const id = crypto.randomUUID();
+
+      const addSelectedProject = () => {
+        addProject({ id, name, repoPath: dirPath });
+      };
+
+      if (!isRepo) {
+        showConfirmDialog({
+          title: "Initialize Git Repository",
+          message: `"${name}" is not a git repository. Initialize one to get started?`,
+          confirmLabel: "Initialize",
+          onConfirm: async () => {
+            dismissConfirmDialog();
+            try {
+              await window.api.git.initRepo(dirPath);
+              addSelectedProject();
+            } catch (err) {
+              const msg =
+                err instanceof Error ? err.message : "Failed to initialize repo";
+              addToast({ id: crypto.randomUUID(), message: msg, type: "error" });
+            }
+          },
+        });
+        return;
+      }
+
+      addSelectedProject();
+    } catch (err) {
+      const msg =
+        err instanceof Error ? err.message : "Failed to inspect directory";
+      addToast({ id: crypto.randomUUID(), message: msg, type: "error" });
+    }
+  }, [addProject, addToast, dismissConfirmDialog, showConfirmDialog]);
 
   const finishCreateWorkspace = useCallback(
     async (
@@ -1044,7 +1076,7 @@ export function Sidebar() {
                 padding: "0 var(--space-6)",
               }}
             >
-              No projects yet. Add a git repository to get started.
+              No projects yet. Add a directory or git repository to get started.
             </span>
           </div>
         )}
