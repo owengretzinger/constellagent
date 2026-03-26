@@ -31,6 +31,12 @@ export const IPC = {
   /** Renderer → main: worktree paths that have an active agent (busy for sync) */
   GIT_SYNC_SET_BUSY: 'git:sync-set-busy',
 
+  // Graphite stack operations
+  GRAPHITE_GET_STACK: 'graphite:get-stack',
+  GRAPHITE_CHECKOUT_BRANCH: 'graphite:checkout-branch',
+  GRAPHITE_CLONE_STACK: 'graphite:clone-stack',
+  GRAPHITE_GET_STACK_FOR_PR: 'graphite:get-stack-for-pr',
+
   // PTY operations
   PTY_CREATE: 'pty:create',
   PTY_WRITE: 'pty:write',

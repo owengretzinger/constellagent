@@ -115,6 +115,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   ghAvailability: new Map(),
   gitFileStatuses: new Map(),
   worktreeSyncStatus: new Map(),
+  graphiteStacks: new Map(),
   lastKnownRemoteHead: {},
   activeMonacoEditor: null,
   planBuildTerminalByPlanPath: {},
@@ -156,8 +157,10 @@ export const useAppStore = create<AppState>((set, get) => ({
       newGhAvailability.delete(id)
 
       const newWorktreeSyncStatus = new Map(s.worktreeSyncStatus)
+      const newGraphiteStacks = new Map(s.graphiteStacks)
       for (const ws of s.workspaces.filter((w) => w.projectId === id)) {
         newWorktreeSyncStatus.delete(ws.id)
+        newGraphiteStacks.delete(ws.id)
       }
 
       const tabMap = { ...s.lastActiveTabByWorkspace }
@@ -181,6 +184,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         prStatusMap: newPrStatusMap,
         ghAvailability: newGhAvailability,
         worktreeSyncStatus: newWorktreeSyncStatus,
+        graphiteStacks: newGraphiteStacks,
         activeWorkspaceId,
         activeTabId,
         lastActiveTabByWorkspace: tabMap,
@@ -208,12 +212,15 @@ export const useAppStore = create<AppState>((set, get) => ({
       delete tabMap[id]
       const newWorktreeSyncStatus = new Map(s.worktreeSyncStatus)
       newWorktreeSyncStatus.delete(id)
+      const newGraphiteStacks = new Map(s.graphiteStacks)
+      newGraphiteStacks.delete(id)
       return {
         workspaces: newWorkspaces,
         tabs: newTabs,
         unreadWorkspaceIds: newUnread,
         activeClaudeWorkspaceIds: newActiveClaude,
         worktreeSyncStatus: newWorktreeSyncStatus,
+        graphiteStacks: newGraphiteStacks,
         lastActiveTabByWorkspace: tabMap,
         planBuildTerminalByPlanPath,
         activeWorkspaceId:
@@ -1309,6 +1316,17 @@ export const useAppStore = create<AppState>((set, get) => ({
       return { worktreeSyncStatus: next }
     }),
 
+  setGraphiteStack: (workspaceId, stack) =>
+    set((s) => {
+      const next = new Map(s.graphiteStacks)
+      if (stack) {
+        next.set(workspaceId, stack)
+      } else {
+        next.delete(workspaceId)
+      }
+      return { graphiteStacks: next }
+    }),
+
   addAutomation: (automation) =>
     set((s) => ({ automations: [...s.automations, automation] })),
 
@@ -1410,6 +1428,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       lastActiveTabByWorkspace: data.lastActiveTabByWorkspace ?? {},
       settings,
       worktreeSyncStatus: new Map(),
+      graphiteStacks: new Map(),
       lastKnownRemoteHead: {},
       activeMonacoEditor: null,
       planBuildTerminalByPlanPath: {},
