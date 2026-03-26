@@ -24,6 +24,8 @@ import { CLAUDE_CONFIG_PATH } from './claude-config'
 import { LspService } from './lsp/lsp-service'
 import { SkillsService } from './skills-service'
 import { GraphiteService } from './graphite-service'
+import { IMessageService, type ProjectInfo } from './imessage-service'
+import type { PhoneControlSettings } from '../shared/phone-control-types'
 
 import { ContextDb } from './context-db'
 import { getAgentFS, closeAllAgentFS, checkpoint, checkpointAll } from './agentfs-service'
@@ -58,6 +60,51 @@ ptyManager.onTitleChanged = (ptyId, title, workspaceId, workingDir) => {
 
 const automationScheduler = new AutomationScheduler(ptyManager)
 const lspService = new LspService()
+
+// Phone control via iMessage
+const iMessageService = new IMessageService(
+  ptyManager,
+  () => {
+    // Read projects from persisted state on disk
+    try {
+      const statePath = join(app.getPath('userData'), 'constellagent-state.json')
+      const raw = JSON.parse(require('fs').readFileSync(statePath, 'utf-8'))
+      const projects = Array.isArray(raw?.projects) ? raw.projects : []
+      return projects.map((p: { id: string; name: string; repoPath: string }) => ({
+        id: p.id,
+        name: p.name,
+        repoPath: p.repoPath,
+      })) as ProjectInfo[]
+    } catch {
+      return []
+    }
+  },
+  () => {
+    // Read active workspace → project from persisted state
+    try {
+      const statePath = join(app.getPath('userData'), 'constellagent-state.json')
+      const raw = JSON.parse(require('fs').readFileSync(statePath, 'utf-8'))
+      const activeWsId = raw?.activeWorkspaceId
+      if (!activeWsId) return null
+      const ws = (raw?.workspaces ?? []).find((w: { id: string }) => w.id === activeWsId)
+      return ws?.projectId ?? null
+    } catch {
+      return null
+    }
+  },
+)
+
+// Wire phone control to PTY data stream
+ptyManager.onPtyData = (ptyId, data) => {
+  iMessageService.onPtyData(ptyId, data)
+}
+
+// Wire phone control to PTY title changes (chain with existing callback)
+const existingOnTitleChanged = ptyManager.onTitleChanged
+ptyManager.onTitleChanged = (ptyId, title, workspaceId, workingDir) => {
+  existingOnTitleChanged?.(ptyId, title, workspaceId, workingDir)
+  iMessageService.onTitleChanged(ptyId, title)
+}
 
 // Cache of open context databases keyed by projectDir
 const contextDbs = new Map<string, ContextDb>()
@@ -1897,6 +1944,23 @@ Cachebro is pre-configured via \`npx cachebro init\`. Use the cachebro MCP tools
     await AnnotationService.delete(worktreePath, id)
   })
 
+  // ── Phone control (iMessage) handlers ──
+  ipcMain.handle(IPC.PHONE_CONTROL_START, async (_e, settings: PhoneControlSettings) => {
+    await iMessageService.start(settings)
+  })
+
+  ipcMain.handle(IPC.PHONE_CONTROL_STOP, async () => {
+    iMessageService.stop()
+  })
+
+  ipcMain.handle(IPC.PHONE_CONTROL_STATUS, async () => {
+    return iMessageService.getStatus()
+  })
+
+  ipcMain.handle(IPC.PHONE_CONTROL_TEST_SEND, async (_e, message: string) => {
+    await iMessageService.testSend(message)
+  })
+
   // ── State persistence handlers ──
   const stateFilePath = () =>
     join(app.getPath('userData'), 'constellagent-state.json')
@@ -1931,11 +1995,17 @@ Cachebro is pre-configured via \`npx cachebro init\`. Use the cachebro MCP tools
   })
 }
 
+/** Expose the iMessage service so index.ts can wire the notification watcher callback. */
+export function getIMessageService(): IMessageService {
+  return iMessageService
+}
+
 /** Kill all PTY processes and stop all automation jobs. Call on app quit. */
 export function cleanupAll(): void {
   worktreeSyncService.stopAll()
   ptyManager.destroyAll()
   automationScheduler.destroyAll()
+  iMessageService.destroy()
   lspService.shutdown()
   cleanupAnnotationWatchers()
   for (const watcher of pendingIndexerWatchers.values()) watcher.close()

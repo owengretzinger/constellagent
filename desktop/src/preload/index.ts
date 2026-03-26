@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { IPC } from '../shared/ipc-channels'
 import type { AutomationConfig, AutomationRunStartedEvent } from '../shared/automation-types'
+import type { PhoneControlSettings } from '../shared/phone-control-types'
 import type { CreateWorktreeProgressEvent } from '../shared/workspace-creation'
 import type { SyncProgress, SyncResult } from '../shared/sync-types'
 import type { PlanAgent } from '../shared/agent-plan-path'
@@ -339,6 +340,17 @@ const api = {
         ipcRenderer.removeListener(IPC.ANNOTATION_CHANGED, listener)
       }
     },
+  },
+
+  phoneControl: {
+    start: (settings: PhoneControlSettings) =>
+      ipcRenderer.invoke(IPC.PHONE_CONTROL_START, settings),
+    stop: () =>
+      ipcRenderer.invoke(IPC.PHONE_CONTROL_STOP),
+    status: () =>
+      ipcRenderer.invoke(IPC.PHONE_CONTROL_STATUS) as Promise<{ running: boolean; contactId: string; sessionCount: number }>,
+    testSend: (message: string) =>
+      ipcRenderer.invoke(IPC.PHONE_CONTROL_TEST_SEND, message),
   },
 
   state: {

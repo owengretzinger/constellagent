@@ -161,6 +161,12 @@ export const IPC = {
   /** Main → renderer: annotations file changed for a worktree */
   ANNOTATION_CHANGED: 'annotation:changed',
 
+  // Phone control (iMessage)
+  PHONE_CONTROL_START: 'phone-control:start',
+  PHONE_CONTROL_STOP: 'phone-control:stop',
+  PHONE_CONTROL_STATUS: 'phone-control:status',
+  PHONE_CONTROL_TEST_SEND: 'phone-control:test-send',
+
   // State persistence
   STATE_SAVE: 'state:save',
   STATE_SAVE_SYNC: 'state:save-sync',

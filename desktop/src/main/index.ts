@@ -5,7 +5,7 @@ import { join, resolve } from 'path'
 import { symlink, unlink, stat, readlink } from 'fs/promises'
 import { execFile, execFileSync } from 'child_process'
 import { promisify } from 'util'
-import { registerIpcHandlers, cleanupAll } from './ipc'
+import { registerIpcHandlers, cleanupAll, getIMessageService } from './ipc'
 import { NotificationWatcher } from './notification-watcher'
 
 const execFileAsync = promisify(execFile)
@@ -185,8 +185,33 @@ app.whenReady().then(() => {
 
   registerIpcHandlers()
   notificationWatcher = new NotificationWatcher()
+  // Wire phone control to notification events
+  notificationWatcher.onNotify = (workspaceId) => {
+    getIMessageService().onNotify(workspaceId)
+  }
   notificationWatcher.start()
   createWindow()
+
+  // Auto-start phone control if enabled in persisted settings
+  try {
+    const statePath = join(app.getPath('userData'), 'constellagent-state.json')
+    const raw = JSON.parse(require('fs').readFileSync(statePath, 'utf-8'))
+    const s = raw?.settings
+    if (s?.phoneControlEnabled && s?.phoneControlContactId) {
+      getIMessageService().start({
+        enabled: true,
+        contactId: s.phoneControlContactId,
+        notifyOnStart: s.phoneControlNotifyOnStart ?? true,
+        notifyOnFinish: s.phoneControlNotifyOnFinish ?? true,
+        streamOutput: s.phoneControlStreamOutput ?? false,
+        streamIntervalSec: s.phoneControlStreamIntervalSec ?? 10,
+      }).catch((err: unknown) => {
+        console.error('[phone-control] Auto-start failed:', err)
+      })
+    }
+  } catch {
+    // State file may not exist yet — no auto-start
+  }
 
   // Auto-install CLI (fire-and-forget, don't block startup)
   autoInstallCli()

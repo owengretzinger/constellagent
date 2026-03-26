@@ -221,6 +221,7 @@ export class PtyManager {
   private nextId = 0
   onTitleChanged?: (ptyId: string, title: string, workspaceId: string | undefined, workingDir: string) => void
   onAgentDetected?: (ptyId: string, agentType: string) => void
+  onPtyData?: (ptyId: string, data: string) => void
 
   create(workingDir: string, webContents: WebContents, shell?: string, command?: string[], initialWrite?: string, extraEnv?: Record<string, string>): string {
     const id = `pty-${++this.nextId}`
@@ -253,6 +254,7 @@ export class PtyManager {
       if (!instance.webContents.isDestroyed()) {
         instance.webContents.send(`${IPC.PTY_DATA}:${id}`, data)
       }
+      this.onPtyData?.(id, data)
       this.handleCodexQuestionPrompt(instance, data)
       this.handleOscTitle(id, instance, data)
       // Write initial command on first output (shell is ready)

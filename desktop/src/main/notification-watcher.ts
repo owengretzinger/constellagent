@@ -20,6 +20,8 @@ interface ActivityEntry {
 }
 
 export class NotificationWatcher {
+  onNotify?: (workspaceId: string) => void
+
   constructor(
     private readonly notifyDir = process.env.CONSTELLAGENT_NOTIFY_DIR || DEFAULT_NOTIFY_DIR,
     private readonly activityDir = process.env.CONSTELLAGENT_ACTIVITY_DIR || DEFAULT_ACTIVITY_DIR,
@@ -171,6 +173,7 @@ export class NotificationWatcher {
         win.webContents.send(IPC.CLAUDE_NOTIFY_WORKSPACE, workspaceId)
       }
     }
+    this.onNotify?.(workspaceId)
   }
 
   private sendActivity(entries: ActivityEntry[]): void {

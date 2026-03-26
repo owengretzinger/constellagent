@@ -18,6 +18,7 @@
   "license": "ISC",
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",
+    "@photon-ai/imessage-kit": "^2.1.2",
     "@pierre/diffs": "^1.0.10",
     "@streamdown/cjk": "^1.0.3",
     "@streamdown/code": "^1.1.1",
@@ -31,6 +32,7 @@
     "@xterm/xterm": "^6.0.0",
     "agentfs-sdk": "^0.6.0",
     "allotment": "^1.20.5",
+    "better-sqlite3": "^12.8.0",
     "cachebro": "^0.2.0",
     "diff": "^8.0.3",
     "electron-vite": "^5.0.0",

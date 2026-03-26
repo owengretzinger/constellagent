@@ -546,6 +546,153 @@ function McpServersSection() {
   )
 }
 
+function PhoneControlSection() {
+  const settings = useAppStore((s) => s.settings)
+  const updateSettings = useAppStore((s) => s.updateSettings)
+  const addToast = useAppStore((s) => s.addToast)
+  const [status, setStatus] = useState<{ running: boolean; contactId: string; sessionCount: number } | null>(null)
+  const [testing, setTesting] = useState(false)
+
+  const update = <K extends keyof Settings>(key: K, value: Settings[K]) => {
+    updateSettings({ [key]: value })
+  }
+
+  useEffect(() => {
+    window.api.phoneControl.status().then(setStatus).catch(() => {})
+  }, [])
+
+  const handleToggle = async (enabled: boolean) => {
+    update('phoneControlEnabled', enabled)
+    if (enabled && settings.phoneControlContactId) {
+      try {
+        await window.api.phoneControl.start({
+          enabled: true,
+          contactId: settings.phoneControlContactId,
+          notifyOnStart: settings.phoneControlNotifyOnStart,
+          notifyOnFinish: settings.phoneControlNotifyOnFinish,
+          streamOutput: settings.phoneControlStreamOutput,
+          streamIntervalSec: settings.phoneControlStreamIntervalSec,
+        })
+        setStatus(await window.api.phoneControl.status())
+      } catch {
+        addToast({ id: crypto.randomUUID(), message: 'Failed to start phone control. Check Full Disk Access permissions.', type: 'error' })
+        update('phoneControlEnabled', false)
+      }
+    } else {
+      await window.api.phoneControl.stop()
+      setStatus(await window.api.phoneControl.status())
+    }
+  }
+
+  const handleTestSend = async () => {
+    setTesting(true)
+    try {
+      await window.api.phoneControl.testSend('Constellagent connected')
+      addToast({ id: crypto.randomUUID(), message: 'Test message sent', type: 'info' })
+    } catch {
+      addToast({ id: crypto.randomUUID(), message: 'Failed to send test message', type: 'error' })
+    } finally {
+      setTesting(false)
+    }
+  }
+
+  const handleContactChange = (contactId: string) => {
+    update('phoneControlContactId', contactId)
+    // If already running, restart with new contact
+    if (settings.phoneControlEnabled && contactId) {
+      window.api.phoneControl.start({
+        enabled: true,
+        contactId,
+        notifyOnStart: settings.phoneControlNotifyOnStart,
+        notifyOnFinish: settings.phoneControlNotifyOnFinish,
+        streamOutput: settings.phoneControlStreamOutput,
+        streamIntervalSec: settings.phoneControlStreamIntervalSec,
+      }).then(() => window.api.phoneControl.status()).then(setStatus).catch(() => {})
+    }
+  }
+
+  return (
+    <div className={styles.section}>
+      <div className={styles.sectionTitle}>Phone Control</div>
+
+      <ToggleRow
+        label="Enable phone control"
+        description="Control agents from your iPhone via iMessage"
+        value={settings.phoneControlEnabled}
+        onChange={handleToggle}
+      />
+
+      <TextRow
+        label="Contact ID"
+        description="Your phone number or email to listen for (e.g. +15551234567)"
+        value={settings.phoneControlContactId}
+        onChange={handleContactChange}
+        placeholder="+15551234567"
+      />
+
+      {status?.running && (
+        <div className={styles.row}>
+          <div className={styles.rowText}>
+            <div className={styles.rowLabel}>Status</div>
+            <div className={styles.rowDescription}>
+              Listening for messages from {status.contactId}
+              {status.sessionCount > 0 ? ` · ${status.sessionCount} active session${status.sessionCount === 1 ? '' : 's'}` : ''}
+            </div>
+          </div>
+          <button
+            className={styles.actionBtn}
+            onClick={handleTestSend}
+            disabled={testing}
+          >
+            {testing ? 'Sending...' : 'Test'}
+          </button>
+        </div>
+      )}
+
+      <ToggleRow
+        label="Notify on agent start"
+        description="Send an iMessage when an agent starts running"
+        value={settings.phoneControlNotifyOnStart}
+        onChange={(v) => update('phoneControlNotifyOnStart', v)}
+      />
+
+      <ToggleRow
+        label="Notify on agent finish"
+        description="Send an iMessage when an agent finishes"
+        value={settings.phoneControlNotifyOnFinish}
+        onChange={(v) => update('phoneControlNotifyOnFinish', v)}
+      />
+
+      <ToggleRow
+        label="Stream output"
+        description="Periodically send agent output to your phone"
+        value={settings.phoneControlStreamOutput}
+        onChange={(v) => update('phoneControlStreamOutput', v)}
+      />
+
+      {settings.phoneControlStreamOutput && (
+        <NumberRow
+          label="Stream interval"
+          description="Seconds between output updates"
+          value={settings.phoneControlStreamIntervalSec}
+          onChange={(v) => update('phoneControlStreamIntervalSec', v)}
+          min={5}
+          max={30}
+        />
+      )}
+
+      <div className={styles.row}>
+        <div className={styles.rowText}>
+          <div className={styles.rowDescription}>
+            Requires Full Disk Access for Constellagent in System Settings &gt; Privacy &amp; Security.
+            Text "claude fix the tests" from your phone to start an agent.
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export function SettingsPanel() {
   const settings = useAppStore((s) => s.settings)
   const updateSettings = useAppStore((s) => s.updateSettings)
@@ -699,6 +846,8 @@ export function SettingsPanel() {
             onChange={(v) => update('sessionResumeEnabled', v)}
           />
         </div>
+
+        <PhoneControlSection />
 
         <SkillsSubagentsSection />
 
