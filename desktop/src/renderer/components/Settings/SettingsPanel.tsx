@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useAppStore } from '../../store/app-store'
 import type { Settings, FavoriteEditor, McpServer, AgentType, SkillEntry, SubagentEntry } from '../../store/types'
+import type { PhoneControlStatus } from '@shared/phone-control-types'
 import { Tooltip } from '../Tooltip/Tooltip'
 import styles from './SettingsPanel.module.css'
 
@@ -550,8 +551,9 @@ function PhoneControlSection() {
   const settings = useAppStore((s) => s.settings)
   const updateSettings = useAppStore((s) => s.updateSettings)
   const addToast = useAppStore((s) => s.addToast)
-  const [status, setStatus] = useState<{ running: boolean; contactId: string; sessionCount: number } | null>(null)
+  const [status, setStatus] = useState<PhoneControlStatus | null>(null)
   const [testing, setTesting] = useState(false)
+  const contactRestartTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const update = <K extends keyof Settings>(key: K, value: Settings[K]) => {
     updateSettings({ [key]: value })
@@ -559,6 +561,12 @@ function PhoneControlSection() {
 
   useEffect(() => {
     window.api.phoneControl.status().then(setStatus).catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    return () => {
+      if (contactRestartTimer.current) clearTimeout(contactRestartTimer.current)
+    }
   }, [])
 
   const handleToggle = async (enabled: boolean) => {
@@ -574,9 +582,14 @@ function PhoneControlSection() {
           streamIntervalSec: settings.phoneControlStreamIntervalSec,
         })
         setStatus(await window.api.phoneControl.status())
-      } catch {
-        addToast({ id: crypto.randomUUID(), message: 'Failed to start phone control. Check Full Disk Access permissions.', type: 'error' })
+      } catch (e: unknown) {
+        addToast({
+          id: crypto.randomUUID(),
+          message: e instanceof Error ? e.message : 'Failed to start phone control.',
+          type: 'error',
+        })
         update('phoneControlEnabled', false)
+        setStatus(await window.api.phoneControl.status())
       }
     } else {
       await window.api.phoneControl.stop()
@@ -589,26 +602,52 @@ function PhoneControlSection() {
     try {
       await window.api.phoneControl.testSend('Constellagent connected')
       addToast({ id: crypto.randomUUID(), message: 'Test message sent', type: 'info' })
-    } catch {
-      addToast({ id: crypto.randomUUID(), message: 'Failed to send test message', type: 'error' })
+    } catch (e: unknown) {
+      addToast({
+        id: crypto.randomUUID(),
+        message: e instanceof Error ? e.message : 'Failed to send test message',
+        type: 'error',
+      })
     } finally {
       setTesting(false)
     }
   }
 
+  const handleOpenPrivacy = () => {
+    window.api.phoneControl.openFullDiskAccessSettings().catch(() => {
+      addToast({ id: crypto.randomUUID(), message: 'Could not open System Settings', type: 'error' })
+    })
+  }
+
   const handleContactChange = (contactId: string) => {
     update('phoneControlContactId', contactId)
-    // If already running, restart with new contact
-    if (settings.phoneControlEnabled && contactId) {
-      window.api.phoneControl.start({
-        enabled: true,
-        contactId,
-        notifyOnStart: settings.phoneControlNotifyOnStart,
-        notifyOnFinish: settings.phoneControlNotifyOnFinish,
-        streamOutput: settings.phoneControlStreamOutput,
-        streamIntervalSec: settings.phoneControlStreamIntervalSec,
-      }).then(() => window.api.phoneControl.status()).then(setStatus).catch(() => {})
-    }
+    if (!settings.phoneControlEnabled) return
+    if (contactRestartTimer.current) clearTimeout(contactRestartTimer.current)
+    contactRestartTimer.current = setTimeout(() => {
+      contactRestartTimer.current = null
+      const s = useAppStore.getState().settings
+      const id = s.phoneControlContactId
+      if (!id) return
+      window.api.phoneControl
+        .start({
+          enabled: true,
+          contactId: id,
+          notifyOnStart: s.phoneControlNotifyOnStart,
+          notifyOnFinish: s.phoneControlNotifyOnFinish,
+          streamOutput: s.phoneControlStreamOutput,
+          streamIntervalSec: s.phoneControlStreamIntervalSec,
+        })
+        .then(() => window.api.phoneControl.status())
+        .then(setStatus)
+        .catch((e: unknown) => {
+          addToast({
+            id: crypto.randomUUID(),
+            message: e instanceof Error ? e.message : 'Failed to restart phone control',
+            type: 'error',
+          })
+          void window.api.phoneControl.status().then(setStatus)
+        })
+    }, 450)
   }
 
   return (
@@ -629,6 +668,25 @@ function PhoneControlSection() {
         onChange={handleContactChange}
         placeholder="+15551234567"
       />
+
+      <div className={styles.row}>
+        <div className={styles.rowText}>
+          <div className={styles.rowLabel}>Full Disk Access</div>
+          <div className={styles.rowDescription}>
+            Add the path below under System Settings → Privacy &amp; Security → Full Disk Access (toggle on). If the Electron window shows only “To run a local app…”, you launched Electron.app from Finder; quit it and run Constellagent via bun run dev from the repo root. Each clone uses a different path—match the line below.
+          </div>
+          {status?.executablePathForPermissions ? (
+            <div className={styles.phoneControlPath}>{status.executablePathForPermissions}</div>
+          ) : null}
+        </div>
+        <button type="button" className={styles.actionBtn} onClick={handleOpenPrivacy}>
+          Open settings
+        </button>
+      </div>
+
+      {status?.permissionError ? (
+        <div className={styles.phoneControlWarn}>{status.permissionError}</div>
+      ) : null}
 
       {status?.running && (
         <div className={styles.row}>
@@ -684,8 +742,7 @@ function PhoneControlSection() {
       <div className={styles.row}>
         <div className={styles.rowText}>
           <div className={styles.rowDescription}>
-            Requires Full Disk Access for Constellagent in System Settings &gt; Privacy &amp; Security.
-            Text "claude fix the tests" from your phone to start an agent.
+            Text &quot;claude fix the tests&quot; from your phone to start an agent (when Phone Control is running and permissions are OK).
           </div>
         </div>
       </div>

@@ -1,4 +1,4 @@
-import { ipcMain, dialog, app, BrowserWindow, clipboard, type WebContents } from 'electron'
+import { ipcMain, dialog, app, BrowserWindow, clipboard, type WebContents, shell } from 'electron'
 import { join, relative, resolve } from 'path'
 import { mkdir, writeFile, readFile, readdir, unlink } from 'fs/promises'
 import { existsSync, mkdirSync, writeFileSync, realpathSync } from 'fs'
@@ -1967,6 +1967,31 @@ Cachebro is pre-configured via \`npx cachebro init\`. Use the cachebro MCP tools
 
   ipcMain.handle(IPC.PHONE_CONTROL_TEST_SEND, async (_e, message: string) => {
     await iMessageService.testSend(message)
+  })
+
+  ipcMain.handle(IPC.PHONE_CONTROL_OPEN_FULL_DISK_ACCESS, async () => {
+    if (process.platform !== 'darwin') return
+    const urls = [
+      'x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles',
+      'x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?path=Privacy/Full%20Disk%20Access',
+    ]
+    const runOpen = promisify(execFile)
+    for (const url of urls) {
+      try {
+        await runOpen('open', [url])
+        return
+      } catch {
+        // try next
+      }
+    }
+    for (const url of urls) {
+      try {
+        await shell.openExternal(url)
+        return
+      } catch {
+        // try next
+      }
+    }
   })
 
   // ── State persistence handlers ──

@@ -382,6 +382,7 @@ export function Sidebar() {
   const [workspaceCreation, setWorkspaceCreation] =
     useState<WorkspaceCreationState | null>(null);
   const [showSlowCreateMessage, setShowSlowCreateMessage] = useState(false);
+  const [isInitializingRepo, setIsInitializingRepo] = useState(false);
   const [openProjectPrPopoverId, setOpenProjectPrPopoverId] = useState<
     string | null
   >(null);
@@ -494,6 +495,7 @@ export function Sidebar() {
           confirmLabel: "Initialize",
           onConfirm: async () => {
             dismissConfirmDialog();
+            setIsInitializingRepo(true);
             try {
               await window.api.git.initRepo(dirPath);
               addSelectedProject();
@@ -501,6 +503,8 @@ export function Sidebar() {
               const msg =
                 err instanceof Error ? err.message : "Failed to initialize repo";
               addToast({ id: crypto.randomUUID(), message: msg, type: "error" });
+            } finally {
+              setIsInitializingRepo(false);
             }
           },
         });
@@ -1291,10 +1295,10 @@ export function Sidebar() {
       </div>
 
       <div className={styles.actions}>
-        <Tooltip label="Add project">
-          <button className={styles.actionButton} onClick={handleAddProject}>
-            <span className={styles.actionIcon}>+</span>
-            <span>Add project</span>
+        <Tooltip label={isInitializingRepo ? "Initializing repository…" : "Add project"}>
+          <button className={styles.actionButton} onClick={handleAddProject} disabled={isInitializingRepo}>
+            <span className={styles.actionIcon}>{isInitializingRepo ? "…" : "+"}</span>
+            <span>{isInitializingRepo ? "Initializing…" : "Add project"}</span>
           </button>
         </Tooltip>
         <Tooltip label="Automations">

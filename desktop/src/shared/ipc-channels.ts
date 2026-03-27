@@ -168,6 +168,8 @@ export const IPC = {
   PHONE_CONTROL_STOP: 'phone-control:stop',
   PHONE_CONTROL_STATUS: 'phone-control:status',
   PHONE_CONTROL_TEST_SEND: 'phone-control:test-send',
+  /** macOS: open System Settings → Privacy & Security (Full Disk Access / Files and Folders) */
+  PHONE_CONTROL_OPEN_FULL_DISK_ACCESS: 'phone-control:open-full-disk-access',
 
   // State persistence
   STATE_SAVE: 'state:save',

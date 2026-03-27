@@ -162,13 +162,13 @@ export class GitService {
         await writeFile(gitignorePath, DEFAULT_GITIGNORE, 'utf-8')
       }
 
-      await git(['add', '-A'], dirPath)
+      await git(['add', '.gitignore'], dirPath)
       await git([
         '-c', 'user.name=Constellagent',
         '-c', 'user.email=noreply@constellagent',
         'commit',
         '--no-gpg-sign',
-        '--allow-empty',
+        '--no-verify',
         '-m', 'Initial commit',
       ], dirPath)
     } catch (err) {
@@ -177,7 +177,18 @@ export class GitService {
   }
 
   static async listWorktrees(repoPath: string): Promise<WorktreeInfo[]> {
-    const output = await git(['worktree', 'list', '--porcelain'], repoPath)
+    const cwd = (repoPath ?? '').trim()
+    if (!cwd.length) return []
+    if (!existsSync(cwd)) return []
+
+    let output: string
+    try {
+      output = await git(['worktree', 'list', '--porcelain'], cwd)
+    } catch {
+      // Stale/moved projects, non-repo folders, or empty IPC path — avoid throwing and
+      // spamming Electron's "Error occurred in handler for 'git:list-worktrees'" log.
+      return []
+    }
     if (!output) return []
 
     const worktrees: WorktreeInfo[] = []

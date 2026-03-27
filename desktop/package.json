@@ -11,6 +11,7 @@
     "test": "bunx playwright test --project=electron",
     "rebuild": "bunx electron-rebuild",
     "dist": "electron-vite build && electron-builder --mac --arm64",
+    "macos-fda-electron": "sh scripts/macos-electron-full-disk-access.sh",
     "postinstall": "bash scripts/patch-electron-dev.sh && bunx electron-rebuild"
   },
   "keywords": [],

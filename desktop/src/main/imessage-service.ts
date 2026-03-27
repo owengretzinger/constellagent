@@ -1,7 +1,7 @@
 import { IMessageSDK } from '@photon-ai/imessage-kit'
 import { BrowserWindow } from 'electron'
 import { IPC } from '../shared/ipc-channels'
-import type { PhoneControlSettings } from '../shared/phone-control-types'
+import type { PhoneControlSettings, PhoneControlStatus } from '../shared/phone-control-types'
 import type { AutomationRunStartedEvent } from '../shared/automation-types'
 import type { PtyManager } from './pty-manager'
 import { GitService } from './git-service'
@@ -62,11 +62,19 @@ function capitalize(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1)
 }
 
+function formatPhoneControlErr(err: unknown): string {
+  if (err instanceof Error) return err.message
+  return String(err)
+}
+
 export class IMessageService {
   private sdk: IMessageSDK | null = null
   private pollTimer: ReturnType<typeof setInterval> | null = null
   private streamTimer: ReturnType<typeof setInterval> | null = null
   private lastMessageDate: Date = new Date()
+  /** Last DB / permission failure (cleared on successful start). */
+  private permissionError: string | null = null
+  private pollDbFailureLogged = false
   private sessions = new Map<number, PhoneSession>()
   private ptyToSession = new Map<string, number>()
   private workspaceToSession = new Map<string, number>()
@@ -89,11 +97,33 @@ export class IMessageService {
   // ── Lifecycle ──
 
   async start(settings: PhoneControlSettings): Promise<void> {
-    this.stop()
+    this.stopInternal(false)
     this.settings = settings
-    if (!settings.enabled || !settings.contactId) return
+    this.permissionError = null
+    this.pollDbFailureLogged = false
+    if (!settings.enabled || !settings.contactId) {
+      this.stopInternal(true)
+      return
+    }
 
     this.sdk = new IMessageSDK()
+    try {
+      // Await DB init immediately so initPromise rejection is handled (avoids unhandledRejection)
+      // and we fail fast if Full Disk Access is missing.
+      await this.sdk.getMessages({ limit: 1 })
+    } catch (err) {
+      const msg = formatPhoneControlErr(err)
+      this.permissionError =
+        msg.includes('unable to open database') || msg.includes('chat.db')
+          ? 'Cannot read Messages database. Grant Full Disk Access to the app shown below (use “Open Full Disk Access settings”), then toggle Phone Control off and on.'
+          : msg
+      // Do not call sdk.close() here: imessage-kit's close() awaits database.close(), which
+      // calls ensureInit() again and surfaces a second rejection / unhandled promise when the DB
+      // never opened. Drop the reference only (one leaked SDK instance on failure).
+      this.sdk = null
+      throw new Error(this.permissionError)
+    }
+
     this.lastMessageDate = new Date()
     this.pollTimer = setInterval(() => this.poll(), 3000)
 
@@ -107,7 +137,8 @@ export class IMessageService {
     console.log('[phone-control] Started, listening for messages from', settings.contactId)
   }
 
-  stop(): void {
+  /** Tear down SDK and timers. Pass clearPermissionError when the user disables Phone Control. */
+  private stopInternal(clearPermissionError: boolean): void {
     if (this.pollTimer) {
       clearInterval(this.pollTimer)
       this.pollTimer = null
@@ -120,6 +151,14 @@ export class IMessageService {
       this.sdk.close().catch(() => {})
       this.sdk = null
     }
+    if (clearPermissionError) {
+      this.permissionError = null
+      this.pollDbFailureLogged = false
+    }
+  }
+
+  stop(): void {
+    this.stopInternal(true)
   }
 
   updateSettings(settings: PhoneControlSettings): void {
@@ -140,21 +179,33 @@ export class IMessageService {
     return this.sdk !== null
   }
 
-  getStatus(): { running: boolean; contactId: string; sessionCount: number } {
+  getStatus(): PhoneControlStatus {
     return {
       running: this.isRunning(),
       contactId: this.settings.contactId,
       sessionCount: this.sessions.size,
+      executablePathForPermissions: process.execPath,
+      permissionError: this.permissionError,
     }
   }
 
   async testSend(message: string): Promise<void> {
     if (!this.sdk) throw new Error('Phone control not running')
-    await this.sdk.send(this.settings.contactId, message)
+    try {
+      await this.sdk.send(this.settings.contactId, message)
+    } catch (err) {
+      const msg = formatPhoneControlErr(err)
+      if (msg.includes('Messages app is not running')) {
+        throw new Error(
+          'Messages is not running. Open the Messages app on this Mac, then try Test again.',
+        )
+      }
+      throw err instanceof Error ? err : new Error(msg)
+    }
   }
 
   destroy(): void {
-    this.stop()
+    this.stopInternal(true)
     this.sessions.clear()
     this.ptyToSession.clear()
     this.workspaceToSession.clear()
@@ -229,7 +280,17 @@ export class IMessageService {
         }
       }
     } catch (err) {
-      console.error('[phone-control] Poll error:', err)
+      const msg = formatPhoneControlErr(err)
+      if (msg.includes('unable to open database') || msg.includes('chat.db')) {
+        if (!this.pollDbFailureLogged) {
+          this.pollDbFailureLogged = true
+          this.permissionError =
+            'Lost access to the Messages database. Check Full Disk Access for this app, then restart Phone Control.'
+          console.error('[phone-control] Poll error (database):', err)
+        }
+      } else if (!this.pollDbFailureLogged) {
+        console.error('[phone-control] Poll error:', err)
+      }
     }
   }
 
