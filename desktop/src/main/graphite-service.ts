@@ -16,37 +16,123 @@ async function git(args: string[], cwd: string): Promise<string> {
 }
 
 /**
- * Parse graphite branch metadata from git config.
- * Returns a map of branchName → parentBranch.
+ * Resolve the common .git directory for a repo or worktree.
+ * For worktrees this returns the main repo's .git dir where
+ * shared metadata (like .graphite_metadata.db) lives.
  */
-async function parseGraphiteMetadata(repoPath: string): Promise<Map<string, string>> {
+async function resolveGitCommonDir(repoPath: string): Promise<string> {
+  const rel = await git(['rev-parse', '--git-common-dir'], repoPath)
+  return resolve(repoPath, rel)
+}
+
+/**
+ * Parse graphite branch metadata from the SQLite metadata DB
+ * (.git/.graphite_metadata.db) used by Graphite CLI >= ~1.0.
+ */
+async function parseGraphiteSqliteMetadata(gitCommonDir: string): Promise<Map<string, string>> {
+  const dbPath = join(gitCommonDir, '.graphite_metadata.db')
+  if (!existsSync(dbPath)) return new Map()
+
+  const map = new Map<string, string>()
+  try {
+    const { stdout } = await execFileAsync('sqlite3', [
+      dbPath,
+      '-separator', '\t',
+      'SELECT branch_name, parent_branch_name FROM branch_metadata WHERE parent_branch_name IS NOT NULL AND parent_branch_name != "";',
+    ], { maxBuffer: 1024 * 1024 })
+    for (const line of stdout.trimEnd().split('\n')) {
+      if (!line) continue
+      const [branch, parent] = line.split('\t')
+      if (branch && parent) map.set(branch, parent)
+    }
+  } catch {
+    // sqlite3 not available or DB unreadable — fall through
+  }
+  return map
+}
+
+/**
+ * Parse graphite branch metadata from refs/branch-metadata/ (older CLI).
+ * Each ref is a JSON blob with a parentBranchName field.
+ */
+async function parseGraphiteRefMetadata(repoPath: string): Promise<Map<string, string>> {
+  const map = new Map<string, string>()
+  try {
+    const refsOutput = await git(
+      ['for-each-ref', '--format=%(refname)', 'refs/branch-metadata/'],
+      repoPath,
+    )
+    for (const refName of refsOutput.split('\n')) {
+      if (!refName) continue
+      const branchName = refName.replace('refs/branch-metadata/', '')
+      try {
+        const blob = await git(['cat-file', '-p', refName], repoPath)
+        const meta = JSON.parse(blob)
+        const parent = meta.parentBranchName ?? meta.parent
+        if (typeof parent === 'string' && parent) {
+          map.set(branchName, parent)
+        }
+      } catch {
+        // Unparseable ref — skip
+      }
+    }
+  } catch {
+    // No refs/branch-metadata/ — return empty
+  }
+  return map
+}
+
+/**
+ * Parse graphite branch metadata from git config (legacy / Constellagent cloneStack).
+ */
+async function parseGraphiteConfigMetadata(repoPath: string): Promise<Map<string, string>> {
   const map = new Map<string, string>()
   try {
     const output = await git(['config', '--get-regexp', '^graphite\\.branch\\.'], repoPath)
-    // Lines like: graphite.branch.feat-x.parent main
     for (const line of output.split('\n')) {
       if (!line) continue
-      // graphite.branch.<name>.parent <value>
       const match = line.match(/^graphite\.branch\.(.+)\.parent\s+(.+)$/)
       if (match) {
         map.set(match[1], match[2])
       }
     }
   } catch {
-    // No graphite metadata or git config error — return empty map
+    // No graphite config entries
   }
   return map
 }
 
 /**
+ * Collect graphite parent metadata from all known sources.
+ * Priority: SQLite DB (current CLI) > refs (older CLI) > git config (cloneStack fallback).
+ * Later sources only fill in branches not already present.
+ */
+async function parseGraphiteMetadata(repoPath: string): Promise<Map<string, string>> {
+  let gitCommonDir: string
+  try {
+    gitCommonDir = await resolveGitCommonDir(repoPath)
+  } catch {
+    return new Map()
+  }
+
+  const map = await parseGraphiteSqliteMetadata(gitCommonDir)
+  if (map.size > 0) return map
+
+  const refMap = await parseGraphiteRefMetadata(repoPath)
+  if (refMap.size > 0) return refMap
+
+  return parseGraphiteConfigMetadata(repoPath)
+}
+
+/**
  * Build a linear stack chain containing a given branch.
  * Walks up from the branch to find the root, then walks down to find the full chain.
+ * The trunk (e.g. main) is prepended so even single-branch stacks show context.
  */
 function buildStackChain(
   branchName: string,
   parentMap: Map<string, string>,
 ): GraphiteBranchInfo[] | null {
-  // Check if branch is in the graphite metadata
   if (!parentMap.has(branchName)) return null
 
   // Build child map (parent → children)
@@ -59,19 +145,25 @@ function buildStackChain(
 
   // Walk up to find root (a branch whose parent is not itself a graphite branch)
   let root = branchName
+  let trunk: string | null = null
   const visited = new Set<string>()
   while (parentMap.has(root) && !visited.has(root)) {
     visited.add(root)
     const parent = parentMap.get(root)!
     if (!parentMap.has(parent)) {
-      // parent is the trunk (e.g. main) — root stays as current
+      trunk = parent
       break
     }
     root = parent
   }
 
-  // Walk down from root to build the chain
+  // Start chain with the trunk branch (e.g. main) so the stack has context
   const chain: GraphiteBranchInfo[] = []
+  if (trunk) {
+    chain.push({ name: trunk, parent: null })
+  }
+
+  // Walk down from root to build the rest of the chain
   let current: string | undefined = root
   const chainVisited = new Set<string>()
   while (current && !chainVisited.has(current)) {
@@ -80,15 +172,11 @@ function buildStackChain(
       name: current,
       parent: parentMap.get(current) ?? null,
     })
-    // Find the next child in the chain
     const children: string[] = childMap.get(current) ?? []
-    // If there's exactly one child, follow it. If multiple, prefer the one
-    // that's in the ancestry of our target branch.
     if (children.length === 0) break
     if (children.length === 1) {
       current = children[0]
     } else {
-      // Multiple children — find the one that leads to branchName
       current = children.find((c: string) => {
         let walk: string | undefined = branchName
         const walkVisited = new Set<string>()
@@ -102,7 +190,7 @@ function buildStackChain(
     }
   }
 
-  return chain.length > 0 ? chain : null
+  return chain.length > 1 ? chain : null
 }
 
 const SKIP_DIRS = new Set([
@@ -227,13 +315,34 @@ export class GraphiteService {
       }
     }
 
-    // Write graphite parent metadata so the stack is discoverable
-    for (const entry of prBranches) {
-      if (entry.parent != null) {
-        await git(
-          ['config', `graphite.branch.${entry.name}.parent`, entry.parent],
-          repoPath,
-        ).catch(() => {})
+    // Write graphite parent metadata so the stack is discoverable.
+    // Prefer the SQLite DB (current CLI format), fall back to git config.
+    let wroteToDb = false
+    try {
+      const gitCommonDir = await resolveGitCommonDir(repoPath)
+      const dbPath = join(gitCommonDir, '.graphite_metadata.db')
+      if (existsSync(dbPath)) {
+        for (const entry of prBranches) {
+          if (entry.parent != null) {
+            await execFileAsync('sqlite3', [
+              dbPath,
+              `INSERT OR REPLACE INTO branch_metadata (branch_name, parent_branch_name) VALUES ('${entry.name.replace(/'/g, "''")}', '${entry.parent.replace(/'/g, "''")}');`,
+            ]).catch(() => {})
+          }
+        }
+        wroteToDb = true
+      }
+    } catch {
+      // DB write failed — fall through to git config
+    }
+    if (!wroteToDb) {
+      for (const entry of prBranches) {
+        if (entry.parent != null) {
+          await git(
+            ['config', `graphite.branch.${entry.name}.parent`, entry.parent],
+            repoPath,
+          ).catch(() => {})
+        }
       }
     }
 

@@ -305,6 +305,13 @@ export function useShortcuts() {
         return
       }
 
+      // Cmd+Shift+T — toggle graphite stack expanded/collapsed
+      if (shift && !alt && e.code === 'KeyT') {
+        consume()
+        store.toggleGraphiteStackExpanded()
+        return
+      }
+
       // Cmd+Shift+M — open plan palette (search + filter by agent)
       if (shift && !alt && e.code === 'KeyM') {
         consume()

@@ -18,19 +18,10 @@ export function useGraphiteStackPoller(): void {
         const { projects, workspaces, setGraphiteStack, updateWorkspaceBranch } =
           useAppStore.getState()
 
-        // Only poll workspaces belonging to graphite projects
-        const graphiteProjectIds = new Set(
-          projects
-            .filter((p) => p.prLinkProvider === 'graphite')
-            .map((p) => p.id),
-        )
-
-        const graphiteWorkspaces = workspaces.filter((ws) =>
-          graphiteProjectIds.has(ws.projectId),
-        )
-
+        // Poll all workspaces — getStackInfo returns null fast when
+        // no graphite metadata exists, so no need to pre-filter by prLinkProvider.
         await Promise.allSettled(
-          graphiteWorkspaces.map(async (ws) => {
+          workspaces.map(async (ws) => {
             const project = projects.find((p) => p.id === ws.projectId)
             if (!project) return
 
@@ -41,7 +32,6 @@ export function useGraphiteStackPoller(): void {
               )
               setGraphiteStack(ws.id, stack)
 
-              // If the current branch changed, update the workspace
               if (stack && stack.currentBranch !== ws.branch) {
                 updateWorkspaceBranch(ws.id, stack.currentBranch)
               }

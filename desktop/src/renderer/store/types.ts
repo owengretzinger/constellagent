@@ -219,6 +219,8 @@ export interface AppState {
   worktreeSyncStatus: Map<string, WorkspaceSyncInfo>
   /** Graphite stack info per workspace (key = workspace id). Ephemeral, not persisted. */
   graphiteStacks: Map<string, GraphiteStackInfo>
+  /** Whether graphite stack pills are expanded (show all) or collapsed (show 3). Ephemeral. */
+  graphiteStackExpanded: boolean
   /** Last seen `git ls-remote origin HEAD` hash per project (background poller) */
   lastKnownRemoteHead: Record<string, string>
   activeMonacoEditor: editor.IStandaloneCodeEditor | null
@@ -326,6 +328,7 @@ export interface AppState {
   setGhAvailability: (projectId: string, available: boolean) => void
   setWorktreeSyncStatus: (projectId: string, workspaces: Record<string, WorkspaceSyncInfo>) => void
   setGraphiteStack: (workspaceId: string, stack: GraphiteStackInfo | null) => void
+  toggleGraphiteStackExpanded: () => void
 
   // Automation actions
   addAutomation: (automation: Automation) => void

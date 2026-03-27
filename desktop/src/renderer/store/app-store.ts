@@ -116,6 +116,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   gitFileStatuses: new Map(),
   worktreeSyncStatus: new Map(),
   graphiteStacks: new Map(),
+  graphiteStackExpanded: false,
   lastKnownRemoteHead: {},
   activeMonacoEditor: null,
   planBuildTerminalByPlanPath: {},
@@ -1331,6 +1332,9 @@ export const useAppStore = create<AppState>((set, get) => ({
       return { graphiteStacks: next }
     }),
 
+  toggleGraphiteStackExpanded: () =>
+    set((s) => ({ graphiteStackExpanded: !s.graphiteStackExpanded })),
+
   addAutomation: (automation) =>
     set((s) => ({ automations: [...s.automations, automation] })),
 
@@ -1460,6 +1464,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       settings,
       worktreeSyncStatus: new Map(),
       graphiteStacks: new Map(),
+      graphiteStackExpanded: false,
       lastKnownRemoteHead: {},
       activeMonacoEditor: null,
       planBuildTerminalByPlanPath: {},
