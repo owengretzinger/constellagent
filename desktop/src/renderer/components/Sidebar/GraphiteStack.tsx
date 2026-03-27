@@ -48,7 +48,6 @@ export function GraphiteStack({ workspaceId, projectId, worktreePath }: Graphite
             disabled={isCurrent || checking !== null}
             title={isCurrent ? `Current branch: ${b.name}` : `Switch to ${b.name}`}
           >
-            <span className={styles.graphiteConnector} />
             <span className={styles.graphiteBranchName}>{b.name}</span>
           </button>
         )

@@ -40,6 +40,14 @@
   --accent-blue: #7B93BD;
   --accent-blue-dim: rgba(123, 147, 189, 0.14);
   --accent-blue-glow: rgba(123, 147, 189, 0.06);
+
+  /* Graphite stack — nested box color depth */
+  --surface-worktree: #222830;            /* worktree container — blue-gray lift off sidebar */
+  --surface-branch: #2a2a2a;              /* resting branch pill */
+  --surface-branch-active: #1e2d42;       /* active branch — steel-blue wash */
+  --surface-branch-hover: #323232;        /* resting branch hover */
+  --surface-branch-active-hover: #243752; /* active branch hover */
+
   --accent-cyan: #88C0D0;
   --accent-purple: #B48EAD;
   --accent-green: #A3BE8C;

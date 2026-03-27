@@ -796,45 +796,47 @@
 }
 
 /* ── Graphite Stack Visualization ── */
+/* Nested box color depth: sidebar (#191919) → worktree (#222830) → pills (#2a2a2a / #1e2d42)
+   No borders — depth comes purely from background color stepping. */
 
-/* Workspace-level tint when a stack is present — uses accent-blue (steel-blue)
-   to stay cohesive with the Cursor-aligned dark theme palette */
 .graphiteWorkspace {
-  background: var(--accent-blue-glow);
+  /* No extra background — visual depth comes from the graphiteStack container */
 }
 
 .graphiteWorkspace.active {
-  background: var(--accent-blue-dim);
+  background: var(--accent-blue-glow);
 }
 
+/* Worktree container — the outer box */
 .graphiteStack {
   display: flex;
   flex-direction: column;
-  padding: 4px 0 2px 0;
-  margin-top: 3px;
-  border-left: 1px solid rgba(123, 147, 189, 0.20);
-  margin-left: 2px;
+  gap: 3px;
+  padding: 5px;
+  margin-top: 4px;
+  background: var(--surface-worktree);
+  border-radius: var(--radius-lg);  /* 8px — outer container gets larger radius */
 }
 
+/* Branch pill — inner cards */
 .graphiteBranch {
   display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 2px 6px 2px 8px;
-  margin-left: -1px;
+  padding: 4px 8px;
   border: none;
-  border-radius: var(--radius-sm);
-  background: transparent;
+  border-radius: var(--radius-md);  /* 5px — inner pills get smaller radius than container */
+  background: var(--surface-branch);
   cursor: pointer;
   font-family: var(--font-mono);
   font-size: 10px;
   color: var(--text-tertiary);
   text-align: left;
   line-height: 16px;
-  transition: background-color 150ms cubic-bezier(0.23, 1, 0.32, 1),
-              color 150ms cubic-bezier(0.23, 1, 0.32, 1),
-              opacity 150ms cubic-bezier(0.23, 1, 0.32, 1),
-              transform 120ms cubic-bezier(0.23, 1, 0.32, 1);
+  will-change: background-color, transform;
+  transition: background-color 100ms ease,
+              color 100ms ease,
+              opacity 100ms ease,
+              transform 100ms var(--ease-out);
 }
 
 .graphiteBranch:active:not(:disabled) {
@@ -847,40 +849,15 @@
 
 /* Checking state — dim without layout shift */
 .graphiteBranchChecking {
-  opacity: 0.45;
+  opacity: 0.5;
   pointer-events: none;
 }
 
-/* Current branch — deeper blue tint */
+/* Current branch — steel-blue wash */
 .graphiteBranchCurrent {
   color: var(--accent-blue);
   font-weight: var(--weight-semibold);
-  background: rgba(123, 147, 189, 0.12);
-}
-
-/* Connector dot: small circle on the left border line */
-.graphiteConnector {
-  position: relative;
-  flex-shrink: 0;
-  width: 8px;
-  height: 8px;
-}
-
-.graphiteConnector::before {
-  content: '';
-  position: absolute;
-  left: -1px;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 5px;
-  height: 5px;
-  border-radius: var(--radius-full);
-  background: rgba(123, 147, 189, 0.25);
-  transition: background-color 150ms cubic-bezier(0.23, 1, 0.32, 1);
-}
-
-.graphiteBranchCurrent .graphiteConnector::before {
-  background: var(--accent-blue);
+  background: var(--surface-branch-active);
 }
 
 .graphiteBranchName {
@@ -892,31 +869,23 @@
 
 /* Hover states — gated for pointer devices only */
 @media (hover: hover) and (pointer: fine) {
-  .graphiteWorkspace:hover {
-    background: rgba(123, 147, 189, 0.07);
-  }
-
   .graphiteBranch:hover:not(:disabled) {
     color: var(--text-primary);
-    background: rgba(123, 147, 189, 0.09);
+    background: var(--surface-branch-hover);
   }
 
   .graphiteBranchCurrent:hover {
     color: var(--accent-blue);
-    background: rgba(123, 147, 189, 0.16);
-  }
-
-  .graphiteBranch:hover:not(:disabled) .graphiteConnector::before {
-    background: rgba(123, 147, 189, 0.5);
+    background: var(--surface-branch-active-hover);
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .graphiteBranch {
     /* Keep color + opacity transitions for comprehension; drop transform */
-    transition: background-color 150ms ease,
-                color 150ms ease,
-                opacity 150ms ease;
+    transition: background-color 100ms ease,
+                color 100ms ease,
+                opacity 100ms ease;
   }
   .graphiteBranch:active:not(:disabled) {
     transform: none;
