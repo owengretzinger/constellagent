@@ -366,6 +366,23 @@ const api = {
       ipcRenderer.invoke(IPC.T3CODE_STOP, cwd),
   },
 
+  webview: {
+    registerTabSwitch: (guestWebContentsId: number) =>
+      ipcRenderer.invoke(IPC.WEBVIEW_REGISTER_TAB_SWITCH, guestWebContentsId),
+    unregisterTabSwitch: (guestWebContentsId: number) =>
+      ipcRenderer.invoke(IPC.WEBVIEW_UNREGISTER_TAB_SWITCH, guestWebContentsId),
+    onTabPrev: (callback: () => void) => {
+      const listener = () => callback()
+      ipcRenderer.on(IPC.WEBVIEW_TAB_PREV, listener)
+      return () => { ipcRenderer.removeListener(IPC.WEBVIEW_TAB_PREV, listener) }
+    },
+    onTabNext: (callback: () => void) => {
+      const listener = () => callback()
+      ipcRenderer.on(IPC.WEBVIEW_TAB_NEXT, listener)
+      return () => { ipcRenderer.removeListener(IPC.WEBVIEW_TAB_NEXT, listener) }
+    },
+  },
+
   state: {
     save: (data: unknown) =>
       ipcRenderer.invoke(IPC.STATE_SAVE, data),

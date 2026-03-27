@@ -175,6 +175,16 @@ export const IPC = {
   T3CODE_START: 't3code:start',
   T3CODE_STOP: 't3code:stop',
 
+  // Webview guest keyboard shortcuts (T3 Code webview focus bypass)
+  /** Renderer → main: register guest webContentsId for tab-switch interception */
+  WEBVIEW_REGISTER_TAB_SWITCH: 'webview:register-tab-switch',
+  /** Renderer → main: unregister guest webContentsId */
+  WEBVIEW_UNREGISTER_TAB_SWITCH: 'webview:unregister-tab-switch',
+  /** Main → renderer: switch to previous tab */
+  WEBVIEW_TAB_PREV: 'webview:tab-prev',
+  /** Main → renderer: switch to next tab */
+  WEBVIEW_TAB_NEXT: 'webview:tab-next',
+
   // State persistence
   STATE_SAVE: 'state:save',
   STATE_SAVE_SYNC: 'state:save-sync',

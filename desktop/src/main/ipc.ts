@@ -1,4 +1,4 @@
-import { ipcMain, dialog, app, BrowserWindow, clipboard, type WebContents, shell } from 'electron'
+import { ipcMain, dialog, app, BrowserWindow, clipboard, webContents, type WebContents, shell } from 'electron'
 import { join, relative, resolve } from 'path'
 import { mkdir, writeFile, readFile, readdir, unlink } from 'fs/promises'
 import { existsSync, mkdirSync, writeFileSync, realpathSync } from 'fs'
@@ -110,6 +110,7 @@ ptyManager.onTitleChanged = (ptyId, title, workspaceId, workingDir) => {
 // Cache of open context databases keyed by projectDir
 const contextDbs = new Map<string, ContextDb>()
 const pendingIndexerWatchers = new Map<string, FSWatcher>()
+const guestTabSwitchListeners = new Map<number, { inputListener: (...args: unknown[]) => void; destroyListener: () => void }>()
 /** Debounce bursts of pending files so the renderer refreshes context history once per tick */
 const contextEntriesUpdatedTimers = new Map<string, ReturnType<typeof setTimeout>>()
 
@@ -2004,6 +2005,51 @@ Cachebro is pre-configured via \`npx cachebro init\`. Use the cachebro MCP tools
     t3codeService.stop(cwd)
   })
 
+  // ── Webview guest tab-switch interception ──
+  // Electron <webview> guests swallow keyboard events; register before-input-event
+  // on the guest WebContents so ⌘⌥←/→ still switches tabs.
+
+  function unregisterGuestTabSwitch(guestId: number): void {
+    const entry = guestTabSwitchListeners.get(guestId)
+    if (!entry) return
+    const guest = webContents.fromId(guestId)
+    if (guest && !guest.isDestroyed()) {
+      guest.off('before-input-event', entry.inputListener as never)
+      guest.off('destroyed', entry.destroyListener as never)
+    }
+    guestTabSwitchListeners.delete(guestId)
+  }
+
+  ipcMain.handle(IPC.WEBVIEW_REGISTER_TAB_SWITCH, (_e, guestId: number) => {
+    unregisterGuestTabSwitch(guestId)
+    const guest = webContents.fromId(guestId)
+    if (!guest || guest.isDestroyed()) return
+
+    const hostSender = _e.sender
+
+    const inputListener = (_ev: Electron.Event, input: Electron.Input) => {
+      if (input.type !== 'keyDown') return
+      if (!(input.meta || input.control) || !input.alt || input.shift) return
+      if (input.key === 'ArrowLeft') {
+        _ev.preventDefault()
+        if (!hostSender.isDestroyed()) hostSender.send(IPC.WEBVIEW_TAB_PREV)
+      } else if (input.key === 'ArrowRight') {
+        _ev.preventDefault()
+        if (!hostSender.isDestroyed()) hostSender.send(IPC.WEBVIEW_TAB_NEXT)
+      }
+    }
+
+    const destroyListener = () => unregisterGuestTabSwitch(guestId)
+
+    guest.on('before-input-event', inputListener)
+    guest.once('destroyed', destroyListener)
+    guestTabSwitchListeners.set(guestId, { inputListener: inputListener as never, destroyListener })
+  })
+
+  ipcMain.handle(IPC.WEBVIEW_UNREGISTER_TAB_SWITCH, (_e, guestId: number) => {
+    unregisterGuestTabSwitch(guestId)
+  })
+
   // ── State persistence handlers ──
   const stateFilePath = () =>
     join(app.getPath('userData'), 'constellagent-state.json')
@@ -2057,5 +2103,6 @@ export function cleanupAll(): void {
   for (const db of contextDbs.values()) db.close().catch(() => {})
   contextDbs.clear()
   t3codeService.stopAll()
+  guestTabSwitchListeners.clear()
   closeAllAgentFS().catch(() => {})
 }

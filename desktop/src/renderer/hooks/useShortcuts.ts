@@ -411,6 +411,13 @@ export function useShortcuts() {
     return () => window.removeEventListener('keydown', handler, true)
   }, [])
 
+  // Webview guest tab-switch: main process forwards ⌘⌥←/→ from guest WebContents.
+  useEffect(() => {
+    const unsubPrev = window.api.webview.onTabPrev(() => useAppStore.getState().prevTab())
+    const unsubNext = window.api.webview.onTabNext(() => useAppStore.getState().nextTab())
+    return () => { unsubPrev(); unsubNext() }
+  }, [])
+
   // Image paste: terminal textareas ignore clipboard images, so intercept and save to temp file.
   useEffect(() => {
     const handlePaste = async (e: ClipboardEvent) => {
