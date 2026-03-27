@@ -171,6 +171,10 @@ export const IPC = {
   /** macOS: open System Settings → Privacy & Security (Full Disk Access / Files and Folders) */
   PHONE_CONTROL_OPEN_FULL_DISK_ACCESS: 'phone-control:open-full-disk-access',
 
+  // T3 Code server lifecycle
+  T3CODE_START: 't3code:start',
+  T3CODE_STOP: 't3code:stop',
+
   // State persistence
   STATE_SAVE: 'state:save',
   STATE_SAVE_SYNC: 'state:save-sync',

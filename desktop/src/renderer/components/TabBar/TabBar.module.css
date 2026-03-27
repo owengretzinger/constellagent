@@ -241,6 +241,17 @@
   color: var(--text-primary);
 }
 
+/* Muted tab-bar action when no workspace (avoid real `disabled` so Tooltip still receives hover) */
+.tabBarActionMuted {
+  opacity: 0.35;
+  cursor: not-allowed;
+  pointer-events: auto;
+}
+
+.tabBarActionMuted:hover {
+  color: var(--text-tertiary);
+}
+
 /* ── Spacer (drag region) ── */
 
 .dragSpacer {

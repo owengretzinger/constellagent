@@ -293,6 +293,10 @@ export const useAppStore = create<AppState>((set, get) => ({
   removeTab: (id) =>
     set((s) => {
       const removed = s.tabs.find((t) => t.id === id)
+      if (removed?.type === 't3code') {
+        const ws = s.workspaces.find((w) => w.id === removed.workspaceId)
+        if (ws) void window.api.t3code.stop(ws.worktreePath)
+      }
       let planBuildTerminalByPlanPath = s.planBuildTerminalByPlanPath
       if (removed?.type === 'terminal') {
         const next = { ...planBuildTerminalByPlanPath }
@@ -1350,6 +1354,33 @@ export const useAppStore = create<AppState>((set, get) => ({
     set((s) => ({ settings: { ...s.settings, subagents: s.settings.subagents.filter((sa) => sa.id !== id) } })),
   updateSubagent: (id, partial) =>
     set((s) => ({ settings: { ...s.settings, subagents: s.settings.subagents.map((sa) => sa.id === id ? { ...sa, ...partial } : sa) } })),
+
+  openT3CodeTab: async (workspaceId) => {
+    const s = get()
+    const ws = s.workspaces.find((w) => w.id === workspaceId)
+    if (!ws) return
+    // Reuse existing t3code tab for this workspace
+    const existing = s.tabs.find(
+      (t) => t.workspaceId === workspaceId && t.type === 't3code'
+    )
+    if (existing) {
+      set({ activeTabId: existing.id })
+      return
+    }
+    try {
+      const serverUrl = await window.api.t3code.start(ws.worktreePath)
+      get().addTab({
+        id: crypto.randomUUID(),
+        workspaceId,
+        type: 't3code',
+        title: 'T3 Code',
+        serverUrl,
+      })
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to start T3 Code'
+      get().addToast({ id: crypto.randomUUID(), message: msg, type: 'error' })
+    }
+  },
 
   openDiffTab: (workspaceId) => {
     const s = get()

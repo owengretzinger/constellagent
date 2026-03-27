@@ -359,6 +359,13 @@ const api = {
       ipcRenderer.invoke(IPC.PHONE_CONTROL_OPEN_FULL_DISK_ACCESS),
   },
 
+  t3code: {
+    start: (cwd: string) =>
+      ipcRenderer.invoke(IPC.T3CODE_START, cwd) as Promise<string>,
+    stop: (cwd: string) =>
+      ipcRenderer.invoke(IPC.T3CODE_STOP, cwd),
+  },
+
   state: {
     save: (data: unknown) =>
       ipcRenderer.invoke(IPC.STATE_SAVE, data),

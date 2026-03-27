@@ -26,6 +26,7 @@ import { SkillsService } from './skills-service'
 import { GraphiteService } from './graphite-service'
 import { IMessageService, type ProjectInfo } from './imessage-service'
 import type { PhoneControlSettings } from '../shared/phone-control-types'
+import { t3codeService } from './t3code-service.js'
 
 import { ContextDb } from './context-db'
 import { getAgentFS, closeAllAgentFS, checkpoint, checkpointAll } from './agentfs-service'
@@ -1994,6 +1995,15 @@ Cachebro is pre-configured via \`npx cachebro init\`. Use the cachebro MCP tools
     }
   })
 
+  // ── T3 Code server handlers ──
+  ipcMain.handle(IPC.T3CODE_START, async (_e, cwd: string) => {
+    return t3codeService.start(cwd)
+  })
+
+  ipcMain.handle(IPC.T3CODE_STOP, async (_e, cwd: string) => {
+    t3codeService.stop(cwd)
+  })
+
   // ── State persistence handlers ──
   const stateFilePath = () =>
     join(app.getPath('userData'), 'constellagent-state.json')
@@ -2046,5 +2056,6 @@ export function cleanupAll(): void {
   // Close AgentFS-backed context databases (async, best-effort on quit)
   for (const db of contextDbs.values()) db.close().catch(() => {})
   contextDbs.clear()
+  t3codeService.stopAll()
   closeAllAgentFS().catch(() => {})
 }

@@ -376,6 +376,15 @@ export function useShortcuts() {
         return
       }
 
+      // ── T3 Code: Cmd+Shift+` (backtick) — avoids macOS ⌘⇧3 / ⌘⇧4 screenshots ──
+      if (shift && !alt && e.code === 'Backquote') {
+        consume()
+        if (store.activeWorkspaceId) {
+          store.openT3CodeTab(store.activeWorkspaceId)
+        }
+        return
+      }
+
       // ── Workspace creation ──
       // Cmd+N — new workspace dialog
       if (!shift && !alt && e.key === 'n') {

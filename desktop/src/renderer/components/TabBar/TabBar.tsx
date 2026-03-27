@@ -62,6 +62,7 @@ const TAB_ICONS: Record<Tab['type'], { icon: string; className: string }> = {
   file: { icon: '◇', className: styles.file },
   diff: { icon: '±', className: styles.diff },
   markdownPreview: { icon: '◈', className: styles.file },
+  t3code: { icon: '⚡', className: styles.terminal },
 }
 
 function getTabTitle(tab: Tab): string {
@@ -71,6 +72,7 @@ function getTabTitle(tab: Tab): string {
     return 'Changes'
   }
   if (tab.type === 'markdownPreview') return tab.title
+  if (tab.type === 't3code') return tab.title
   const name = tab.filePath.split('/').pop() || tab.filePath
   return name
 }
@@ -95,6 +97,7 @@ export function TabBar() {
   const allTabs = useAppStore((s) => s.tabs)
   const activeWorkspaceId = useAppStore((s) => s.activeWorkspaceId)
   const createTerminalForActiveWorkspace = useAppStore((s) => s.createTerminalForActiveWorkspace)
+  const openT3CodeTab = useAppStore((s) => s.openT3CodeTab)
   const lastSavedTabId = useAppStore((s) => s.lastSavedTabId)
   const settings = useAppStore((s) => s.settings)
   const gitFileStatuses = useAppStore((s) => s.gitFileStatuses)
@@ -357,6 +360,20 @@ export function TabBar() {
           />
         ) : null}
       </div>
+
+      <Tooltip label="T3 Code" shortcut="⇧⌘`">
+        <button
+          type="button"
+          className={`${styles.newTabButton} ${!activeWorkspaceId ? styles.tabBarActionMuted : ''}`}
+          aria-label="Open T3 Code"
+          aria-disabled={!activeWorkspaceId}
+          onClick={() => {
+            if (activeWorkspaceId) openT3CodeTab(activeWorkspaceId)
+          }}
+        >
+          ⚡
+        </button>
+      </Tooltip>
 
       <Tooltip label="New terminal" shortcut="⌘T">
         <button type="button" className={styles.newTabButton} onClick={createTerminalForActiveWorkspace}>

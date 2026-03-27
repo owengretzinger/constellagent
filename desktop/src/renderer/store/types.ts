@@ -77,6 +77,7 @@ export type Tab = {
   | { type: 'file'; filePath: string; unsaved?: boolean; deleted?: boolean; splitRoot?: SplitNode; focusedPaneId?: string }
   | { type: 'diff'; commitHash?: string; commitMessage?: string }
   | { type: 'markdownPreview'; filePath: string; title: string }
+  | { type: 't3code'; title: string; serverUrl: string }
 )
 
 export type RightPanelMode = 'files' | 'changes' | 'graph'
@@ -260,6 +261,7 @@ export interface AppState {
   setPlanBuildTerminalForPlan: (planPath: string, terminalTabId: string) => void
   /** Open newest .md/.mdx across agent plan dirs (.cursor/plans, etc.) in the active workspace */
   openLatestAgentPlan: () => Promise<void>
+  openT3CodeTab: (workspaceId: string) => Promise<void>
   openDiffTab: (workspaceId: string) => void
   openCommitDiffTab: (workspaceId: string, hash: string, message: string) => void
   nextWorkspace: () => void

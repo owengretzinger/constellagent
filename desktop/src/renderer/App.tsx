@@ -8,6 +8,7 @@ import { FileTabSplitContainer, TerminalSplitContainer } from './components/Term
 import { FileEditor } from './components/Editor/FileEditor'
 import { DiffViewer } from './components/Editor/DiffEditor'
 import { MarkdownPreview } from './components/MarkdownPreview/MarkdownPreview'
+import { T3CodeView } from './components/T3CodeView/T3CodeView'
 import { RightPanel } from './components/RightPanel/RightPanel'
 import { SettingsPanel } from './components/Settings/SettingsPanel'
 import { AutomationsPanel } from './components/Automations/AutomationsPanel'
@@ -217,6 +218,15 @@ export function App() {
                           key={activeTab.id}
                           filePath={activeTab.filePath}
                           worktreePath={tabWorkspace?.worktreePath}
+                        />
+                      )}
+
+                      {/* Render T3 Code webview */}
+                      {activeTab?.type === 't3code' && (
+                        <T3CodeView
+                          key={activeTab.id}
+                          serverUrl={activeTab.serverUrl}
+                          active={true}
                         />
                       )}
                     </>
