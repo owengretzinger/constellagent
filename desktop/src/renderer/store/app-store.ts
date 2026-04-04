@@ -283,6 +283,33 @@ export const useAppStore = create<AppState>((set, get) => ({
       }
     }),
 
+  reorderWorkspace: (projectId, sourceWsId, targetWsId) =>
+    set((s) => {
+      if (sourceWsId === targetWsId) return s
+
+      const source = s.workspaces.find((w) => w.id === sourceWsId)
+      const target = s.workspaces.find((w) => w.id === targetWsId)
+      if (!source || !target) return s
+      if (source.projectId !== projectId || target.projectId !== projectId) return s
+      if (source.isRoot || target.isRoot) return s
+
+      const nonRoot = s.workspaces.filter((w) => w.projectId === projectId && !w.isRoot)
+      const srcIdx = nonRoot.findIndex((w) => w.id === sourceWsId)
+      const tgtIdx = nonRoot.findIndex((w) => w.id === targetWsId)
+      if (srcIdx < 0 || tgtIdx < 0) return s
+
+      const reordered = [...nonRoot]
+      const [moved] = reordered.splice(srcIdx, 1)
+      reordered.splice(tgtIdx, 0, moved)
+
+      let cursor = 0
+      return {
+        workspaces: s.workspaces.map((w) =>
+          w.projectId === projectId && !w.isRoot ? reordered[cursor++] : w,
+        ),
+      }
+    }),
+
   setTerminalTitleFromCommand: (ptyId, command) =>
     set((s) => {
       const nextTitle = titleFromTerminalCommand(command)

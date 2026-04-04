@@ -280,6 +280,7 @@ export function Sidebar() {
   const unreadWorkspaceIds = useAppStore((s) => s.unreadWorkspaceIds);
   const activeAgentWorkspaceIds = useAppStore((s) => s.activeAgentWorkspaceIds);
   const renameWorkspace = useAppStore((s) => s.renameWorkspace);
+  const reorderWorkspace = useAppStore((s) => s.reorderWorkspace);
   const setActiveTab = useAppStore((s) => s.setActiveTab);
   const setPrStatuses = useAppStore((s) => s.setPrStatuses);
   const setGhAvailability = useAppStore((s) => s.setGhAvailability);
@@ -308,6 +309,9 @@ export function Sidebar() {
   >({});
   const [pullingPrKey, setPullingPrKey] = useState<string | null>(null);
   const [projectPrSearch, setProjectPrSearch] = useState("");
+  const [draggingWsId, setDraggingWsId] = useState<string | null>(null);
+  const [dragOverWsId, setDragOverWsId] = useState<string | null>(null);
+  const draggingProjectId = useRef<string | null>(null);
   const editRef = useRef<string>("");
   const dialogProject = workspaceDialogProjectId
     ? (projects.find((p) => p.id === workspaceDialogProjectId) ?? null)
@@ -680,6 +684,59 @@ export function Sidebar() {
     [setActiveWorkspace],
   );
 
+  const clearWsDragState = useCallback(() => {
+    setDraggingWsId(null);
+    setDragOverWsId(null);
+    draggingProjectId.current = null;
+  }, []);
+
+  const handleWsDragStart = useCallback(
+    (e: React.DragEvent<HTMLDivElement>, ws: { id: string; projectId: string; isRoot?: boolean }) => {
+      if (ws.isRoot) {
+        e.preventDefault();
+        return;
+      }
+      setDraggingWsId(ws.id);
+      setDragOverWsId(null);
+      draggingProjectId.current = ws.projectId;
+      e.dataTransfer.effectAllowed = "move";
+      e.dataTransfer.setData("text/plain", ws.id);
+    },
+    [],
+  );
+
+  const handleWsDragOver = useCallback(
+    (e: React.DragEvent<HTMLElement>, ws: { id: string; projectId: string; isRoot?: boolean }) => {
+      if (!draggingWsId) return;
+      if (ws.isRoot || ws.projectId !== draggingProjectId.current) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+      if (ws.id === draggingWsId) {
+        setDragOverWsId(null);
+        return;
+      }
+      setDragOverWsId(ws.id);
+    },
+    [draggingWsId],
+  );
+
+  const handleWsDrop = useCallback(
+    (e: React.DragEvent<HTMLElement>, ws: { id: string; projectId: string; isRoot?: boolean }) => {
+      if (!draggingWsId || !draggingProjectId.current) return;
+      e.preventDefault();
+      if (ws.isRoot || ws.projectId !== draggingProjectId.current) {
+        clearWsDragState();
+        return;
+      }
+      const sourceId = e.dataTransfer.getData("text/plain") || draggingWsId;
+      if (sourceId !== ws.id) {
+        reorderWorkspace(draggingProjectId.current, sourceId, ws.id);
+      }
+      clearWsDragState();
+    },
+    [draggingWsId, clearWsDragState, reorderWorkspace],
+  );
+
   const handleDeleteWorkspace = useCallback(
     (e: React.MouseEvent, ws: { id: string; name: string; isRoot?: boolean }) => {
       e.stopPropagation();
@@ -842,9 +899,10 @@ export function Sidebar() {
                     return (
                       <div
                         key={ws.id}
+                        draggable={!ws.isRoot}
                         className={`${styles.workspaceItem} ${
                           ws.id === activeWorkspaceId ? styles.active : ""
-                        } ${unreadWorkspaceIds.has(ws.id) ? styles.unread : ""} ${activeAgentWorkspaceIds.has(ws.id) ? styles.claudeActive : ""} ${ws.isRoot ? styles.rootWorkspace : ""}`}
+                        } ${unreadWorkspaceIds.has(ws.id) ? styles.unread : ""} ${activeAgentWorkspaceIds.has(ws.id) ? styles.claudeActive : ""} ${ws.isRoot ? styles.rootWorkspace : ""} ${draggingWsId === ws.id ? styles.wsDragging : ""} ${dragOverWsId === ws.id ? styles.wsDragOver : ""}`}
                         onClick={() =>
                           !isEditing && handleSelectWorkspace(ws.id)
                         }
@@ -852,6 +910,10 @@ export function Sidebar() {
                           editRef.current = displayName;
                           setEditingWorkspaceId(ws.id);
                         }}
+                        onDragStart={(e) => handleWsDragStart(e, ws)}
+                        onDragOver={(e) => handleWsDragOver(e, ws)}
+                        onDrop={(e) => handleWsDrop(e, ws)}
+                        onDragEnd={clearWsDragState}
                       >
                         <span className={styles.workspaceIcon}>
                           {ws.isRoot ? "~" : ws.automationId ? "⏱" : "⌥"}
