@@ -19,6 +19,20 @@ export function useShortcuts() {
         return
       }
 
+      // Option+Backspace: macOS word-delete convention.
+      // xterm.js doesn't send the right escape sequence on macOS, so we handle it.
+      if (e.altKey && !e.metaKey && !e.ctrlKey && !e.shiftKey && e.key === 'Backspace'
+        && (e.target as HTMLElement)?.closest?.('[class*="terminalInner"]')) {
+        e.preventDefault()
+        e.stopPropagation()
+        const s = useAppStore.getState()
+        const tab = s.tabs.find((t) => t.id === s.activeTabId)
+        if (tab?.type === 'terminal') {
+          window.api.pty.write(tab.ptyId, '\x17') // Ctrl+W — delete word backward
+        }
+        return
+      }
+
       // Cmd+Left/Right/Backspace: macOS line-editing conventions.
       // Only Cmd (not Ctrl) — Ctrl+arrow is word movement handled by shells/TUIs.
       if (e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey
