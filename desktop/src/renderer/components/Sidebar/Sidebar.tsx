@@ -15,7 +15,7 @@ const START_TERMINAL_MESSAGE = "Starting terminal...";
 const MAX_COMMENT_COUNT_DISPLAY = 9;
 const PR_PROVIDER_DOMAINS: Record<PrLinkProvider, string> = {
   github: "github.com",
-  graphite: "graphite.dev",
+  graphite: "graphite.com",
   devinreview: "devinreview.com",
 };
 
