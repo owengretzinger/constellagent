@@ -555,6 +555,11 @@ export class GithubService {
       ),
       isApproved: isOpen && reviewDecision === 'APPROVED',
       isChangesRequested: isOpen && reviewDecision === 'CHANGES_REQUESTED',
+      isMergeable: isOpen && reviewDecision === 'APPROVED' && (
+        mergeStateStatus === 'CLEAN' ||
+        mergeStateStatus === 'UNSTABLE' ||
+        mergeStateStatus === 'HAS_HOOKS'
+      ),
       updatedAt: pr.updatedAt,
     }
   }

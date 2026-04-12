@@ -184,6 +184,7 @@ function WorkspaceMeta({
   const isBlockedByCi = openPr && prInfo!.checkStatus === "failing";
   const isApproved = openPr && !!prInfo!.isApproved;
   const isCiPassing = openPr && prInfo!.checkStatus === "passing";
+  const isMergeable = openPr && !!prInfo!.isMergeable;
   const isChangesRequested = openPr && !!prInfo!.isChangesRequested;
   const reviewDecision: "approved" | "changes_requested" | null = isChangesRequested
     ? "changes_requested"
@@ -216,37 +217,48 @@ function WorkspaceMeta({
           )}
           {openPr && (
             <span className={styles.prSignals}>
-              {hasPendingComments && (
+              {isMergeable ? (
                 <span
-                  className={styles.prPendingComments}
-                  title={`${pendingCommentCount} unresolved review comment${pendingCommentCount === 1 ? "" : "s"}`}
+                  className={`${styles.prBadge} ${styles.prMergeable}`}
+                  title="Ready to merge"
                 >
-                  <CommentCountIcon count={pendingCommentCount} />
+                  Ready
                 </span>
-              )}
-              {isCiPending && (
-                <span
-                  className={`${styles.prBadge} ${styles.prCiPending}`}
-                  title="CI checks running"
-                >
-                  CI
-                </span>
-              )}
-              {isBlockedByCi && (
-                <span
-                  className={`${styles.prBadge} ${styles.prBlockedCi}`}
-                  title="CI checks failing"
-                >
-                  CI
-                </span>
-              )}
-              {isCiPassing && (
-                <span
-                  className={`${styles.prBadge} ${styles.prCiPassing}`}
-                  title="CI checks passing"
-                >
-                  CI
-                </span>
+              ) : (
+                <>
+                  {hasPendingComments && (
+                    <span
+                      className={styles.prPendingComments}
+                      title={`${pendingCommentCount} unresolved review comment${pendingCommentCount === 1 ? "" : "s"}`}
+                    >
+                      <CommentCountIcon count={pendingCommentCount} />
+                    </span>
+                  )}
+                  {isCiPending && (
+                    <span
+                      className={`${styles.prBadge} ${styles.prCiPending}`}
+                      title="CI checks running"
+                    >
+                      CI
+                    </span>
+                  )}
+                  {isBlockedByCi && (
+                    <span
+                      className={`${styles.prBadge} ${styles.prBlockedCi}`}
+                      title="CI checks failing"
+                    >
+                      CI
+                    </span>
+                  )}
+                  {isCiPassing && (
+                    <span
+                      className={`${styles.prBadge} ${styles.prCiPassing}`}
+                      title="CI checks passing"
+                    >
+                      CI
+                    </span>
+                  )}
+                </>
               )}
             </span>
           )}

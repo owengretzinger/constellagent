@@ -15,6 +15,7 @@ export interface PrInfo {
   isBlockedByCi: boolean
   isApproved: boolean
   isChangesRequested: boolean
+  isMergeable: boolean
   updatedAt: string
 }
 

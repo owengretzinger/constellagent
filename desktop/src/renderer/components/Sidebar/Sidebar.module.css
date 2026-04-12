@@ -808,6 +808,12 @@
   background: rgba(158, 206, 106, 0.08);
 }
 
+.prMergeable {
+  color: var(--accent-green);
+  border-color: var(--accent-green-dim);
+  background: rgba(158, 206, 106, 0.15);
+}
+
 /* PR state colors — applies to icon (currentColor) and number */
 .pr_open {
   color: var(--accent-green);
