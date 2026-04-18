@@ -37,6 +37,13 @@ interface GraphqlPullRequestNode {
       }
     }>
   }
+  reviewThreads?: {
+    nodes?: Array<{ isResolved?: boolean }>
+    pageInfo?: {
+      hasNextPage?: boolean
+      endCursor?: string | null
+    }
+  }
 }
 
 interface GraphqlConnection {
@@ -466,6 +473,15 @@ export class GithubService {
             }
           }
         }
+        reviewThreads(first: 100) {
+          nodes {
+            isResolved
+          }
+          pageInfo {
+            hasNextPage
+            endCursor
+          }
+        }
       }
     `
 
@@ -499,6 +515,15 @@ export class GithubService {
                       state
                     }
                   }
+                }
+              }
+              reviewThreads(first: 100) {
+                nodes {
+                  isResolved
+                }
+                pageInfo {
+                  hasNextPage
+                  endCursor
                 }
               }
             }
@@ -597,6 +622,41 @@ export class GithubService {
     prNode: GraphqlPullRequestNode,
     info: PrInfo
   ): Promise<void> {
+    const inline = prNode.reviewThreads
+    if (inline) {
+      const nodes = Array.isArray(inline.nodes) ? inline.nodes : []
+      const inlineUnresolved = nodes.filter((t) => !t.isResolved).length
+      if (!inline.pageInfo?.hasNextPage) {
+        info.pendingCommentCount = inlineUnresolved
+        info.hasPendingComments = inlineUnresolved > 0
+        this.updateReviewThreadCache(repoInfo, prNode.number, prNode.updatedAt, inlineUnresolved)
+        return
+      }
+
+      const key = this.reviewThreadCacheKey(repoInfo, prNode.number, prNode.updatedAt)
+      const cached = this.unresolvedThreadCache.get(key)
+      if (
+        cached &&
+        Date.now() - cached.fetchedAt < this.UNRESOLVED_THREAD_CACHE_TTL_MS
+      ) {
+        info.pendingCommentCount = cached.count
+        info.hasPendingComments = cached.count > 0
+        return
+      }
+
+      const remaining = await this.fetchUnresolvedReviewThreadCount(
+        repoInfo,
+        token,
+        prNode.number,
+        inline.pageInfo.endCursor ?? null
+      )
+      const total = inlineUnresolved + remaining
+      info.pendingCommentCount = total
+      info.hasPendingComments = total > 0
+      this.updateReviewThreadCache(repoInfo, prNode.number, prNode.updatedAt, total)
+      return
+    }
+
     const key = this.reviewThreadCacheKey(repoInfo, prNode.number, prNode.updatedAt)
     const cached = this.unresolvedThreadCache.get(key)
     if (
@@ -608,7 +668,7 @@ export class GithubService {
       return
     }
 
-    const unresolvedCount = await this.fetchUnresolvedReviewThreadCount(repoInfo, token, prNode.number)
+    const unresolvedCount = await this.fetchUnresolvedReviewThreadCount(repoInfo, token, prNode.number, null)
     info.pendingCommentCount = unresolvedCount
     info.hasPendingComments = unresolvedCount > 0
     this.updateReviewThreadCache(repoInfo, prNode.number, prNode.updatedAt, unresolvedCount)
@@ -617,9 +677,10 @@ export class GithubService {
   private static async fetchUnresolvedReviewThreadCount(
     repoInfo: GithubRepoInfo,
     token: string,
-    number: number
+    number: number,
+    startCursor: string | null
   ): Promise<number> {
-    let cursor: string | null = null
+    let cursor: string | null = startCursor
     let unresolvedCount = 0
 
     while (true) {
