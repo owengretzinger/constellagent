@@ -5,6 +5,7 @@ import { homedir } from 'os'
 export const PI_AGENT_DIR = join(homedir(), '.pi', 'agent')
 export const PI_EXTENSIONS_DIR = join(PI_AGENT_DIR, 'extensions')
 export const PI_ACTIVITY_EXTENSION_FILE = join(PI_EXTENSIONS_DIR, 'constellagent-activity.ts')
+export const PI_SETTINGS_FILE = join(PI_AGENT_DIR, 'settings.json')
 
 const EXTENSION_MARKER = 'Constellagent pi-mono activity extension'
 
@@ -90,5 +91,50 @@ export async function uninstallPiActivityExtension(): Promise<void> {
     await unlink(PI_ACTIVITY_EXTENSION_FILE)
   } catch {
     // ignore missing file
+  }
+}
+
+export async function loadPiSettings(): Promise<Record<string, unknown>> {
+  try {
+    return JSON.parse(await readFile(PI_SETTINGS_FILE, 'utf-8')) as Record<string, unknown>
+  } catch {
+    return {}
+  }
+}
+
+export async function savePiSettings(settings: Record<string, unknown>): Promise<void> {
+  await mkdir(PI_AGENT_DIR, { recursive: true })
+  await writeFile(PI_SETTINGS_FILE, JSON.stringify(settings, null, 2), 'utf-8')
+}
+
+export async function ensurePiAutomationSettings(): Promise<void> {
+  const settings = await loadPiSettings()
+  const hasAnthropicKey = !!process.env.ANTHROPIC_API_KEY?.trim()
+  const currentProvider = typeof settings.defaultProvider === 'string' ? settings.defaultProvider : ''
+  const currentModel = typeof settings.defaultModel === 'string' ? settings.defaultModel : ''
+
+  let changed = false
+
+  if (!currentProvider && hasAnthropicKey) {
+    settings.defaultProvider = 'anthropic'
+    changed = true
+  }
+
+  const resolvedProvider = typeof settings.defaultProvider === 'string' ? settings.defaultProvider : ''
+  const invalidAnthropicDefaults = new Set([
+    'claude-3-5-haiku-latest',
+    'claude-3-5-haiku-20241022',
+  ])
+
+  if (
+    resolvedProvider === 'anthropic' &&
+    (!currentModel || invalidAnthropicDefaults.has(currentModel))
+  ) {
+    settings.defaultModel = 'claude-sonnet-4-20250514'
+    changed = true
+  }
+
+  if (changed) {
+    await savePiSettings(settings)
   }
 }
