@@ -179,6 +179,8 @@ const api = {
   clipboard: {
     saveImage: () =>
       ipcRenderer.invoke(IPC.CLIPBOARD_SAVE_IMAGE) as Promise<string | null>,
+    writeText: (text: string) =>
+      ipcRenderer.invoke(IPC.CLIPBOARD_WRITE_TEXT, text) as Promise<void>,
   },
 
   state: {

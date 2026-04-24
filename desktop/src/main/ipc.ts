@@ -699,6 +699,10 @@ export function registerIpcHandlers(): void {
     return filePath
   })
 
+  ipcMain.handle(IPC.CLIPBOARD_WRITE_TEXT, async (_e, text: string) => {
+    clipboard.writeText(text)
+  })
+
   // ── State persistence handlers ──
   const stateFilePath = () =>
     join(app.getPath('userData'), 'constellagent-state.json')

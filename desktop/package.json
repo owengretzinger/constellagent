@@ -19,6 +19,7 @@
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",
     "@pierre/diffs": "^1.0.10",
+    "@pierre/trees": "^1.0.0-beta.3",
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/addon-serialize": "^0.14.0",
     "@xterm/addon-web-links": "^0.12.0",
@@ -29,7 +30,6 @@
     "node-cron": "^4.2.1",
     "node-pty": "^1.1.0",
     "react": "^19.2.4",
-    "react-arborist": "^3.4.3",
     "react-dom": "^19.2.4",
     "zustand": "^5.0.11"
   },

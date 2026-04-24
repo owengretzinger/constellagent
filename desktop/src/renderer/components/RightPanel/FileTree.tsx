@@ -1,5 +1,6 @@
-import { useEffect, useState, useCallback, useRef } from 'react'
-import { Tree, NodeRendererProps, NodeApi } from 'react-arborist'
+import { useEffect, useRef, useState, useCallback } from 'react'
+import { FileTree as TreesFileTree, useFileTree } from '@pierre/trees/react'
+import type { ContextMenuItem, ContextMenuOpenContext, GitStatusEntry } from '@pierre/trees'
 import { useAppStore } from '../../store/app-store'
 import styles from './RightPanel.module.css'
 
@@ -16,104 +17,120 @@ interface Props {
   isActive?: boolean
 }
 
-function basename(p: string) {
-  const i = p.lastIndexOf('/')
-  return i >= 0 ? p.slice(i + 1) : p
+interface TreeData {
+  paths: string[]
+  filePaths: Set<string>
+  gitStatus: GitStatusEntry[]
 }
 
-/** Recursively open or close all descendants of a node */
-function toggleRecursive(node: NodeApi<FileNode>) {
-  if (node.isOpen) {
-    closeRecursive(node)
-  } else {
-    openRecursive(node)
+function toRelativePath(worktreePath: string, filePath: string): string {
+  const prefix = worktreePath.endsWith('/') ? worktreePath : `${worktreePath}/`
+  return filePath.startsWith(prefix) ? filePath.slice(prefix.length) : filePath
+}
+
+function toAbsolutePath(worktreePath: string, filePath: string): string {
+  return `${worktreePath.replace(/\/$/, '')}/${filePath}`
+}
+
+function flattenTree(worktreePath: string, nodes: FileNode[]): TreeData {
+  const paths: string[] = []
+  const filePaths = new Set<string>()
+  const gitStatus: GitStatusEntry[] = []
+
+  const visit = (node: FileNode) => {
+    const relPath = toRelativePath(worktreePath, node.path)
+    if (!relPath) return
+
+    paths.push(node.type === 'directory' ? `${relPath}/` : relPath)
+    if (node.type === 'file') filePaths.add(relPath)
+    if (node.gitStatus) gitStatus.push({ path: relPath, status: node.gitStatus })
+
+    for (const child of node.children ?? []) visit(child)
   }
+
+  for (const node of nodes) visit(node)
+  return { paths, filePaths, gitStatus }
 }
 
-function openRecursive(node: NodeApi<FileNode>) {
-  node.open()
-  if (node.children) {
-    for (const child of node.children) {
-      if (child.isInternal) openRecursive(child)
-    }
-  }
+interface TreesViewProps {
+  worktreePath: string
+  tree: TreeData
 }
 
-function closeRecursive(node: NodeApi<FileNode>) {
-  if (node.children) {
-    for (const child of node.children) {
-      if (child.isInternal) closeRecursive(child)
-    }
-  }
-  node.close()
-}
-
-const GIT_STATUS_CLASS: Record<string, string> = {
-  modified: styles.gitModified,
-  added: styles.gitAdded,
-  deleted: styles.gitDeleted,
-  renamed: styles.gitRenamed,
-  untracked: styles.gitUntracked,
-}
-
-function Node({ node, style }: NodeRendererProps<FileNode>) {
-  const activeTabId = useAppStore((s) => s.activeTabId)
-  const tabs = useAppStore((s) => s.tabs)
+function TreesView({ worktreePath, tree }: TreesViewProps) {
   const openFileTab = useAppStore((s) => s.openFileTab)
+  const filePathsRef = useRef(tree.filePaths)
 
-  const activeTab = tabs.find((t) => t.id === activeTabId)
-  const isActiveFile =
-    node.isLeaf &&
-    activeTab?.type === 'file' &&
-    activeTab.filePath === node.data.path
+  filePathsRef.current = tree.filePaths
 
-  const gitClass = node.data.gitStatus
-    ? GIT_STATUS_CLASS[node.data.gitStatus] || ''
-    : ''
+  const { model } = useFileTree({
+    paths: tree.paths,
+    gitStatus: tree.gitStatus,
+    id: `workspace-files-${worktreePath}`,
+    initialExpansion: 1,
+    initialSelectedPaths: [],
+    itemHeight: 26,
+    search: true,
+    flattenEmptyDirectories: true,
+    onSelectionChange: (selectedPaths) => {
+      const selectedPath = selectedPaths.at(-1)
+      if (!selectedPath || !filePathsRef.current.has(selectedPath)) return
+      openFileTab(toAbsolutePath(worktreePath, selectedPath))
+    },
+  })
 
-  const handleClick = (e: React.MouseEvent) => {
-    if (node.isInternal) {
-      if (e.altKey) {
-        toggleRecursive(node)
-      } else {
-        node.toggle()
-      }
-    } else {
-      openFileTab(node.data.path)
-    }
-  }
+  const handleOpen = useCallback((item: ContextMenuItem, context: ContextMenuOpenContext) => {
+    if (item.kind !== 'file') return
+    openFileTab(toAbsolutePath(worktreePath, item.path))
+    context.close()
+  }, [openFileTab, worktreePath])
+
+  const handleCopyPath = useCallback((item: ContextMenuItem, context: ContextMenuOpenContext) => {
+    const path = toAbsolutePath(worktreePath, item.path)
+    window.api.clipboard.writeText(path)
+    context.close()
+  }, [worktreePath])
+
+  const handleCopyRelativePath = useCallback((item: ContextMenuItem, context: ContextMenuOpenContext) => {
+    window.api.clipboard.writeText(item.path.replace(/\/$/, ''))
+    context.close()
+  }, [])
+
+  useEffect(() => {
+    model.resetPaths(tree.paths)
+    model.setGitStatus(tree.gitStatus)
+  }, [model, tree.paths, tree.gitStatus])
 
   return (
-    <div
-      style={style}
-      className={`${styles.treeNode} ${isActiveFile ? styles.treeNodeActive : ''}`}
-      onClick={handleClick}
-    >
-      <span className={styles.treeChevron}>
-        {node.isInternal ? (node.isOpen ? '▾' : '▸') : ''}
-      </span>
-      <span className={`${styles.treeName} ${gitClass}`}>
-        {node.data.name}
-      </span>
-    </div>
+    <TreesFileTree
+      model={model}
+      className={styles.treesHost}
+      style={{ height: '100%' }}
+      renderContextMenu={(item, context) => (
+        <div className={styles.treeContextMenu} data-file-tree-context-menu-root="true">
+          {item.kind === 'file' ? (
+            <button type="button" onClick={() => handleOpen(item, context)}>
+              Open
+            </button>
+          ) : null}
+          <button type="button" onClick={() => handleCopyPath(item, context)}>
+            Copy Path
+          </button>
+          <button type="button" onClick={() => handleCopyRelativePath(item, context)}>
+            Copy Relative Path
+          </button>
+        </div>
+      )}
+    />
   )
 }
 
 export function FileTree({ worktreePath, isActive }: Props) {
-  const [tree, setTree] = useState<FileNode[] | null>(null)
-  const containerRef = useRef<HTMLDivElement>(null)
-  const [height, setHeight] = useState(400)
+  const [tree, setTree] = useState<TreeData | null>(null)
 
   const fetchTree = useCallback(() => {
     window.api.fs.getTreeWithStatus(worktreePath).then((nodes: FileNode[]) => {
-      // Wrap in root node
-      const root: FileNode = {
-        name: basename(worktreePath),
-        path: worktreePath,
-        type: 'directory',
-        children: nodes,
-      }
-      setTree([root])
+      setTree(flattenTree(worktreePath, nodes))
     }).catch(() => {})
   }, [worktreePath])
 
@@ -139,43 +156,14 @@ export function FileTree({ worktreePath, isActive }: Props) {
     if (isActive) fetchTree()
   }, [isActive, fetchTree])
 
-  // Measure container height for virtualization
-  useEffect(() => {
-    const el = containerRef.current
-    if (!el) return
-    const ro = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        setHeight(entry.contentRect.height)
-      }
-    })
-    ro.observe(el)
-    return () => ro.disconnect()
-  }, [])
-
   return (
-    <div ref={containerRef} className={styles.treeContainer}>
+    <div className={styles.treeContainer}>
       {!tree ? (
         <div className={styles.emptyState}>
           <span className={styles.emptyText}>Loading files...</span>
         </div>
       ) : (
-        <Tree<FileNode>
-          key={worktreePath}
-          data={tree}
-          idAccessor="path"
-          openByDefault={false}
-          initialOpenState={{ [worktreePath]: true }}
-          disableDrag={true}
-          disableDrop={true}
-          disableEdit={true}
-          disableMultiSelection={true}
-          rowHeight={26}
-          indent={14}
-          width="100%"
-          height={height}
-        >
-          {Node}
-        </Tree>
+        <TreesView key={worktreePath} worktreePath={worktreePath} tree={tree} />
       )}
     </div>
   )
