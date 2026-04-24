@@ -63,7 +63,7 @@
   flex-direction: column;
 }
 
-/* ── File Tree (react-arborist) ── */
+/* ── File Tree ── */
 
 .treeContainer {
   flex: 1;
@@ -71,66 +71,51 @@
   overflow: hidden;
 }
 
-.treeNode {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding-right: var(--space-4);
-  cursor: pointer;
-  color: var(--text-secondary);
-  font-size: var(--text-sm);
-  font-family: var(--font-mono);
-  white-space: nowrap;
+.treesHost {
+  --trees-bg-override: var(--surface-0);
+  --trees-fg-override: var(--text-secondary);
+  --trees-fg-muted-override: var(--text-tertiary);
+  --trees-bg-muted-override: rgba(255, 255, 255, 0.03);
+  --trees-selected-bg-override: var(--accent-blue-glow);
+  --trees-selected-fg-override: var(--text-primary);
+  --trees-border-color-override: var(--border-subtle);
+  --trees-status-added-override: var(--accent-green);
+  --trees-status-deleted-override: var(--accent-red);
+  --trees-status-modified-override: var(--accent-orange);
+  --trees-status-renamed-override: var(--accent-cyan);
+  --trees-status-untracked-override: var(--accent-green-muted);
+  --trees-font-family-override: var(--font-mono);
+  --trees-font-size-override: var(--text-sm);
+  display: block;
   height: 100%;
 }
 
-.treeNode:hover {
-  background: rgba(255, 255, 255, 0.03);
+.treeContextMenu {
+  min-width: 160px;
+  padding: 4px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--surface-3);
+  box-shadow: var(--shadow-lg);
 }
 
-.treeNodeActive {
-  background: var(--accent-blue-glow);
+.treeContextMenu button {
+  display: block;
+  width: 100%;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+  text-align: left;
+  cursor: pointer;
 }
 
-.treeNodeActive .treeName {
+.treeContextMenu button:hover {
+  background: var(--surface-4);
   color: var(--text-primary);
-}
-
-.treeChevron {
-  width: 12px;
-  text-align: center;
-  flex-shrink: 0;
-  color: var(--text-tertiary);
-  font-size: 11px;
-}
-
-.treeName {
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* ── Git Status Colors (must override active/hover states) ── */
-
-.treeName.gitModified {
-  color: var(--accent-orange);
-}
-
-.treeName.gitAdded {
-  color: var(--accent-green);
-}
-
-.treeName.gitDeleted {
-  color: var(--accent-red);
-}
-
-.treeName.gitRenamed {
-  color: var(--accent-cyan);
-}
-
-.treeName.gitUntracked {
-  color: var(--accent-green-muted);
 }
 
 /* ── Changed Files ── */

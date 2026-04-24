@@ -84,10 +84,10 @@ test.describe('File tree & editor integration', () => {
       await window.waitForTimeout(1000)
 
       // Should see src directory and README.md
-      const readmeItem = window.locator('[class*="treeNode"]', { hasText: 'README.md' })
+      const readmeItem = window.locator('file-tree-container [data-item-path="README.md"]')
       await expect(readmeItem).toBeVisible()
 
-      const srcItem = window.locator('[class*="treeNode"]', { hasText: 'src' })
+      const srcItem = window.locator('file-tree-container [data-item-path="src/"]')
       await expect(srcItem).toBeVisible()
 
       await window.screenshot({
@@ -111,7 +111,7 @@ test.describe('File tree & editor integration', () => {
       await window.waitForTimeout(2000)
 
       // Click README.md in file tree
-      const readmeItem = window.locator('[class*="treeNode"]', { hasText: 'README.md' }).first()
+      const readmeItem = window.locator('file-tree-container [data-item-path="README.md"]').first()
       await expect(readmeItem).toBeVisible({ timeout: 5000 })
       await readmeItem.click()
       await window.waitForTimeout(3000)
@@ -127,6 +127,30 @@ test.describe('File tree & editor integration', () => {
       await window.screenshot({
         path: resolve(__dirname, 'screenshots/editor-file-opened.png'),
       })
+    } finally {
+      await app.close()
+      cleanupTestRepo(repoPath)
+    }
+  })
+
+  test('right-clicking file in tree opens context menu actions', async () => {
+    const repoPath = createTestRepo('context-menu-1')
+    const { app, window } = await launchApp()
+
+    try {
+      await setupWorkspace(window, repoPath, 'context')
+      await window.waitForTimeout(1000)
+
+      const readmeItem = window.locator('file-tree-container [data-item-path="README.md"]').first()
+      await expect(readmeItem).toBeVisible({ timeout: 5000 })
+      await readmeItem.click({ button: 'right' })
+
+      const openAction = window.locator('file-tree-container').getByRole('button', { name: 'Open' })
+      await expect(openAction).toBeVisible({ timeout: 5000 })
+      await openAction.click()
+
+      const tab = window.locator('[class*="tabTitle"]', { hasText: 'README.md' })
+      await expect(tab).toBeVisible({ timeout: 5000 })
     } finally {
       await app.close()
       cleanupTestRepo(repoPath)
