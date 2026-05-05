@@ -202,8 +202,8 @@ export function registerIpcHandlers(): void {
     return GitService.getDiff(worktreePath, staged)
   })
 
-  ipcMain.handle(IPC.GIT_GET_FILE_DIFF, async (_e, worktreePath: string, filePath: string) => {
-    return GitService.getFileDiff(worktreePath, filePath)
+  ipcMain.handle(IPC.GIT_GET_WORKING_TREE_DIFF, async (_e, worktreePath: string) => {
+    return GitService.getWorkingTreeDiff(worktreePath)
   })
 
   ipcMain.handle(IPC.GIT_GET_BRANCHES, async (_e, repoPath: string) => {

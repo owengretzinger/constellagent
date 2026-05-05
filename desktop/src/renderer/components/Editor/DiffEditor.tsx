@@ -1,20 +1,8 @@
 import { useEffect, useState, useCallback, useRef, memo } from 'react'
 import { PatchDiff } from '@pierre/diffs/react'
 import { useAppStore } from '../../store/app-store'
+import type { WorkingTreeDiffEntry } from '@shared/diff-types'
 import styles from './Editor.module.css'
-
-interface FileStatus {
-  path: string
-  status: 'modified' | 'added' | 'deleted' | 'renamed' | 'untracked'
-  staged: boolean
-}
-
-interface DiffFileData {
-  filePath: string
-  patch: string
-  status: string
-  isBinary: boolean
-}
 
 interface Props {
   worktreePath: string
@@ -29,51 +17,10 @@ const STATUS_LABELS: Record<string, string> = {
   untracked: 'U',
 }
 
-function patchIndicatesBinary(patch: string): boolean {
-  if (!patch) return false
-  return /^\s*Binary files /m.test(patch) || /^\s*GIT binary patch\b/m.test(patch)
-}
-
-const BINARY_EXTENSIONS = new Set([
-  // Images
-  'png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'ico', 'icns', 'tiff', 'tif',
-  // Documents
-  'pdf',
-  // Archives / packages
-  'zip', 'gz', 'tgz', 'bz2', 'xz', '7z', 'rar', 'tar', 'dmg', 'pkg',
-  // Audio / video
-  'mp3', 'wav', 'flac', 'm4a', 'ogg', 'mp4', 'mov', 'avi', 'mkv', 'webm',
-  // Fonts
-  'woff', 'woff2', 'ttf', 'otf', 'eot',
-  // Binaries / data
-  'exe', 'dll', 'so', 'dylib', 'wasm', 'bin', 'dat', 'db', 'sqlite',
-])
-
-function pathIndicatesBinary(filePath: string): boolean {
-  const ext = filePath.split('.').pop()?.toLowerCase()
-  if (!ext || ext === filePath.toLowerCase()) return false
-  return BINARY_EXTENSIONS.has(ext)
-}
-
-function contentIndicatesBinary(text: string): boolean {
-  // Heuristic: NUL bytes or lots of control/replacement characters usually mean "not text".
-  const sample = text.slice(0, 8000)
-  if (sample.includes('\u0000')) return true
-
-  let suspicious = 0
-  for (let i = 0; i < sample.length; i++) {
-    const code = sample.charCodeAt(i)
-    if (code === 9 || code === 10 || code === 13) continue // tab/newline/carriage return
-    if (code === 0xfffd || code < 32) suspicious++
-  }
-
-  return sample.length > 0 && suspicious / sample.length > 0.1
-}
-
 // ── Per-file diff section ──
 
 interface DiffFileSectionProps {
-  data: DiffFileData
+  data: WorkingTreeDiffEntry
   inline: boolean
   worktreePath: string
   onOpenFile: (filePath: string) => void
@@ -85,16 +32,22 @@ const DiffFileSection = memo(function DiffFileSection({
   worktreePath,
   onOpenFile,
 }: DiffFileSectionProps) {
-  const parts = data.filePath.split('/')
+  const parts = data.path.split('/')
   const fileName = parts.pop()
   const dir = parts.length > 0 ? parts.join('/') + '/' : ''
 
-  const fullPath = data.filePath.startsWith('/')
-    ? data.filePath
-    : `${worktreePath}/${data.filePath}`
+  const fullPath = data.path.startsWith('/')
+    ? data.path
+    : `${worktreePath}/${data.path}`
+
+  const notice = data.isBinary
+    ? 'Non-text file. Diff not shown.'
+    : data.tooLarge
+      ? 'File too large to diff.'
+      : null
 
   return (
-    <div className={styles.diffFileSection} id={`diff-${data.filePath}`}>
+    <div className={styles.diffFileSection} id={`diff-${data.path}`}>
       <div
         className={styles.fileHeader}
         onClick={() => onOpenFile(fullPath)}
@@ -107,11 +60,9 @@ const DiffFileSection = memo(function DiffFileSection({
           {fileName}
         </span>
       </div>
-      {data.isBinary ? (
+      {notice ? (
         <div className={styles.binaryDiffNotice}>
-          <span className={styles.binaryDiffNoticeText}>
-            Non-text file. Diff not shown.
-          </span>
+          <span className={styles.binaryDiffNoticeText}>{notice}</span>
         </div>
       ) : (
         <PatchDiff
@@ -138,7 +89,7 @@ function FileStrip({
   files,
   activeFile,
 }: {
-  files: DiffFileData[]
+  files: WorkingTreeDiffEntry[]
   activeFile: string | null
 }) {
   const scrollTo = (filePath: string) => {
@@ -150,11 +101,11 @@ function FileStrip({
     <div className={styles.fileStrip}>
       {files.map((f) => (
         <button
-          key={f.filePath}
-          className={`${styles.fileStripItem} ${f.filePath === activeFile ? styles.active : ''}`}
-          onClick={() => scrollTo(f.filePath)}
+          key={f.path}
+          className={`${styles.fileStripItem} ${f.path === activeFile ? styles.active : ''}`}
+          onClick={() => scrollTo(f.path)}
         >
-          {f.filePath.split('/').pop()}
+          {f.path.split('/').pop()}
         </button>
       ))}
     </div>
@@ -164,7 +115,7 @@ function FileStrip({
 // ── Main DiffViewer ──
 
 export function DiffViewer({ worktreePath, active }: Props) {
-  const [files, setFiles] = useState<DiffFileData[]>([])
+  const [files, setFiles] = useState<WorkingTreeDiffEntry[]>([])
   const [loading, setLoading] = useState(true)
   const [activeFile, setActiveFile] = useState<string | null>(null)
   const scrollAreaRef = useRef<HTMLDivElement>(null)
@@ -173,44 +124,9 @@ export function DiffViewer({ worktreePath, active }: Props) {
   const openFileTab = useAppStore((s) => s.openFileTab)
   const inline = settings.diffInline
 
-  // Load all changed files
   const loadFiles = useCallback(async () => {
     try {
-      const statuses: FileStatus[] = await window.api.git.getStatus(worktreePath)
-      const results = await Promise.all(
-        statuses.map(async (file) => {
-          let patch = await window.api.git.getFileDiff(worktreePath, file.path)
-          let isBinary =
-            patchIndicatesBinary(patch) ||
-            (pathIndicatesBinary(file.path) && (file.status === 'added' || file.status === 'untracked' || file.status === 'renamed'))
-
-          // For added/untracked files, git diff returns empty — build synthetic patch
-          if (!patch && !isBinary && (file.status === 'added' || file.status === 'untracked')) {
-            const fullPath = file.path.startsWith('/')
-              ? file.path
-              : `${worktreePath}/${file.path}`
-            const content = await window.api.fs.readFile(fullPath)
-            if (contentIndicatesBinary(content)) {
-              isBinary = true
-              return { filePath: file.path, patch: '', status: file.status, isBinary }
-            }
-            const lines = content.split('\n')
-            patch = [
-              `--- /dev/null`,
-              `+++ b/${file.path}`,
-              `@@ -0,0 +1,${lines.length} @@`,
-              ...lines.map((l: string) => `+${l}`),
-            ].join('\n')
-          }
-
-          // For deleted files with no diff, build synthetic removal patch
-          if (!patch && file.status === 'deleted') {
-            patch = `--- a/${file.path}\n+++ /dev/null\n@@ -1,0 +0,0 @@\n`
-          }
-
-          return { filePath: file.path, patch: patch || '', status: file.status, isBinary }
-        }),
-      )
+      const results = await window.api.git.getWorkingTreeDiff(worktreePath)
       setFiles(results)
     } catch (err) {
       console.error('Failed to load diffs:', err)
@@ -268,7 +184,7 @@ export function DiffViewer({ worktreePath, active }: Props) {
     )
 
     for (const f of files) {
-      const el = document.getElementById(`diff-${f.filePath}`)
+      const el = document.getElementById(`diff-${f.path}`)
       if (el) observer.observe(el)
     }
 
@@ -326,7 +242,7 @@ export function DiffViewer({ worktreePath, active }: Props) {
       <div ref={scrollAreaRef} className={styles.diffScrollArea}>
         {files.map((f) => (
           <DiffFileSection
-            key={f.filePath}
+            key={f.path}
             data={f}
             inline={inline}
             worktreePath={worktreePath}

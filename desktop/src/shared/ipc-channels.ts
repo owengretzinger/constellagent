@@ -9,7 +9,7 @@ export const IPC = {
   GIT_REMOVE_WORKTREE: 'git:remove-worktree',
   GIT_GET_STATUS: 'git:get-status',
   GIT_GET_DIFF: 'git:get-diff',
-  GIT_GET_FILE_DIFF: 'git:get-file-diff',
+  GIT_GET_WORKING_TREE_DIFF: 'git:get-working-tree-diff',
   GIT_GET_BRANCHES: 'git:get-branches',
   GIT_STAGE: 'git:stage',
   GIT_UNSTAGE: 'git:unstage',

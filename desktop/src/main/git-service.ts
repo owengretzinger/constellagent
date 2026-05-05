@@ -1,9 +1,10 @@
 import { execFile } from 'child_process'
 import { existsSync } from 'fs'
-import { copyFile, mkdir, readdir, rm } from 'fs/promises'
+import { copyFile, mkdir, readdir, readFile, rm, stat } from 'fs/promises'
 import { promisify } from 'util'
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'path'
 import type { CreateWorktreeProgress } from '../shared/workspace-creation'
+import type { WorkingTreeDiffEntry, WorkingTreeFileStatus } from '../shared/diff-types'
 
 const execFileAsync = promisify(execFile)
 
@@ -38,6 +39,161 @@ async function git(args: string[], cwd: string): Promise<string> {
     maxBuffer: 10 * 1024 * 1024,
   })
   return stdout.trimEnd()
+}
+
+const SYNTHETIC_PATCH_SIZE_LIMIT = 1024 * 1024 // 1MB
+
+const BINARY_EXTENSIONS = new Set([
+  'png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'ico', 'icns', 'tiff', 'tif',
+  'pdf',
+  'zip', 'gz', 'tgz', 'bz2', 'xz', '7z', 'rar', 'tar', 'dmg', 'pkg',
+  'mp3', 'wav', 'flac', 'm4a', 'ogg', 'mp4', 'mov', 'avi', 'mkv', 'webm',
+  'woff', 'woff2', 'ttf', 'otf', 'eot',
+  'exe', 'dll', 'so', 'dylib', 'wasm', 'bin', 'dat', 'db', 'sqlite',
+])
+
+function pathIndicatesBinary(filePath: string): boolean {
+  const ext = filePath.split('.').pop()?.toLowerCase()
+  if (!ext || ext === filePath.toLowerCase()) return false
+  return BINARY_EXTENSIONS.has(ext)
+}
+
+function patchIndicatesBinary(patch: string): boolean {
+  if (!patch) return false
+  return /^\s*Binary files /m.test(patch) || /^\s*GIT binary patch\b/m.test(patch)
+}
+
+function bufferLooksBinary(buf: Buffer): boolean {
+  const sampleEnd = Math.min(8192, buf.length)
+  for (let i = 0; i < sampleEnd; i++) {
+    if (buf[i] === 0) return true
+  }
+  return false
+}
+
+interface PorcelainEntry {
+  newPath: string
+  oldPath?: string
+  xy: string // 2-char from porcelain v2 (e.g. "M.", ".M", "??")
+  isUntracked: boolean
+}
+
+// Parse `git status --porcelain=v2 -z` output into raw entries. Records are
+// NUL-delimited; rename/copy (type 2) entries consume an additional
+// NUL-terminated old-path field.
+function parsePorcelainV2(output: string): PorcelainEntry[] {
+  const result: PorcelainEntry[] = []
+  if (!output) return result
+  const records = output.split('\0')
+  for (let i = 0; i < records.length; i++) {
+    const record = records[i]
+    if (!record) continue
+    const head = record[0]
+    if (head === '?') {
+      result.push({ newPath: record.slice(2), xy: '??', isUntracked: true })
+    } else if (head === '!') {
+      // ignored — skip
+    } else if (head === '1') {
+      const parts = record.split(' ')
+      const xy = parts[1] ?? '..'
+      const path = parts.slice(8).join(' ')
+      result.push({ newPath: path, xy, isUntracked: false })
+    } else if (head === '2') {
+      const parts = record.split(' ')
+      const xy = parts[1] ?? '..'
+      const newPath = parts.slice(9).join(' ')
+      const oldPath = records[i + 1] ?? ''
+      i++ // consume old-path record
+      result.push({ newPath, oldPath, xy, isUntracked: false })
+    } else if (head === 'u') {
+      const parts = record.split(' ')
+      const xy = parts[1] ?? 'UU'
+      const path = parts.slice(10).join(' ')
+      result.push({ newPath: path, xy, isUntracked: false })
+    }
+  }
+  return result
+}
+
+function statusFromCode(code: string): WorkingTreeFileStatus {
+  if (code === 'A') return 'added'
+  if (code === 'D') return 'deleted'
+  if (code === 'R' || code === 'C') return 'renamed'
+  return 'modified'
+}
+
+function combinedStatus(entry: PorcelainEntry): WorkingTreeFileStatus {
+  if (entry.isUntracked) return 'untracked'
+  const x = entry.xy[0]
+  const y = entry.xy[1]
+  const pick = x !== '.' && x !== ' ' ? x : y
+  return statusFromCode(pick)
+}
+
+// Split a unified diff output into a per-new-path map.
+function parseDiffByFile(diffOutput: string): Map<string, string> {
+  const map = new Map<string, string>()
+  if (!diffOutput) return map
+  const parts = diffOutput.split(/^diff --git /m).filter(Boolean)
+  for (const part of parts) {
+    const section = 'diff --git ' + part
+    // Prefer `+++ b/path` (most reliable, including for renames)
+    const plusMatch = section.match(/^\+\+\+ b\/(.+)$/m)
+    if (plusMatch) {
+      map.set(plusMatch[1], section)
+      continue
+    }
+    // Pure deletion: extract `a/path` from header line
+    const firstLine = part.split('\n')[0]
+    const aMatch = firstLine.match(/^a\/(.+?) b\//)
+    if (aMatch) {
+      map.set(aMatch[1], section)
+    }
+  }
+  return map
+}
+
+async function buildUntrackedEntry(
+  worktreePath: string,
+  path: string
+): Promise<WorkingTreeDiffEntry> {
+  const fullPath = isAbsolute(path) ? path : join(worktreePath, path)
+
+  if (pathIndicatesBinary(path)) {
+    return { path, status: 'untracked', patch: '', isBinary: true, tooLarge: false }
+  }
+
+  let fileSize = 0
+  try {
+    fileSize = (await stat(fullPath)).size
+  } catch {
+    return { path, status: 'untracked', patch: '', isBinary: false, tooLarge: false }
+  }
+
+  if (fileSize > SYNTHETIC_PATCH_SIZE_LIMIT) {
+    return { path, status: 'untracked', patch: '', isBinary: false, tooLarge: true }
+  }
+
+  let buf: Buffer
+  try {
+    buf = await readFile(fullPath)
+  } catch {
+    return { path, status: 'untracked', patch: '', isBinary: false, tooLarge: false }
+  }
+
+  if (bufferLooksBinary(buf)) {
+    return { path, status: 'untracked', patch: '', isBinary: true, tooLarge: false }
+  }
+
+  const lines = buf.toString('utf8').split('\n')
+  const patch = [
+    '--- /dev/null',
+    `+++ b/${path}`,
+    `@@ -0,0 +1,${lines.length} @@`,
+    ...lines.map((l) => `+${l}`),
+  ].join('\n')
+
+  return { path, status: 'untracked', patch, isBinary: false, tooLarge: false }
 }
 
 /** Extract a user-friendly message from a git exec error */
@@ -453,40 +609,25 @@ export class GitService {
 
   static async getStatus(worktreePath: string): Promise<FileStatus[]> {
     const output = await git(
-      ['status', '--porcelain=v1', '-uall'],
+      ['status', '--porcelain=v2', '-z', '-uall'],
       worktreePath
     )
-    if (!output) return []
-
+    const entries = parsePorcelainV2(output)
     const results: FileStatus[] = []
-
-    for (const line of output.split('\n')) {
-      const indexStatus = line[0]
-      const workStatus = line[1]
-      const path = line.slice(3)
-
-      if (indexStatus === '?' && workStatus === '?') {
-        results.push({ path, status: 'untracked', staged: false })
+    for (const entry of entries) {
+      if (entry.isUntracked) {
+        results.push({ path: entry.newPath, status: 'untracked', staged: false })
         continue
       }
-
-      // Staged entry (index has a real status)
-      if (indexStatus !== ' ' && indexStatus !== '?') {
-        const status: FileStatus['status'] =
-          indexStatus === 'A' ? 'added' :
-          indexStatus === 'D' ? 'deleted' :
-          indexStatus === 'R' ? 'renamed' : 'modified'
-        results.push({ path, status, staged: true })
+      const x = entry.xy[0]
+      const y = entry.xy[1]
+      if (x !== '.' && x !== ' ') {
+        results.push({ path: entry.newPath, status: statusFromCode(x), staged: true })
       }
-
-      // Unstaged entry (worktree has a real status)
-      if (workStatus !== ' ' && workStatus !== '?') {
-        const status: FileStatus['status'] =
-          workStatus === 'D' ? 'deleted' : 'modified'
-        results.push({ path, status, staged: false })
+      if (y !== '.' && y !== ' ') {
+        results.push({ path: entry.newPath, status: statusFromCode(y), staged: false })
       }
     }
-
     return results
   }
 
@@ -517,16 +658,58 @@ export class GitService {
     return files
   }
 
-  static async getFileDiff(worktreePath: string, filePath: string): Promise<string> {
-    try {
-      // Try unstaged first
-      const unstaged = await git(['diff', '--', filePath], worktreePath)
-      if (unstaged) return unstaged
-      // Then staged
-      return await git(['diff', '--staged', '--', filePath], worktreePath)
-    } catch {
-      return ''
+  static async getWorkingTreeDiff(worktreePath: string): Promise<WorkingTreeDiffEntry[]> {
+    const statusOutput = await git(
+      ['status', '--porcelain=v2', '-z', '-uall'],
+      worktreePath
+    )
+    const parsed = parsePorcelainV2(statusOutput)
+
+    // Collapse to one entry per new-path (preserve first occurrence)
+    const seen = new Map<string, PorcelainEntry>()
+    for (const entry of parsed) {
+      if (!seen.has(entry.newPath)) seen.set(entry.newPath, entry)
     }
+    const entries = Array.from(seen.values())
+
+    // Single combined diff for all tracked changes (since HEAD)
+    let diffByPath = new Map<string, string>()
+    let trackedTooLarge = false
+    try {
+      const diffOutput = await git(
+        ['-c', 'core.quotepath=false', 'diff', '-M', 'HEAD'],
+        worktreePath
+      )
+      diffByPath = parseDiffByFile(diffOutput)
+    } catch {
+      trackedTooLarge = true
+    }
+
+    return Promise.all(
+      entries.map(async (entry): Promise<WorkingTreeDiffEntry> => {
+        if (entry.isUntracked) {
+          return buildUntrackedEntry(worktreePath, entry.newPath)
+        }
+
+        const status = combinedStatus(entry)
+        const path = entry.newPath
+        const oldPath = entry.oldPath
+
+        if (trackedTooLarge) {
+          return { path, oldPath, status, patch: '', isBinary: false, tooLarge: true }
+        }
+
+        let patch = diffByPath.get(path) ?? ''
+        const isBinary = patchIndicatesBinary(patch)
+
+        // Pure-deletion fallback (no diff section emitted in some edge cases)
+        if (!patch && status === 'deleted') {
+          patch = `--- a/${path}\n+++ /dev/null\n@@ -1,0 +0,0 @@\n`
+        }
+
+        return { path, oldPath, status, patch, isBinary, tooLarge: false }
+      })
+    )
   }
 
   static async getBranches(repoPath: string): Promise<string[]> {

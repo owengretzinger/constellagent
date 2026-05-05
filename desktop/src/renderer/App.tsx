@@ -12,6 +12,7 @@ import { SettingsPanel } from './components/Settings/SettingsPanel'
 import { AutomationsPanel } from './components/Automations/AutomationsPanel'
 import { QuickOpen } from './components/QuickOpen/QuickOpen'
 import { ToastContainer } from './components/Toast/Toast'
+import { ErrorBoundary } from './components/ErrorBoundary/ErrorBoundary'
 import { useShortcuts } from './hooks/useShortcuts'
 import { usePrStatusPoller } from './hooks/usePrStatusPoller'
 import styles from './App.module.css'
@@ -94,11 +95,12 @@ export function App() {
                   {/* Keep ALL terminal panels alive across workspaces so PTY
                       state (scrollback, TUI layout) is never lost */}
                   {allTerminals.map((t) => (
-                    <TerminalPanel
-                      key={t.id}
-                      ptyId={t.ptyId}
-                      active={t.id === activeTabId}
-                    />
+                    <ErrorBoundary key={t.id} label={`terminal:${t.id}`}>
+                      <TerminalPanel
+                        ptyId={t.ptyId}
+                        active={t.id === activeTabId}
+                      />
+                    </ErrorBoundary>
                   ))}
 
                   {!activeTab ? (
@@ -114,21 +116,23 @@ export function App() {
                     <>
                       {/* Render active file editor */}
                       {activeTab?.type === 'file' && (
-                        <FileEditor
-                          key={activeTab.id}
-                          tabId={activeTab.id}
-                          filePath={activeTab.filePath}
-                          active={true}
-                        />
+                        <ErrorBoundary key={activeTab.id} label={`file:${activeTab.id}`}>
+                          <FileEditor
+                            tabId={activeTab.id}
+                            filePath={activeTab.filePath}
+                            active={true}
+                          />
+                        </ErrorBoundary>
                       )}
 
                       {/* Render active diff viewer */}
                       {activeTab?.type === 'diff' && workspace && (
-                        <DiffViewer
-                          key={activeTab.id}
-                          worktreePath={workspace.worktreePath}
-                          active={true}
-                        />
+                        <ErrorBoundary key={activeTab.id} label={`diff:${activeTab.id}`}>
+                          <DiffViewer
+                            worktreePath={workspace.worktreePath}
+                            active={true}
+                          />
+                        </ErrorBoundary>
                       )}
                     </>
                   )}

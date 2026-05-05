@@ -3,6 +3,7 @@ import { IPC } from '../shared/ipc-channels'
 import type { AutomationConfig, AutomationRunStartedEvent } from '../shared/automation-types'
 import type { CreateWorktreeProgressEvent } from '../shared/workspace-creation'
 import type { PrLookupResult, ListOpenPrsResult } from '../shared/github-types'
+import type { WorkingTreeDiffEntry } from '../shared/diff-types'
 
 const api = {
   git: {
@@ -25,8 +26,8 @@ const api = {
       ipcRenderer.invoke(IPC.GIT_GET_STATUS, worktreePath),
     getDiff: (worktreePath: string, staged: boolean) =>
       ipcRenderer.invoke(IPC.GIT_GET_DIFF, worktreePath, staged),
-    getFileDiff: (worktreePath: string, filePath: string) =>
-      ipcRenderer.invoke(IPC.GIT_GET_FILE_DIFF, worktreePath, filePath),
+    getWorkingTreeDiff: (worktreePath: string) =>
+      ipcRenderer.invoke(IPC.GIT_GET_WORKING_TREE_DIFF, worktreePath) as Promise<WorkingTreeDiffEntry[]>,
     getBranches: (repoPath: string) =>
       ipcRenderer.invoke(IPC.GIT_GET_BRANCHES, repoPath),
     stage: (worktreePath: string, paths: string[]) =>
