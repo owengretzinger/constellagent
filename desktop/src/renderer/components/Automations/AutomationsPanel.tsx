@@ -1,6 +1,12 @@
 import { useState, useCallback, useEffect } from 'react'
 import { useAppStore } from '../../store/app-store'
 import type { Automation } from '../../store/types'
+import {
+  AUTOMATION_HARNESSES,
+  DEFAULT_AUTOMATION_HARNESS,
+  getAutomationHarnessLabel,
+  normalizeAutomationHarness,
+} from '../../../shared/automation-types'
 import { Tooltip } from '../Tooltip/Tooltip'
 import styles from './AutomationsPanel.module.css'
 
@@ -92,6 +98,7 @@ function AutomationList({
       ) : (
         automations.map((automation) => {
           const project = projects.find((p) => p.id === automation.projectId)
+          const harness = normalizeAutomationHarness(automation.harness)
           return (
             <div
               key={automation.id}
@@ -102,6 +109,8 @@ function AutomationList({
                 <div className={styles.rowName}>{automation.name}</div>
                 <div className={styles.rowMeta}>
                   <span>{project?.name ?? 'Unknown project'}</span>
+                  <span>·</span>
+                  <span>{getAutomationHarnessLabel(harness)}</span>
                   <span>·</span>
                   <span>{automation.cronExpression}</span>
                   <span>·</span>
@@ -153,6 +162,7 @@ function AutomationForm({
   const [projectId, setProjectId] = useState(editingAutomation?.projectId || projects[0]?.id || '')
   const [prompt, setPrompt] = useState(editingAutomation?.prompt || '')
   const [name, setName] = useState(editingAutomation?.name || '')
+  const [harness, setHarness] = useState(() => normalizeAutomationHarness(editingAutomation?.harness ?? DEFAULT_AUTOMATION_HARNESS))
   const [nameManuallySet, setNameManuallySet] = useState(isEditing)
   const [selectedPreset, setSelectedPreset] = useState(() => {
     if (!editingAutomation) return 0
@@ -185,6 +195,7 @@ function AutomationForm({
         projectId,
         prompt: prompt.trim(),
         cronExpression,
+        harness,
       })
       await window.api.automations.update({
         ...editingAutomation,
@@ -192,6 +203,7 @@ function AutomationForm({
         projectId,
         prompt: prompt.trim(),
         cronExpression,
+        harness,
         repoPath: project.repoPath,
       })
     } else {
@@ -202,6 +214,7 @@ function AutomationForm({
         prompt: prompt.trim(),
         cronExpression,
         enabled: true,
+        harness,
         createdAt: Date.now(),
       }
       addAutomation(automation)
@@ -212,7 +225,7 @@ function AutomationForm({
     }
 
     onBack()
-  }, [isValid, projectId, prompt, name, cronExpression, isEditing, editingAutomation, projects, addAutomation, updateAutomation, onBack])
+  }, [isValid, projectId, prompt, name, cronExpression, harness, isEditing, editingAutomation, projects, addAutomation, updateAutomation, onBack])
 
   return (
     <>
@@ -252,6 +265,21 @@ function AutomationForm({
           placeholder="Review the codebase for security issues..."
           rows={3}
         />
+      </div>
+
+      <div className={styles.formGroup}>
+        <label className={styles.label}>Harness</label>
+        <select
+          className={styles.input}
+          value={harness}
+          onChange={(e) => setHarness(normalizeAutomationHarness(e.target.value))}
+        >
+          {AUTOMATION_HARNESSES.map((option) => (
+            <option key={option} value={option}>
+              {getAutomationHarnessLabel(option)}
+            </option>
+          ))}
+        </select>
       </div>
 
       <div className={styles.formGroup}>

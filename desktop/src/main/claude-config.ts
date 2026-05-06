@@ -41,6 +41,29 @@ export async function trustPathForClaude(dirPath: string): Promise<void> {
   await saveJsonFile(CLAUDE_CONFIG_PATH, config)
 }
 
+export async function prepareClaudeForAutomation(dirPath: string): Promise<void> {
+  const config = await loadJsonFile<Record<string, unknown>>(CLAUDE_CONFIG_PATH, {})
+  const projects = (config.projects ?? {}) as Record<string, unknown>
+
+  if (!(dirPath in projects)) {
+    projects[dirPath] = { hasTrustDialogAccepted: true }
+  } else {
+    const entry = projects[dirPath] as Record<string, unknown>
+    entry.hasTrustDialogAccepted = true
+  }
+
+  const apiKey = process.env.ANTHROPIC_API_KEY?.trim()
+  if (apiKey && typeof config.primaryApiKey !== 'string') {
+    config.primaryApiKey = apiKey
+  }
+  if (apiKey) {
+    config.hasCompletedOnboarding = true
+  }
+
+  config.projects = projects
+  await saveJsonFile(CLAUDE_CONFIG_PATH, config)
+}
+
 export async function loadClaudeSettings(): Promise<Record<string, unknown>> {
   return loadJsonFile<Record<string, unknown>>(CLAUDE_SETTINGS_PATH, {})
 }

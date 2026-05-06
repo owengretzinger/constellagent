@@ -13,6 +13,7 @@ type SchedulerLike = {
 }
 
 let SchedulerCtor: new (ptyManager: unknown) => SchedulerLike
+let buildAutomationCommand: (config: Pick<AutomationConfig, 'prompt'> & Partial<Pick<AutomationConfig, 'harness'>>) => string[]
 
 beforeAll(async () => {
   mock.module('node-cron', () => ({
@@ -30,6 +31,7 @@ beforeAll(async () => {
 
   const mod = await import('./automation-scheduler')
   SchedulerCtor = mod.AutomationScheduler as unknown as new (ptyManager: unknown) => SchedulerLike
+  buildAutomationCommand = mod.buildAutomationCommand as typeof buildAutomationCommand
 })
 
 function createAutomation(id: string): AutomationConfig {
@@ -40,9 +42,26 @@ function createAutomation(id: string): AutomationConfig {
     prompt: 'do thing',
     cronExpression: '0 * * * *',
     enabled: true,
+    harness: 'claude',
     repoPath: '/tmp/repo',
   }
 }
+
+describe('buildAutomationCommand', () => {
+  it('builds a Claude command by default', () => {
+    expect(buildAutomationCommand({ prompt: 'do thing' })).toEqual(['claude', 'do thing'])
+  })
+
+  it('builds the right command for each harness', () => {
+    expect(buildAutomationCommand({ prompt: 'review repo', harness: 'claude' })).toEqual(['claude', 'review repo'])
+    expect(buildAutomationCommand({ prompt: 'review repo', harness: 'codex' })).toEqual(['codex', 'review repo'])
+    expect(buildAutomationCommand({ prompt: 'review repo', harness: 'pi' })).toEqual(['pi', 'review repo'])
+  })
+
+  it('passes raw prompt text as a direct argument', () => {
+    expect(buildAutomationCommand({ prompt: "review O'Reilly", harness: 'codex' })).toEqual(['codex', "review O'Reilly"])
+  })
+})
 
 describe('AutomationScheduler.catchUpOnWake', () => {
   it('runs at most one catch-up per wake window', async () => {

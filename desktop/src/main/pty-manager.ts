@@ -197,7 +197,14 @@ export class PtyManager {
   private ptys = new Map<string, PtyInstance>()
   private nextId = 0
 
-  create(workingDir: string, webContents: WebContents, shell?: string, command?: string[], initialWrite?: string, extraEnv?: Record<string, string>): string {
+  create(
+    workingDir: string,
+    webContents: WebContents,
+    shell?: string,
+    command?: string[],
+    initialWrite?: string,
+    extraEnv?: Record<string, string | null>,
+  ): string {
     const id = `pty-${++this.nextId}`
 
     let file: string
@@ -211,20 +218,27 @@ export class PtyManager {
     }
 
     const agentSessionId = extraEnv?.AGENT_ORCH_SESSION_ID || id
+    const env: Record<string, string> = {
+      ...process.env,
+      TERM: 'xterm-256color',
+      COLORTERM: 'truecolor',
+    }
+    for (const [key, value] of Object.entries(extraEnv ?? {})) {
+      if (value == null) {
+        delete env[key]
+      } else {
+        env[key] = value
+      }
+    }
+    env.AGENT_ORCH_SESSION_ID = agentSessionId
+    env.AGENT_ORCH_PTY_ID = id
 
     const proc = pty.spawn(file, args, {
       name: 'xterm-256color',
       cols: 80,
       rows: 24,
       cwd: workingDir,
-      env: {
-        ...process.env,
-        TERM: 'xterm-256color',
-        COLORTERM: 'truecolor',
-        ...extraEnv,
-        AGENT_ORCH_SESSION_ID: agentSessionId,
-        AGENT_ORCH_PTY_ID: id,
-      } as Record<string, string>,
+      env,
     })
 
     const instance: PtyInstance = {
@@ -236,7 +250,7 @@ export class PtyManager {
       outputSeq: 0,
       replayChunks: [],
       replayChars: 0,
-      workspaceId: extraEnv?.AGENT_ORCH_WS_ID,
+      workspaceId: extraEnv?.AGENT_ORCH_WS_ID ?? undefined,
       agentSessionId,
       codexPromptBuffer: '',
       codexAwaitingAnswer: false,

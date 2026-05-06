@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import type { AppState, PersistedState, Tab } from './types'
 import { DEFAULT_SETTINGS } from './types'
+import { normalizeAutomationHarness } from '../../shared/automation-types'
 import { titleFromTerminalCommand } from './terminal-tab-title'
 
 const DEFAULT_PR_LINK_PROVIDER = 'github' as const
@@ -595,6 +596,10 @@ export const useAppStore = create<AppState>((set, get) => ({
       ...project,
       prLinkProvider: project.prLinkProvider ?? DEFAULT_PR_LINK_PROVIDER,
     }))
+    const automations = (data.automations ?? []).map((automation) => ({
+      ...automation,
+      harness: normalizeAutomationHarness((automation as { harness?: unknown }).harness),
+    }))
     const workspaces = data.workspaces ?? []
     const saved = data.activeWorkspaceId
     const settings = data.settings ? { ...DEFAULT_SETTINGS, ...data.settings } : { ...DEFAULT_SETTINGS }
@@ -608,7 +613,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       projects,
       workspaces,
       tabs,
-      automations: data.automations ?? [],
+      automations,
       activeWorkspaceId,
       activeTabId,
       lastActiveTabByWorkspace: data.lastActiveTabByWorkspace ?? {},
@@ -802,7 +807,7 @@ export async function hydrateFromDisk(): Promise<void> {
   // Listen for automation run-started events from main process
   window.api.automations.onRunStarted((data) => {
     const store = useAppStore.getState()
-    const { automationId, automationName, projectId, ptyId, worktreePath, branch } = data
+    const { automationId, automationName, projectId, workspaceId, ptyId, worktreePath, branch } = data
     const project = store.projects.find((p) => p.id === projectId)
     if (!project) return
 
@@ -813,9 +818,8 @@ export async function hydrateFromDisk(): Promise<void> {
     }) + ' ' + now.toLocaleTimeString('en-US', {
       hour: 'numeric', minute: '2-digit',
     })
-    const wsId = crypto.randomUUID()
     store.addWorkspace({
-      id: wsId,
+      id: workspaceId,
       name: `${automationName} · ${timestamp}`,
       branch: branch || '',
       worktreePath: worktreePath || project.repoPath,
@@ -826,7 +830,7 @@ export async function hydrateFromDisk(): Promise<void> {
     // Create terminal tab for the run
     store.addTab({
       id: crypto.randomUUID(),
-      workspaceId: wsId,
+      workspaceId,
       type: 'terminal',
       title: automationName,
       ptyId,
